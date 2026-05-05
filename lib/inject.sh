@@ -4,9 +4,10 @@ set -euo pipefail
 # say.sh — Force-inject a message into another Claude Code session
 # Auto-detects tmux or screen. Override with SWARM_MODE=tmux|screen.
 
-_PATHS_LOADED="${_PATHS_LOADED:-}"
-# sessions loaded from config
-PREFIX="cc"
+_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
+source "$CLAUDES_HOME/lib/discover.sh"
+
+PREFIX="${PREFIX:-cc}"
 
 if [ $# -lt 2 ]; then
     cat <<'EOF'
