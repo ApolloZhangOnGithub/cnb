@@ -10,7 +10,7 @@ source "$CLAUDES_HOME/lib/discover.sh"
 # Override with SWARM_MODE=tmux|screen or SWARM_AGENT=claude|trae|qwen.
 
 
-PREFIX="cc"
+PREFIX="${PREFIX:-cc}"
 SUSPENDED_FILE="${CLAUDES_DIR}/suspended.list"
 LOG_DIR="${CLAUDES_DIR}/logs"
 
@@ -399,10 +399,14 @@ do_stop() {
         ${MODE}_stop_one "$name"
         clock_out "$name"
     done
-    # If stopping all sessions, also kill dispatcher
+    # If stopping all sessions, also kill dispatcher by PID file instead of pkill
     if [ $# -eq 0 ]; then
-        pkill -f 'dispatcher\.sh' 2>/dev/null || true
-        pkill -f 'dispatcher-watchdog\.sh' 2>/dev/null || true
+        for pidfile in "${CLAUDES_DIR}/dispatcher.pid" "${CLAUDES_DIR}/dispatcher-watchdog.pid"; do
+            if [ -f "$pidfile" ]; then
+                kill "$(cat "$pidfile")" 2>/dev/null || true
+                rm -f "$pidfile"
+            fi
+        done
     fi
 }
 

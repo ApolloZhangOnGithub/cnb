@@ -4,15 +4,24 @@ set -euo pipefail
 # session-health.sh — Session health report
 # Shows restart count, idle status, uptime for each session.
 
+_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
+source "$CLAUDES_HOME/lib/discover.sh"
+
 _PATHS_LOADED="${_PATHS_LOADED:-}"
 LOG_DIR="${PROJECT_ROOT}/.swarm-logs"
-PREFIX="cc"
+PREFIX="${PREFIX:-cc}"
 
 G='\033[0;32m'
 R='\033[0;31m'
 Y='\033[1;33m'
 D='\033[2m'
 NC='\033[0m'
+
+_date_to_epoch() {
+    local ts="$1" fmt="${2:-%Y-%m-%d %H:%M:%S}"
+    if date -j -f "$fmt" "$ts" +%s 2>/dev/null; then return; fi
+    date -d "$ts" +%s 2>/dev/null || echo 0
+}
 
 now=$(date +%s)
 
@@ -69,7 +78,7 @@ for name in $sessions; do
         ts=$(echo "$last_line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1)
         agent=$(echo "$last_line" | grep -oE 'agent: [a-z]+' | sed 's/agent: //')
         if [ -n "$ts" ]; then
-            start_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "$ts" +%s 2>/dev/null || echo 0)
+            start_epoch=$(_date_to_epoch "$ts")
             if [ "$start_epoch" -gt 0 ]; then
                 elapsed=$((now - start_epoch))
                 hours=$((elapsed / 3600))

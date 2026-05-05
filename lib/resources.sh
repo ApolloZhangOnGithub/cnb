@@ -9,8 +9,11 @@ set -euo pipefail
 #   ./resource-monitor.sh --watch      # Continuous monitoring (30s interval)
 #   ./resource-monitor.sh --json       # Machine-readable output
 
-BOARD="$TOOLS_SWARM/board.sh"
-STATE_FILE="/tmp/resource-monitor-state"
+_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
+[ -z "${CLAUDES_DIR:-}" ] && source "$CLAUDES_HOME/lib/discover.sh"
+
+BOARD="${PROJECT_ROOT:-$(pwd)}/board"
+STATE_FILE="${CLAUDES_DIR:-/tmp}/resource-monitor-state"
 
 # Thresholds
 BATTERY_LOW=30

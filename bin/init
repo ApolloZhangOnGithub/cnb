@@ -7,10 +7,15 @@ if [ -f "$DIR/board.db" ]; then echo "Already initialized: $DIR"; exit 0; fi
 mkdir -p "$DIR/sessions" "$DIR/files" "$DIR/okr" "$DIR/cv" "$DIR/logs"
 
 SESSIONS=("$@")
+
+# Generate short unique prefix from project path
+PROJECT_HASH=$(echo "$(pwd)" | shasum -a 256 | cut -c1-4)
+PREFIX="cc-${PROJECT_HASH}"
+
 cat > "$DIR/config.sh" << EOF
 CLAUDES_HOME="$CLAUDES_HOME"
 SESSIONS=(${SESSIONS[*]})
-PREFIX="cc"
+PREFIX="$PREFIX"
 EOF
 
 sqlite3 "$DIR/board.db" < "$CLAUDES_HOME/schema.sql"

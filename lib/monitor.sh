@@ -12,10 +12,17 @@ set -euo pipefail
 #   ./tools/monitor-poc.sh --test       # send a test message and measure latency
 #   ./tools/monitor-poc.sh --benchmark  # compare event vs polling latency
 
+_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
+source "$CLAUDES_HOME/lib/discover.sh"
+
 BOARD_SH="$PROJECT_ROOT/board.sh"
 DB="$BOARD_DB"
 
 log() { echo "[monitor] $(date '+%H:%M:%S.%3N') $*"; }
+
+_file_mtime() {
+    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
+}
 
 # --- Event handler ---
 
@@ -127,17 +134,20 @@ watch_inotify() {
 
 watch_poll() {
     log "Starting fast-poll watcher (1s interval) on ${SESSIONS_DIR}/"
-    local -A mtimes
+    local mtime_dir="/tmp/claudes-poll-$$"
+    mkdir -p "$mtime_dir"
+    trap 'rm -rf "$mtime_dir"' EXIT
     while true; do
         for f in "$SESSIONS_DIR"/*.md; do
             [ -f "$f" ] || continue
-            local mt
-            mt=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
-            local prev="${mtimes[$f]:-0}"
+            local base; base=$(basename "$f")
+            local mt; mt=$(_file_mtime "$f")
+            local prev="0"
+            [ -f "$mtime_dir/$base" ] && prev=$(cat "$mtime_dir/$base")
             if [ "$mt" != "$prev" ] && [ "$prev" != "0" ]; then
                 echo "$f"
             fi
-            mtimes[$f]="$mt"
+            echo "$mt" > "$mtime_dir/$base"
         done
         sleep 1
     done
