@@ -1,39 +1,64 @@
-#!/usr/bin/env bash
-# dispatcher-watchdog.sh — Keeps dispatcher.sh running, restarts on crash
-#
-# Usage: nohup ./tools/dispatcher-watchdog.sh > /tmp/dispatcher.log 2>&1 &
+#!/usr/bin/env python3
+"""dispatcher-watchdog — Keeps dispatcher running, restarts on crash.
 
-DISPATCHER="${TOOLS_SWARM}/dispatcher.sh"
-MAX_RESTARTS=50
-COOLDOWN=5
-CRASH_WINDOW=60
-LOG_TAG="[watchdog]"
+Usage: nohup ./dispatcher-watchdog > /tmp/dispatcher.log 2>&1 &
+"""
 
-restart_count=0
-last_crash=0
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
 
-log() { echo "$LOG_TAG $(date '+%H:%M:%S') $*"; }
+# Resolve CLAUDES_HOME
+_self = Path(__file__).resolve()
+CLAUDES_HOME = _self.parent.parent
 
-log "Starting watchdog for dispatcher.sh (max restarts: $MAX_RESTARTS)"
+DISPATCHER = str(CLAUDES_HOME / "bin" / "dispatcher")
+MAX_RESTARTS = 50
+COOLDOWN = 5
+CRASH_WINDOW = 60
+LOG_TAG = "[watchdog]"
 
-while true; do
-    log "Launching dispatcher.sh (restart #${restart_count})"
-    bash "$DISPATCHER"
-    exit_code=$?
-    now=$(date +%s)
 
-    log "dispatcher.sh exited with code $exit_code"
+def log(msg: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"{LOG_TAG} {ts} {msg}", flush=True)
 
-    if [ $((now - last_crash)) -lt "$CRASH_WINDOW" ]; then
-        restart_count=$((restart_count + 1))
-        if [ "$restart_count" -ge "$MAX_RESTARTS" ]; then
-            log "FATAL: $MAX_RESTARTS rapid restarts within ${CRASH_WINDOW}s window. Giving up."
-            exit 1
-        fi
-        log "Rapid restart detected (#${restart_count}/${MAX_RESTARTS}), cooling down ${COOLDOWN}s..."
-        sleep "$COOLDOWN"
-    else
-        restart_count=0
-    fi
-    last_crash=$now
-done
+
+def main() -> None:
+    restart_count = 0
+    last_crash = 0.0
+
+    log(f"Starting watchdog for dispatcher (max restarts: {MAX_RESTARTS})")
+
+    while True:
+        log(f"Launching dispatcher (restart #{restart_count})")
+        result = subprocess.run(["bash", DISPATCHER])
+        exit_code = result.returncode
+        now = time.time()
+
+        log(f"dispatcher exited with code {exit_code}")
+
+        if (now - last_crash) < CRASH_WINDOW:
+            restart_count += 1
+            if restart_count >= MAX_RESTARTS:
+                log(
+                    f"FATAL: {MAX_RESTARTS} rapid restarts within "
+                    f"{CRASH_WINDOW}s window. Giving up."
+                )
+                sys.exit(1)
+            log(
+                f"Rapid restart detected (#{restart_count}/{MAX_RESTARTS}), "
+                f"cooling down {COOLDOWN}s..."
+            )
+            time.sleep(COOLDOWN)
+        else:
+            restart_count = 0
+
+        last_crash = now
+
+
+if __name__ == "__main__":
+    main()

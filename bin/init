@@ -1,103 +1,143 @@
-#!/usr/bin/env bash
-set -euo pipefail
-CLAUDES_HOME="$(cd "$(dirname "$0")/.." && pwd)"
-if [ $# -eq 0 ]; then echo "Usage: claudes-code init <session-name> [session-name...]"; exit 1; fi
-DIR="$(pwd)/.claudes"
-if [ -f "$DIR/board.db" ]; then echo "Already initialized: $DIR"; exit 0; fi
-mkdir -p "$DIR/sessions" "$DIR/files" "$DIR/okr" "$DIR/cv" "$DIR/logs"
+#!/usr/bin/env python3
+"""claudes-code init — initialize a project for multi-agent coordination."""
 
-SESSIONS=("$@")
+import hashlib
+import os
+import sqlite3
+import subprocess
+import sys
+from pathlib import Path
 
-# Generate short unique prefix from project path
-PROJECT_HASH=$(echo "$(pwd)" | shasum -a 256 | cut -c1-4)
-PREFIX="cc-${PROJECT_HASH}"
 
-cat > "$DIR/config.sh" << EOF
-CLAUDES_HOME="$CLAUDES_HOME"
-SESSIONS=(${SESSIONS[*]})
-PREFIX="$PREFIX"
-EOF
+def main() -> None:
+    if len(sys.argv) < 2:
+        print("Usage: claudes-code init <session-name> [session-name...]")
+        sys.exit(1)
 
-sqlite3 "$DIR/board.db" < "$CLAUDES_HOME/schema.sql"
-for name in "${SESSIONS[@]}"; do
-    n=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    sqlite3 "$DIR/board.db" "INSERT OR IGNORE INTO sessions(name) VALUES ('$n');"
-    printf "# %s\n\n## Current task\n(none)\n\n## @inbox\n" "$n" > "$DIR/sessions/${n}.md"
-done
+    # Resolve CLAUDES_HOME (the repo root where this script lives)
+    script = Path(__file__).resolve()
+    claudes_home = script.parent.parent
 
-# Symlink bin/ into project so commands work as ./board, ./swarm
-ln -sf "$CLAUDES_HOME/bin/board" "$(pwd)/board" 2>/dev/null || true
-ln -sf "$CLAUDES_HOME/bin/swarm" "$(pwd)/swarm" 2>/dev/null || true
-ln -sf "$CLAUDES_HOME/bin/dispatcher" "$(pwd)/dispatcher" 2>/dev/null || true
+    sessions: list[str] = sys.argv[1:]
+    project_dir = Path.cwd()
+    claudes_dir = project_dir / ".claudes"
 
-# Generate CLAUDE.md
-cat > "$(pwd)/CLAUDE.md" << 'CLAUDE'
-# Multi-Agent Coordination
+    if (claudes_dir / "board.db").exists():
+        print(f"Already initialized: {claudes_dir}")
+        sys.exit(0)
 
-This project uses claudes-code for multi-session coordination.
+    # Create directory structure
+    for subdir in ("sessions", "files", "okr", "cv", "logs"):
+        (claudes_dir / subdir).mkdir(parents=True, exist_ok=True)
 
-## Session Startup
+    # Generate short unique prefix from project path
+    project_hash = hashlib.sha256(str(project_dir).encode()).hexdigest()[:4]
+    prefix = f"cc-{project_hash}"
 
-You are a session. Your name is passed via `--name` when Claude Code starts.
-On startup:
-```bash
-./board --as <your-name> inbox
-```
+    # Generate config.sh (bash-compatible, read by other scripts during transition)
+    sessions_str = " ".join(sessions)
+    config_content = (
+        f'CLAUDES_HOME="{claudes_home}"\n'
+        f"SESSIONS=({sessions_str})\n"
+        f'PREFIX="{prefix}"\n'
+    )
+    (claudes_dir / "config.sh").write_text(config_content)
 
-## Commands
+    # Initialize SQLite database from schema.sql
+    schema_file = claudes_home / "schema.sql"
+    db_path = claudes_dir / "board.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.executescript(schema_file.read_text())
+    for name in sessions:
+        n = name.lower()
+        conn.execute(
+            "INSERT OR IGNORE INTO sessions(name) VALUES (?)", (n,)
+        )
+        # Create session .md file
+        md_content = f"# {n}\n\n## Current task\n(none)\n\n## @inbox\n"
+        (claudes_dir / "sessions" / f"{n}.md").write_text(md_content)
+    conn.commit()
+    conn.close()
 
-```bash
-./board --as <name> send <to> "<msg>"    # message (person or "all")
-./board --as <name> inbox                # check unread
-./board --as <name> ack                  # clear inbox
-./board --as <name> status "<desc>"      # update current task
-./board --as <name> task add "<desc>"    # add task
-./board --as <name> task done            # finish current task
-./board --as <name> view                 # board overview
-./board --as <name> bug report P1 "desc" # report bug
-./board --as <name> send all "msg"       # broadcast
-```
+    # Symlink bin/ scripts into project root
+    for cmd in ("board", "swarm", "dispatcher"):
+        target = claudes_home / "bin" / cmd
+        link = project_dir / cmd
+        try:
+            if link.is_symlink() or link.exists():
+                link.unlink()
+            link.symlink_to(target)
+        except OSError:
+            pass
 
-## Rules
+    # Generate CLAUDE.md
+    claude_md_lines = [
+        "# Multi-Agent Coordination",
+        "",
+        "This project uses claudes-code for multi-session coordination.",
+        "",
+        "## Session Startup",
+        "",
+        "You are a session. Your name is passed via `--name` when Claude Code starts.",
+        "On startup:",
+        "```bash",
+        "./board --as <your-name> inbox",
+        "```",
+        "",
+        "## Commands",
+        "",
+        "```bash",
+        './board --as <name> send <to> "<msg>"    # message (person or "all")',
+        "./board --as <name> inbox                # check unread",
+        "./board --as <name> ack                  # clear inbox",
+        './board --as <name> status "<desc>"      # update current task',
+        './board --as <name> task add "<desc>"    # add task',
+        "./board --as <name> task done            # finish current task",
+        "./board --as <name> view                 # board overview",
+        './board --as <name> bug report P1 "desc" # report bug',
+        './board --as <name> send all "msg"       # broadcast',
+        "```",
+        "",
+        "## Rules",
+        "",
+        "- Check inbox at startup and after completing each task.",
+        "- Update status when you start or finish work.",
+        "- Commit immediately after each logical change.",
+        "- Message others via `send`, not by editing their files.",
+        "",
+        "## Sessions",
+        "",
+    ]
+    for s in sessions:
+        claude_md_lines.append(f"- **{s}**")
+    (project_dir / "CLAUDE.md").write_text("\n".join(claude_md_lines) + "\n")
 
-- Check inbox at startup and after completing each task.
-- Update status when you start or finish work.
-- Commit immediately after each logical change.
-- Message others via `send`, not by editing their files.
-CLAUDE
-
-# Append session list to CLAUDE.md
-echo "" >> "$(pwd)/CLAUDE.md"
-echo "## Sessions" >> "$(pwd)/CLAUDE.md"
-echo "" >> "$(pwd)/CLAUDE.md"
-for s in "${SESSIONS[@]}"; do
-    echo "- **$s**" >> "$(pwd)/CLAUDE.md"
-done
-
-# Generate .claude/settings.json with hooks
-mkdir -p "$(pwd)/.claude"
-cat > "$(pwd)/.claude/settings.json" << 'HOOKS'
+    # Generate .claude/settings.json with hooks
+    claude_settings_dir = project_dir / ".claude"
+    claude_settings_dir.mkdir(exist_ok=True)
+    settings_json = """\
 {
   "hooks": {
     "PostToolBatch": [
       {
         "type": "command",
-        "command": "if [ -n \"$CLAUDE_SESSION_NAME\" ] && [ -x ./board ]; then unread=$(./board --as $CLAUDE_SESSION_NAME inbox 2>/dev/null | grep -oE '[0-9]+ 条未读' | head -1); [ -n \"$unread\" ] && echo \"[inbox] $unread\" || true; fi"
+        "command": "if [ -n \\"$CLAUDE_SESSION_NAME\\" ] && [ -x ./board ]; then unread=$(./board --as $CLAUDE_SESSION_NAME inbox 2>/dev/null | grep -oE '[0-9]+ 条未读' | head -1); [ -n \\"$unread\\" ] && echo \\"[inbox] $unread\\" || true; fi"
       }
     ]
   }
 }
-HOOKS
+"""
+    (claude_settings_dir / "settings.json").write_text(settings_json)
 
-# .gitignore for generated stuff
-cat > "$(pwd)/.claudes/.gitignore" << 'GI'
-board.db
-board.db-shm
-board.db-wal
-logs/
-GI
+    # .gitignore for generated stuff
+    gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\n"
+    (claudes_dir / ".gitignore").write_text(gitignore_content)
 
-echo "Initialized claudes-code (sessions: ${SESSIONS[*]})"
-echo ""
-echo "  ./board --as ${SESSIONS[0]} send all \"hello\""
-echo "  ./swarm start"
+    print(f"Initialized claudes-code (sessions: {sessions_str})")
+    print()
+    print(f'  ./board --as {sessions[0]} send all "hello"')
+    print("  ./swarm start")
+
+
+if __name__ == "__main__":
+    main()
