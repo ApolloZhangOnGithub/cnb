@@ -20,7 +20,27 @@ ts() { date '+%Y-%m-%d %H:%M'; }
 
 # SQLite helper: run a query, return results
 sql() { sqlite3 -batch "$DB" "$1"; }
-sql_quote() { echo "$1" | sed "s/'/''/g"; }
+sql_quote() { printf '%s' "$1" | tr -d '\0' | sed "s/'/''/g"; }
+
+# portable reverse (tail -r is macOS-only)
+_reverse() {
+    if command -v tac &>/dev/null; then tac
+    elif command -v tail &>/dev/null && tail -r /dev/null 2>/dev/null; then tail -r
+    else awk '{a[NR]=$0} END{for(i=NR;i>=1;i--)print a[i]}'
+    fi
+}
+
+# portable date-to-epoch (date -j -f is macOS-only)
+_date_to_epoch() {
+    local ts="$1" fmt="${2:-%Y-%m-%d %H:%M}"
+    if date -j -f "$fmt" "$ts" +%s 2>/dev/null; then return; fi
+    date -d "$ts" +%s 2>/dev/null || echo 0
+}
+
+# portable file mtime (stat -f %m is macOS-only)
+_file_mtime() {
+    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
+}
 
 # Parse --as <name> from any position in args
 BOARD_IDENTITY=""
@@ -50,10 +70,11 @@ need_identity() {
 ensure_session() {
     local name_lower
     name_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+    local q_name; q_name=$(sql_quote "$name_lower")
     local exists
-    exists=$(sql "SELECT COUNT(*) FROM sessions WHERE name='$name_lower';")
+    exists=$(sql "SELECT COUNT(*) FROM sessions WHERE name='$q_name';")
     if [ "$exists" -eq 0 ]; then
-        sql "INSERT INTO sessions(name) VALUES ('$name_lower');"
+        sql "INSERT INTO sessions(name) VALUES ('$q_name');"
     fi
 }
 
@@ -87,7 +108,11 @@ cmd_send() {
         cp "$attach_file" "$BOARD_DIR/$stored_path" 2>/dev/null || true
 
         local q_orig; q_orig=$(sql_quote "$orig")
-        sql "INSERT OR IGNORE INTO files(hash, original_name, extension, sender, stored_path) VALUES ('$hash', '$q_orig', '$ext', '$name_lower', '$stored_path');"
+        local q_hash; q_hash=$(sql_quote "$hash")
+        local q_ext; q_ext=$(sql_quote "$ext")
+        local q_name_s; q_name_s=$(sql_quote "$name_lower")
+        local q_stored; q_stored=$(sql_quote "$stored_path")
+        sql "INSERT OR IGNORE INTO files(hash, original_name, extension, sender, stored_path) VALUES ('$q_hash', '$q_orig', '$q_ext', '$q_name_s', '$q_stored');"
         attach_ref=" [附件: ${orig} → $stored_path]"
         [ -z "$msg" ] && msg="分享文件: ${orig}"
     fi
@@ -95,22 +120,25 @@ cmd_send() {
     local full_msg="${msg}${attach_ref}"
     local q_msg; q_msg=$(sql_quote "$full_msg")
     local to_lower; to_lower=$(echo "$to" | tr '[:upper:]' '[:lower:]')
+    local q_name; q_name=$(sql_quote "$name_lower")
+    local q_to; q_to=$(sql_quote "$to_lower")
 
     # Insert message and get its ID in one connection
-    local attach_val; attach_val=$([ -n "$attach_ref" ] && echo "'${hash:-}'" || echo "NULL")
-    local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body, attachment) VALUES ('$(ts)', '$name_lower', '$to_lower', '$q_msg', $attach_val); SELECT last_insert_rowid();")
+    local attach_val; attach_val=$([ -n "$attach_ref" ] && echo "'$(sql_quote "${hash:-}")'" || echo "NULL")
+    local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body, attachment) VALUES ('$(ts)', '$q_name', '$q_to', '$q_msg', $attach_val); SELECT last_insert_rowid();")
 
     # Deliver to inbox
     if [ "$to_lower" = "all" ]; then
-        local sessions; sessions=$(sql "SELECT name FROM sessions WHERE name != '$name_lower';")
+        local sessions; sessions=$(sql "SELECT name FROM sessions WHERE name != '$q_name';")
         while IFS= read -r target; do
             [ -z "$target" ] && continue
-            sql "INSERT INTO inbox(session, message_id) VALUES ('$target', $msg_id);"
+            local q_target; q_target=$(sql_quote "$target")
+            sql "INSERT INTO inbox(session, message_id) VALUES ('$q_target', $msg_id);"
             _sync_inbox_to_file "$target"
         done <<< "$sessions"
     else
         ensure_session "$to_lower"
-        sql "INSERT INTO inbox(session, message_id) VALUES ('$to_lower', $msg_id);"
+        sql "INSERT INTO inbox(session, message_id) VALUES ('$q_to', $msg_id);"
         _sync_inbox_to_file "$to_lower"
     fi
 
@@ -129,7 +157,8 @@ cmd_status() {
     local full_status="$desc — $now"
     local q_status; q_status=$(sql_quote "$full_status")
 
-    sql "UPDATE sessions SET status='$q_status', updated_at='$now' WHERE name='$name_lower';"
+    local q_name; q_name=$(sql_quote "$name_lower")
+    sql "UPDATE sessions SET status='$q_status', updated_at='$now' WHERE name='$q_name';"
 
     # Sync to .md view
     _sync_status_to_file "$name_lower" "$full_status"
@@ -151,7 +180,9 @@ cmd_vote() {
     fi
 
     local padded; padded=$(printf "%03d" "$num" 2>/dev/null || echo "$num")
-    local prop_id; prop_id=$(sql "SELECT id FROM proposals WHERE number='$padded' OR number='$num' LIMIT 1;")
+    local q_padded; q_padded=$(sql_quote "$padded")
+    local q_num; q_num=$(sql_quote "$num")
+    local prop_id; prop_id=$(sql "SELECT id FROM proposals WHERE number='$q_padded' OR number='$q_num' LIMIT 1;")
     if [ -z "$prop_id" ]; then echo "ERROR: proposal $num not found" >&2; exit 1; fi
 
     # Check if already decided
@@ -161,7 +192,8 @@ cmd_vote() {
     fi
 
     local q_reason; q_reason=$(sql_quote "$reason")
-    sql "INSERT OR REPLACE INTO votes(proposal_id, voter, decision, reason, ts) VALUES ($prop_id, '$name_lower', '$decision', '$q_reason', '$(ts)');"
+    local q_name; q_name=$(sql_quote "$name_lower")
+    sql "INSERT OR REPLACE INTO votes(proposal_id, voter, decision, reason, ts) VALUES ($prop_id, '$q_name', '$decision', '$q_reason', '$(ts)');"
     echo "OK voted $decision"
 
     # Tally
@@ -190,12 +222,14 @@ cmd_vote() {
         sql "UPDATE proposals SET status='PASSED', decided_at='$(ts)' WHERE id=$prop_id;"
         echo ""
         echo ">>> PASSED (${prop_type}级, ${s}/${eligible} >= ${threshold}) <<<"
-        sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'All', '[VOTE] Proposal ${padded} PASSED (${s}S/${o}O, threshold ${threshold})');"
+        local q_pass_body; q_pass_body=$(sql_quote "[VOTE] Proposal ${padded} PASSED (${s}S/${o}O, threshold ${threshold})")
+        sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'All', '$q_pass_body');"
     elif [ "$o" -gt $((eligible - threshold)) ]; then
         sql "UPDATE proposals SET status='FAILED', decided_at='$(ts)' WHERE id=$prop_id;"
         echo ""
         echo ">>> FAILED (无法达到 ${threshold} 票) <<<"
-        sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'All', '[VOTE] Proposal ${padded} FAILED (${s}S/${o}O, threshold ${threshold})');"
+        local q_fail_body; q_fail_body=$(sql_quote "[VOTE] Proposal ${padded} FAILED (${s}S/${o}O, threshold ${threshold})")
+        sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'All', '$q_fail_body');"
     else
         echo "  (待定，还需 $((threshold - s)) 票 SUPPORT 通过)"
     fi
@@ -205,7 +239,9 @@ cmd_tally() {
     if [ $# -lt 1 ]; then echo "Usage: ./board.sh tally <number>" >&2; exit 1; fi
     local num="$1"
     local padded; padded=$(printf "%03d" "$num" 2>/dev/null || echo "$num")
-    local prop_id; prop_id=$(sql "SELECT id FROM proposals WHERE number='$padded' OR number='$num' LIMIT 1;")
+    local q_padded; q_padded=$(sql_quote "$padded")
+    local q_num; q_num=$(sql_quote "$num")
+    local prop_id; prop_id=$(sql "SELECT id FROM proposals WHERE number='$q_padded' OR number='$q_num' LIMIT 1;")
     if [ -z "$prop_id" ]; then echo "ERROR: proposal $num not found" >&2; exit 1; fi
 
     local prop_status; prop_status=$(sql "SELECT status FROM proposals WHERE id=$prop_id;")
@@ -240,9 +276,10 @@ cmd_log() {
 
     if [ -n "$filter" ]; then
         local f_lower; f_lower=$(echo "$filter" | tr '[:upper:]' '[:lower:]')
-        sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || body FROM messages WHERE sender='$f_lower' OR recipient='$f_lower' OR recipient='all' ORDER BY id DESC LIMIT $n;" | tail -r
+        local q_filter; q_filter=$(sql_quote "$f_lower")
+        sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || body FROM messages WHERE sender='$q_filter' OR recipient='$q_filter' OR recipient='all' ORDER BY id DESC LIMIT $n;" | _reverse
     else
-        sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || body FROM messages ORDER BY id DESC LIMIT $n;" | tail -r
+        sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || body FROM messages ORDER BY id DESC LIMIT $n;" | _reverse
     fi
 }
 
@@ -266,7 +303,8 @@ cmd_view() {
     # Inbox check
     if [ -n "$BOARD_IDENTITY" ]; then
         local me_lower; me_lower=$(echo "$BOARD_IDENTITY" | tr '[:upper:]' '[:lower:]')
-        local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$me_lower' AND read=0;")
+        local q_me; q_me=$(sql_quote "$me_lower")
+        local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$q_me' AND read=0;")
         if [ "$count" -gt 0 ]; then
             echo ">>> 你有 ${count} 条未读消息，运行 ./board.sh inbox 查看 <<<"
             echo ""
@@ -289,7 +327,7 @@ cmd_view() {
 
     # Recent messages
     echo "Recent messages:"
-    sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 80) FROM messages ORDER BY id DESC LIMIT 8;" | tail -r | sed 's/^/  /'
+    sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 80) FROM messages ORDER BY id DESC LIMIT 8;" | _reverse | sed 's/^/  /'
     echo ""
 
     # Active proposals
@@ -305,14 +343,15 @@ cmd_view() {
 cmd_inbox() {
     local name; name="$(need_identity)"
     local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+    local q_name; q_name=$(sql_quote "$name_lower")
 
-    local result; result=$(sql "SELECT m.ts, m.sender, m.body FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$name_lower' AND i.read=0 ORDER BY m.ts;")
+    local result; result=$(sql "SELECT m.ts, m.sender, m.body FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$q_name' AND i.read=0 ORDER BY m.ts;")
     if [ -z "$result" ]; then
         echo "收件箱为空"
     else
-        local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$name_lower' AND read=0;")
+        local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$q_name' AND read=0;")
         echo "你有 ${count} 条未读:"
-        sql "SELECT '- [' || m.ts || '] **' || m.sender || '**: ' || m.body FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$name_lower' AND i.read=0 ORDER BY m.ts;"
+        sql "SELECT '- [' || m.ts || '] **' || m.sender || '**: ' || m.body FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$q_name' AND i.read=0 ORDER BY m.ts;"
         echo ""
         echo "(处理完后运行 ./board.sh --as ${name} ack)"
     fi
@@ -323,8 +362,9 @@ cmd_inbox() {
 cmd_ack() {
     local name; name="$(need_identity)"
     local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+    local q_name; q_name=$(sql_quote "$name_lower")
 
-    local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$name_lower' AND read=0;")
+    local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$q_name' AND read=0;")
     if [ "$count" -eq 0 ]; then
         echo "收件箱已经是空的"
         # Still clear the .md file — a concurrent send may have written stale
@@ -335,7 +375,7 @@ cmd_ack() {
         return 0
     fi
 
-    sql "UPDATE inbox SET read=1 WHERE session='$name_lower' AND read=0;"
+    sql "UPDATE inbox SET read=1 WHERE session='$q_name' AND read=0;"
     echo "OK ${count} 条已清空（完整记录在 messages.log）"
 
     # Sync: clear @inbox in session file
@@ -475,10 +515,11 @@ cmd_dashboard() {
                 *) status="running" ;;
             esac
         fi
-        local inbox_count; inbox_count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$name' AND read=0;")
+        local q_name_d; q_name_d=$(sql_quote "$name")
+        local inbox_count; inbox_count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$q_name_d' AND read=0;")
         local inbox_str=""
         [ "$inbox_count" -gt 0 ] && inbox_str=" [${inbox_count}msg]"
-        local task; task=$(sql "SELECT substr(status, 1, 50) FROM sessions WHERE name='$name';")
+        local task; task=$(sql "SELECT substr(status, 1, 50) FROM sessions WHERE name='$q_name_d';")
         [ -z "$task" ] && task="-"
         printf "  %-7s %-8s%s\n" "$name" "$status" "$inbox_str"
         printf "         %s\n" "$task"
@@ -516,7 +557,8 @@ cmd_get() {
     local query="$1"
     local q_query; q_query=$(sql_quote "$query")
 
-    local result; result=$(sql "SELECT hash, original_name, sender, ts, stored_path FROM files WHERE hash LIKE '${q_query}%' OR original_name='$q_query' LIMIT 1;")
+    local q_query_like; q_query_like=$(sql_quote "$query")
+    local result; result=$(sql "SELECT hash, original_name, sender, ts, stored_path FROM files WHERE hash LIKE '${q_query_like}%' OR original_name='$q_query' LIMIT 1;")
     if [ -z "$result" ]; then
         echo "ERROR: no file matching '$query'" >&2; exit 1
     fi
@@ -547,8 +589,10 @@ cmd_post() {
     local q_title; q_title=$(sql_quote "$title")
     local q_body; q_body=$(sql_quote "$body")
 
-    sql "INSERT INTO threads(id, title, author) VALUES ('$id', '$q_title', '$name_lower');"
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$name_lower', 'all', '[BBS] 新帖「${q_title}」(${id})');"
+    local q_name; q_name=$(sql_quote "$name_lower")
+    local q_id; q_id=$(sql_quote "$id")
+    sql "INSERT INTO threads(id, title, author) VALUES ('$q_id', '$q_title', '$q_name');"
+    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '[BBS] 新帖「${q_title}」(${q_id})');"
 
     echo "OK 帖子已创建: ${id}"
     echo "  标题: ${title}"
@@ -561,31 +605,37 @@ cmd_reply() {
     if [ $# -lt 2 ]; then echo "Usage: ./board.sh --as <name> reply <帖子ID> <内容>" >&2; exit 1; fi
     local tid="$1"; shift; local body="$*"
 
-    local exists; exists=$(sql "SELECT COUNT(*) FROM threads WHERE id LIKE '${tid}%';")
+    local q_tid; q_tid=$(sql_quote "$tid")
+    local exists; exists=$(sql "SELECT COUNT(*) FROM threads WHERE id LIKE '${q_tid}%';")
     if [ "$exists" -eq 0 ]; then echo "ERROR: 帖子 ${tid} 不存在" >&2; exit 1; fi
 
-    local full_tid; full_tid=$(sql "SELECT id FROM threads WHERE id LIKE '${tid}%' LIMIT 1;")
+    local full_tid; full_tid=$(sql "SELECT id FROM threads WHERE id LIKE '${q_tid}%' LIMIT 1;")
+    local q_full_tid; q_full_tid=$(sql_quote "$full_tid")
     local q_body; q_body=$(sql_quote "$body")
-    sql "INSERT INTO thread_replies(thread_id, author, body) VALUES ('$full_tid', '$name_lower', '$q_body');"
+    local q_name; q_name=$(sql_quote "$name_lower")
+    sql "INSERT INTO thread_replies(thread_id, author, body) VALUES ('$q_full_tid', '$q_name', '$q_body');"
 
-    local title; title=$(sql "SELECT title FROM threads WHERE id='$full_tid';")
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$name_lower', 'all', '[BBS] 回帖「${title}」(${full_tid})');"
+    local title; title=$(sql "SELECT title FROM threads WHERE id='$q_full_tid';")
+    local q_title; q_title=$(sql_quote "$title")
+    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '[BBS] 回帖「${q_title}」(${q_full_tid})');"
     echo "OK 回帖成功 (帖子: ${full_tid})"
 }
 
 cmd_thread() {
     if [ $# -lt 1 ]; then echo "Usage: ./board.sh thread <帖子ID>" >&2; exit 1; fi
     local tid="$1"
-    local full_tid; full_tid=$(sql "SELECT id FROM threads WHERE id LIKE '${tid}%' LIMIT 1;")
+    local q_tid; q_tid=$(sql_quote "$tid")
+    local full_tid; full_tid=$(sql "SELECT id FROM threads WHERE id LIKE '${q_tid}%' LIMIT 1;")
     if [ -z "$full_tid" ]; then echo "ERROR: 帖子 ${tid} 不存在" >&2; exit 1; fi
 
+    local q_full_tid; q_full_tid=$(sql_quote "$full_tid")
     local title author created
-    IFS='|' read -r title author created <<< "$(sql "SELECT title, author, created_at FROM threads WHERE id='$full_tid';")"
+    IFS='|' read -r title author created <<< "$(sql "SELECT title, author, created_at FROM threads WHERE id='$q_full_tid';")"
     echo "# $title"
     echo "> @$author — $created"
     echo ""
 
-    sql "SELECT author, body, ts FROM thread_replies WHERE thread_id='$full_tid' ORDER BY id;" | while IFS='|' read -r rauthor rbody rts; do
+    sql "SELECT author, body, ts FROM thread_replies WHERE thread_id='$q_full_tid' ORDER BY id;" | while IFS='|' read -r rauthor rbody rts; do
         echo "---"
         echo "> @$rauthor — $rts"
         echo ""
@@ -642,14 +692,18 @@ _bug_report() {
     local next_id; next_id=$(printf "BUG-%03d" $((max_id + 1)))
 
     local q_desc; q_desc=$(sql_quote "$desc")
-    sql "INSERT INTO bugs(id, severity, sla, reporter, status, description) VALUES ('$next_id', '$severity', '$sla', '$name_lower', 'OPEN', '$q_desc');"
+    local q_name; q_name=$(sql_quote "$name_lower")
+    local q_next_id; q_next_id=$(sql_quote "$next_id")
+    sql "INSERT INTO bugs(id, severity, sla, reporter, status, description) VALUES ('$q_next_id', '$severity', '$sla', '$q_name', 'OPEN', '$q_desc');"
 
     # Notify all
-    local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$name_lower', 'all', '[$next_id/$severity] $q_desc'); SELECT last_insert_rowid();")
-    local sessions; sessions=$(sql "SELECT name FROM sessions WHERE name != '$name_lower';")
+    local q_notify_body; q_notify_body=$(sql_quote "[$next_id/$severity] $desc")
+    local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '$q_notify_body'); SELECT last_insert_rowid();")
+    local sessions; sessions=$(sql "SELECT name FROM sessions WHERE name != '$q_name';")
     while IFS= read -r target; do
         [ -z "$target" ] && continue
-        sql "INSERT INTO inbox(session, message_id) VALUES ('$target', $msg_id);"
+        local q_target; q_target=$(sql_quote "$target")
+        sql "INSERT INTO inbox(session, message_id) VALUES ('$q_target', $msg_id);"
     done <<< "$sessions"
 
     echo "OK ${next_id} (${severity}) created"
@@ -665,11 +719,16 @@ _bug_assign() {
     [[ "$bugid" == BUG-* ]] || bugid="BUG-${bugid}"
     local assignee_lower; assignee_lower=$(echo "$assignee" | tr '[:upper:]' '[:lower:]')
 
-    local exists; exists=$(sql "SELECT COUNT(*) FROM bugs WHERE id='$bugid';")
+    local q_bugid; q_bugid=$(sql_quote "$bugid")
+    local exists; exists=$(sql "SELECT COUNT(*) FROM bugs WHERE id='$q_bugid';")
     if [ "$exists" -eq 0 ]; then echo "ERROR: ${bugid} not found" >&2; exit 1; fi
 
-    sql "UPDATE bugs SET assignee='$assignee_lower', status='ASSIGNED' WHERE id='$bugid';"
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$(echo "$name" | tr '[:upper:]' '[:lower:]')', '$assignee_lower', '[$bugid] assigned to you');"
+    local q_assignee; q_assignee=$(sql_quote "$assignee_lower")
+    local name_lower_a; name_lower_a=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+    local q_name; q_name=$(sql_quote "$name_lower_a")
+    sql "UPDATE bugs SET assignee='$q_assignee', status='ASSIGNED' WHERE id='$q_bugid';"
+    local q_assign_body; q_assign_body=$(sql_quote "[$bugid] assigned to you")
+    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', '$q_assignee', '$q_assign_body');"
     echo "OK ${bugid} assigned to ${assignee}"
 }
 
@@ -683,12 +742,15 @@ _bug_fix() {
     bugid=$(echo "$bugid" | tr '[:lower:]' '[:upper:]')
     [[ "$bugid" == BUG-* ]] || bugid="BUG-${bugid}"
 
-    local exists; exists=$(sql "SELECT COUNT(*) FROM bugs WHERE id='$bugid';")
+    local q_bugid; q_bugid=$(sql_quote "$bugid")
+    local exists; exists=$(sql "SELECT COUNT(*) FROM bugs WHERE id='$q_bugid';")
     if [ "$exists" -eq 0 ]; then echo "ERROR: ${bugid} not found" >&2; exit 1; fi
 
     local q_evidence; q_evidence=$(sql_quote "$evidence")
-    sql "UPDATE bugs SET status='FIXED', fixed_at='$(ts)', evidence='$q_evidence' WHERE id='$bugid';"
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$name_lower', 'all', '[$bugid] FIXED — $q_evidence');"
+    local q_name; q_name=$(sql_quote "$name_lower")
+    sql "UPDATE bugs SET status='FIXED', fixed_at='$(ts)', evidence='$q_evidence' WHERE id='$q_bugid';"
+    local q_fix_body; q_fix_body=$(sql_quote "[$bugid] FIXED — $evidence")
+    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '$q_fix_body');"
     echo "OK ${bugid} marked FIXED"
 }
 
@@ -699,7 +761,8 @@ _bug_list() {
     case "$filter" in
         open) where_clause="WHERE status != 'FIXED'" ;;
         all) where_clause="" ;;
-        *) where_clause="WHERE status = '$(echo "$filter" | tr '[:lower:]' '[:upper:]')'" ;;
+        *) local q_filter; q_filter=$(sql_quote "$(echo "$filter" | tr '[:lower:]' '[:upper:]')")
+           where_clause="WHERE status = '$q_filter'" ;;
     esac
 
     local result; result=$(sql "SELECT id, severity, status, assignee, reporter, reported_at, description FROM bugs $where_clause ORDER BY reported_at;")
@@ -724,7 +787,7 @@ _bug_overdue() {
     if [ -n "$result" ]; then
         echo "$result" | while IFS='|' read -r id sev reported; do
             local rep_epoch
-            rep_epoch=$(date -j -f "%Y-%m-%d %H:%M" "$reported" +%s 2>/dev/null || echo 0)
+            rep_epoch=$(_date_to_epoch "$reported" "%Y-%m-%d %H:%M")
             [ "$rep_epoch" -eq 0 ] && continue
             local elapsed=$(( now_epoch - rep_epoch ))
             local limit=0
@@ -753,14 +816,15 @@ _task_ensure_schema() {
 
 _task_promote_next() {
     local target="$1"
+    local q_target; q_target=$(sql_quote "$target")
     local active_count
-    active_count=$(sql "SELECT COUNT(*) FROM tasks WHERE session='$target' AND status='active';")
+    active_count=$(sql "SELECT COUNT(*) FROM tasks WHERE session='$q_target' AND status='active';")
     if [ "$active_count" -gt 0 ]; then
         return 0
     fi
 
     local next_id
-    next_id=$(sql "SELECT id FROM tasks WHERE session='$target' AND status='pending' ORDER BY priority DESC, id ASC LIMIT 1;")
+    next_id=$(sql "SELECT id FROM tasks WHERE session='$q_target' AND status='pending' ORDER BY priority DESC, id ASC LIMIT 1;")
     if [ -n "$next_id" ]; then
         sql "UPDATE tasks SET status='active' WHERE id=$next_id;"
     fi
@@ -771,7 +835,8 @@ _task_print_queue() {
     local include_done="${2:-false}"
     _task_ensure_schema
 
-    local where="session='$target'"
+    local q_target; q_target=$(sql_quote "$target")
+    local where="session='$q_target'"
     if [ "$include_done" != "true" ]; then
         where="$where AND status != 'done'"
     fi
@@ -834,19 +899,21 @@ cmd_task() {
             _task_ensure_schema
             ensure_session "$target"
 
+            local q_target; q_target=$(sql_quote "$target")
+            local q_name; q_name=$(sql_quote "$name_lower")
             local status="pending"
             local active_count
-            active_count=$(sql "SELECT COUNT(*) FROM tasks WHERE session='$target' AND status='active';")
+            active_count=$(sql "SELECT COUNT(*) FROM tasks WHERE session='$q_target' AND status='active';")
             [ "$active_count" -eq 0 ] && status="active"
 
             local task_id
-            task_id=$(sqlite3 -batch "$DB" "INSERT INTO tasks(session, description, status, priority) VALUES ('$target', '$q_desc', '$status', $priority); SELECT last_insert_rowid();")
+            task_id=$(sqlite3 -batch "$DB" "INSERT INTO tasks(session, description, status, priority) VALUES ('$q_target', '$q_desc', '$status', $priority); SELECT last_insert_rowid();")
 
             echo "OK task #${task_id} added to ${target} (${status})"
             if [ "$target" != "$name_lower" ]; then
                 local q_msg; q_msg=$(sql_quote "[TASK #${task_id}] ${desc}")
-                local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$name_lower', '$target', '$q_msg'); SELECT last_insert_rowid();")
-                sql "INSERT INTO inbox(session, message_id) VALUES ('$target', $msg_id);"
+                local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', '$q_target', '$q_msg'); SELECT last_insert_rowid();")
+                sql "INSERT INTO inbox(session, message_id) VALUES ('$q_target', $msg_id);"
                 _sync_inbox_to_file "$target"
                 echo "OK notified ${target}"
             fi
@@ -897,8 +964,9 @@ cmd_task() {
             echo "OK task #${task_id} done: ${desc}"
 
             _task_promote_next "$assignee"
+            local q_assignee; q_assignee=$(sql_quote "$assignee")
             local next
-            next=$(sql "SELECT id, description FROM tasks WHERE session='$assignee' AND status='active' ORDER BY id ASC LIMIT 1;")
+            next=$(sql "SELECT id, description FROM tasks WHERE session='$q_assignee' AND status='active' ORDER BY id ASC LIMIT 1;")
             if [ -n "$next" ]; then
                 local next_id next_desc
                 IFS='|' read -r next_id next_desc <<< "$next"
@@ -988,8 +1056,12 @@ cmd_kudos() {
     fi
 
     local q_reason; q_reason=$(sql_quote "$reason")
-    sql "INSERT INTO kudos(sender, target, reason, evidence) VALUES ('$name_lower', '$target_lower', '$q_reason', $([ -n "$evidence" ] && echo "'$evidence'" || echo "NULL"));"
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$name_lower', 'all', '[KUDOS] → ${target_lower}: ${q_reason}');"
+    local q_name; q_name=$(sql_quote "$name_lower")
+    local q_target; q_target=$(sql_quote "$target_lower")
+    local q_evidence_val; q_evidence_val=$([ -n "$evidence" ] && echo "'$(sql_quote "$evidence")'" || echo "NULL")
+    sql "INSERT INTO kudos(sender, target, reason, evidence) VALUES ('$q_name', '$q_target', '$q_reason', $q_evidence_val);"
+    local q_kudos_body; q_kudos_body=$(sql_quote "[KUDOS] → ${target_lower}: ${reason}")
+    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '$q_kudos_body');"
     echo "OK kudos sent to $target (visible to all)"
 }
 
@@ -1002,7 +1074,7 @@ cmd_kudos_list() {
     done
     echo ""
     echo "Recent:"
-    sql "SELECT '[' || ts || '] ' || sender || ' → ' || target || ': ' || reason FROM kudos ORDER BY id DESC LIMIT 10;" | tail -r | sed 's/^/  /'
+    sql "SELECT '[' || ts || '] ' || sender || ' → ' || target || ': ' || reason FROM kudos ORDER BY id DESC LIMIT 10;" | _reverse | sed 's/^/  /'
 }
 
 cmd_suspend() {
@@ -1014,13 +1086,15 @@ cmd_suspend() {
     local target="${1:?Usage: ./board.sh --as <lead> suspend <session>}"
     target=$(echo "$target" | tr '[:upper:]' '[:lower:]')
 
-    local already; already=$(sql "SELECT COUNT(*) FROM suspended WHERE name='$target';")
+    local q_target; q_target=$(sql_quote "$target")
+    local q_name; q_name=$(sql_quote "$name_lower")
+    local already; already=$(sql "SELECT COUNT(*) FROM suspended WHERE name='$q_target';")
     if [ "$already" -gt 0 ]; then
         echo "$target 已在停工名单中"
         return 0
     fi
 
-    sql "INSERT INTO suspended(name, suspended_by) VALUES ('$target', '$name_lower');"
+    sql "INSERT INTO suspended(name, suspended_by) VALUES ('$q_target', '$q_name');"
     echo "$target: 已停工"
 
     local sess="cc-${target}"
@@ -1030,7 +1104,8 @@ cmd_suspend() {
         tmux kill-session -t "$sess" 2>/dev/null || true
         echo "$target: tmux session 已关闭"
     fi
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'all', 'SUSPEND $target by $name_lower');"
+    local q_suspend_body; q_suspend_body=$(sql_quote "SUSPEND $target by $name_lower")
+    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'all', '$q_suspend_body');"
 }
 
 cmd_resume() {
@@ -1042,15 +1117,18 @@ cmd_resume() {
     local target="${1:?Usage: ./board.sh --as <lead> resume <session>}"
     target=$(echo "$target" | tr '[:upper:]' '[:lower:]')
 
-    local exists; exists=$(sql "SELECT COUNT(*) FROM suspended WHERE name='$target';")
+    local q_target; q_target=$(sql_quote "$target")
+    local q_name; q_name=$(sql_quote "$name_lower")
+    local exists; exists=$(sql "SELECT COUNT(*) FROM suspended WHERE name='$q_target';")
     if [ "$exists" -eq 0 ]; then
         echo "$target 不在停工名单中"
         return 0
     fi
 
-    sql "DELETE FROM suspended WHERE name='$target';"
+    sql "DELETE FROM suspended WHERE name='$q_target';"
     echo "$target: 已恢复"
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'all', 'RESUME $target by $name_lower');"
+    local q_resume_body; q_resume_body=$(sql_quote "RESUME $target by $name_lower")
+    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'all', '$q_resume_body');"
 }
 
 cmd_roster() {
@@ -1075,12 +1153,13 @@ cmd_history() {
 
     echo "=== History: $subject ==="
     echo ""
+    local q_subject; q_subject=$(sql_quote "$subject_lower")
     echo "Messages involving $subject (last $limit):"
-    sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 100) FROM messages WHERE sender='$subject_lower' OR recipient='$subject_lower' OR (recipient='all' AND sender='$subject_lower') OR body LIKE '%$subject_lower%' ORDER BY id DESC LIMIT $limit;" | tail -r | sed 's/^/  /'
+    sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 100) FROM messages WHERE sender='$q_subject' OR recipient='$q_subject' OR (recipient='all' AND sender='$q_subject') OR body LIKE '%$q_subject%' ORDER BY id DESC LIMIT $limit;" | _reverse | sed 's/^/  /'
     echo ""
 
     echo "Status changes:"
-    sql "SELECT updated_at, status FROM sessions WHERE name='$subject_lower';" | while IFS='|' read -r ts status; do
+    sql "SELECT updated_at, status FROM sessions WHERE name='$q_subject';" | while IFS='|' read -r ts status; do
         echo "  [$ts] $status"
     done
 }
@@ -1136,6 +1215,7 @@ cmd_git_lock() {
     _git_lock_ensure_schema
     _git_lock_cleanup_stale
 
+    local q_name; q_name=$(sql_quote "$name_lower")
     # Check if lock is already held
     local holder
     holder=$(sql "SELECT session FROM git_locks WHERE id=1;")
@@ -1160,7 +1240,7 @@ cmd_git_lock() {
     # Acquire lock
     local expires=$(( $(date +%s) + GIT_LOCK_TTL ))
     local q_reason; q_reason=$(sql_quote "$reason")
-    sql "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, '$name_lower', '$q_reason', $expires);"
+    sql "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, '$q_name', '$q_reason', $expires);"
 
     echo "OK git-lock acquired by $name_lower (expires in ${GIT_LOCK_TTL}s)"
 }
@@ -1190,9 +1270,10 @@ cmd_git_unlock() {
         echo "WARN: force-releasing git lock held by '$holder'"
         # Notify the holder
         local q_msg; q_msg=$(sql_quote "[GIT-LOCK] $name_lower force-released your git lock")
+        local q_holder; q_holder=$(sql_quote "$holder")
         local msg_id
-        msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', '$holder', '$q_msg'); SELECT last_insert_rowid();")
-        sql "INSERT INTO inbox(session, message_id) VALUES ('$holder', $msg_id);"
+        msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', '$q_holder', '$q_msg'); SELECT last_insert_rowid();")
+        sql "INSERT INTO inbox(session, message_id) VALUES ('$q_holder', $msg_id);"
         _sync_inbox_to_file "$holder"
     fi
 
@@ -1233,7 +1314,7 @@ cmd_git_lock_status() {
     local index_lock="$PROJECT_ROOT/.git/index.lock"
     if [ -f "$index_lock" ]; then
         local lock_age
-        lock_age=$(( $(date +%s) - $(stat -f %m "$index_lock" 2>/dev/null || echo 0) ))
+        lock_age=$(( $(date +%s) - $(_file_mtime "$index_lock") ))
         echo "  .git/index.lock exists (age: ${lock_age}s)"
     fi
 }
@@ -1293,7 +1374,8 @@ _sync_inbox_to_file() {
     [ -f "$sf" ] || return 0
 
     # Build inbox content from DB
-    local inbox_lines; inbox_lines=$(sql "SELECT '- [' || m.ts || '] **' || m.sender || '**: ' || substr(m.body, 1, 60) FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$target' AND i.read=0 ORDER BY m.ts;" 2>/dev/null) || true
+    local q_target; q_target=$(sql_quote "$target")
+    local inbox_lines; inbox_lines=$(sql "SELECT '- [' || m.ts || '] **' || m.sender || '**: ' || substr(m.body, 1, 60) FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$q_target' AND i.read=0 ORDER BY m.ts;" 2>/dev/null) || true
 
     # If no @inbox section exists, append it
     if ! grep -q "^## @收件箱" "$sf" 2>/dev/null; then
