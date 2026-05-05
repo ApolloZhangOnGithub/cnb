@@ -6,7 +6,6 @@ These tests exercise the data layer that backs the CLI commands.
 """
 
 import sqlite3
-import time
 
 import pytest
 
@@ -18,14 +17,10 @@ class TestView:
 
     def test_view_shows_session_statuses(self, db_conn):
         """View query returns session names and their current status."""
-        db_conn.execute(
-            "UPDATE sessions SET status='working on feature X' WHERE name='alice'"
-        )
+        db_conn.execute("UPDATE sessions SET status='working on feature X' WHERE name='alice'")
         db_conn.commit()
 
-        rows = db_conn.execute(
-            "SELECT name, status FROM sessions ORDER BY name"
-        ).fetchall()
+        rows = db_conn.execute("SELECT name, status FROM sessions ORDER BY name").fetchall()
         assert len(rows) == 3
         alice = [r for r in rows if r["name"] == "alice"][0]
         assert "feature X" in alice["status"]
@@ -40,9 +35,7 @@ class TestView:
             )
         db_conn.commit()
 
-        rows = db_conn.execute(
-            "SELECT body FROM messages ORDER BY id DESC LIMIT 8"
-        ).fetchall()
+        rows = db_conn.execute("SELECT body FROM messages ORDER BY id DESC LIMIT 8").fetchall()
         assert len(rows) == 8
 
     def test_view_shows_open_proposals(self, db_conn):
@@ -76,9 +69,7 @@ class TestView:
         )
         db_conn.commit()
 
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='alice' AND read=0"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='alice' AND read=0").fetchone()[0]
         assert count == 1
 
 
@@ -95,9 +86,7 @@ class TestStatusUpdate:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT status, updated_at FROM sessions WHERE name='alice'"
-        ).fetchone()
+        row = db_conn.execute("SELECT status, updated_at FROM sessions WHERE name='alice'").fetchone()
         assert "implementing auth module" in row["status"]
         assert row["updated_at"] == now
 
@@ -110,9 +99,7 @@ class TestStatusUpdate:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT updated_at FROM sessions WHERE name='bob'"
-        ).fetchone()
+        row = db_conn.execute("SELECT updated_at FROM sessions WHERE name='bob'").fetchone()
         assert row["updated_at"] is not None
 
 
@@ -122,9 +109,7 @@ class TestFreshness:
     def test_freshness_shows_last_update(self, db_conn):
         """Freshness query returns updated_at and unread count."""
         now = ts()
-        db_conn.execute(
-            "UPDATE sessions SET updated_at=? WHERE name='alice'", (now,)
-        )
+        db_conn.execute("UPDATE sessions SET updated_at=? WHERE name='alice'", (now,))
         db_conn.commit()
 
         rows = db_conn.execute(
@@ -218,9 +203,7 @@ class TestKudos:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT sender, target, reason FROM kudos"
-        ).fetchone()
+        row = db_conn.execute("SELECT sender, target, reason FROM kudos").fetchone()
         assert row["sender"] == "alice"
         assert row["target"] == "bob"
         assert row["reason"] == "great code review"
@@ -233,9 +216,7 @@ class TestKudos:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT evidence FROM kudos WHERE target='bob'"
-        ).fetchone()
+        row = db_conn.execute("SELECT evidence FROM kudos WHERE target='bob'").fetchone()
         assert row["evidence"] == "commit abc123"
 
     def test_kudos_leaderboard(self, db_conn):
@@ -251,9 +232,7 @@ class TestKudos:
         )
         db_conn.commit()
 
-        rows = db_conn.execute(
-            "SELECT target, COUNT(*) as c FROM kudos GROUP BY target ORDER BY c DESC"
-        ).fetchall()
+        rows = db_conn.execute("SELECT target, COUNT(*) as c FROM kudos GROUP BY target ORDER BY c DESC").fetchall()
         assert rows[0]["target"] == "bob"
         assert rows[0]["c"] == 3
         assert rows[1]["target"] == "charlie"
@@ -282,9 +261,7 @@ class TestKudos:
         )
         db_conn.commit()
 
-        msg = db_conn.execute(
-            "SELECT body FROM messages WHERE body LIKE '%KUDOS%'"
-        ).fetchone()
+        msg = db_conn.execute("SELECT body FROM messages WHERE body LIKE '%KUDOS%'").fetchone()
         assert msg is not None
         assert "bob" in msg["body"]
 
@@ -300,9 +277,7 @@ class TestSuspendResume:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT name, suspended_by FROM suspended WHERE name='alice'"
-        ).fetchone()
+        row = db_conn.execute("SELECT name, suspended_by FROM suspended WHERE name='alice'").fetchone()
         assert row is not None
         assert row["suspended_by"] == "lead"
 
@@ -317,9 +292,7 @@ class TestSuspendResume:
         db_conn.execute("DELETE FROM suspended WHERE name='alice'")
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT name FROM suspended WHERE name='alice'"
-        ).fetchone()
+        row = db_conn.execute("SELECT name FROM suspended WHERE name='alice'").fetchone()
         assert row is None
 
     def test_suspend_creates_system_message(self, db_conn):
@@ -335,9 +308,7 @@ class TestSuspendResume:
         )
         db_conn.commit()
 
-        msg = db_conn.execute(
-            "SELECT body FROM messages WHERE body LIKE '%SUSPEND%bob%'"
-        ).fetchone()
+        msg = db_conn.execute("SELECT body FROM messages WHERE body LIKE '%SUSPEND%bob%'").fetchone()
         assert msg is not None
 
     def test_only_lead_can_suspend(self, db_conn):
@@ -359,9 +330,7 @@ class TestSuspendResume:
         db_conn.commit()
 
         # Check if already suspended
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM suspended WHERE name='alice'"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM suspended WHERE name='alice'").fetchone()[0]
         assert count > 0  # Application would return early
 
 
@@ -384,9 +353,7 @@ class TestRoster:
 
     def test_roster_shows_suspended_state(self, db_conn):
         """Roster correctly marks suspended sessions."""
-        db_conn.execute(
-            "INSERT INTO suspended(name, suspended_by) VALUES ('bob', 'lead')"
-        )
+        db_conn.execute("INSERT INTO suspended(name, suspended_by) VALUES ('bob', 'lead')")
         db_conn.commit()
 
         rows = db_conn.execute(
@@ -407,41 +374,27 @@ class TestMetaTable:
 
     def test_meta_stores_key_value(self, db_conn):
         """Meta table stores arbitrary key-value pairs."""
-        db_conn.execute(
-            "INSERT INTO meta(key, value) VALUES ('dispatcher_session', 'coral')"
-        )
+        db_conn.execute("INSERT INTO meta(key, value) VALUES ('dispatcher_session', 'coral')")
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT value FROM meta WHERE key='dispatcher_session'"
-        ).fetchone()
+        row = db_conn.execute("SELECT value FROM meta WHERE key='dispatcher_session'").fetchone()
         assert row["value"] == "coral"
 
     def test_meta_key_unique(self, db_conn):
         """Meta keys are unique (PRIMARY KEY)."""
-        db_conn.execute(
-            "INSERT INTO meta(key, value) VALUES ('test_key', 'value1')"
-        )
+        db_conn.execute("INSERT INTO meta(key, value) VALUES ('test_key', 'value1')")
         db_conn.commit()
 
         with pytest.raises(sqlite3.IntegrityError):
-            db_conn.execute(
-                "INSERT INTO meta(key, value) VALUES ('test_key', 'value2')"
-            )
+            db_conn.execute("INSERT INTO meta(key, value) VALUES ('test_key', 'value2')")
 
     def test_meta_upsert(self, db_conn):
         """Meta values can be updated with INSERT OR REPLACE."""
-        db_conn.execute(
-            "INSERT INTO meta(key, value) VALUES ('version', '1.0')"
-        )
+        db_conn.execute("INSERT INTO meta(key, value) VALUES ('version', '1.0')")
         db_conn.commit()
 
-        db_conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES ('version', '2.0')"
-        )
+        db_conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('version', '2.0')")
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT value FROM meta WHERE key='version'"
-        ).fetchone()
+        row = db_conn.execute("SELECT value FROM meta WHERE key='version'").fetchone()
         assert row["value"] == "2.0"

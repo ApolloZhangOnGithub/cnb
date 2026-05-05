@@ -4,12 +4,15 @@ Provides temporary project directories with initialized .claudes/ structure,
 database connections, and helper utilities used across all test modules.
 """
 
-import pytest
 import sqlite3
-import tempfile
-import time
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import pytest
+
+from lib.common import ts  # noqa: F401 — re-export for tests
 
 # ---------------------------------------------------------------------------
 # Schema path (relative to this file's location)
@@ -42,12 +45,10 @@ def tmp_project(tmp_path):
     (claudes / "okr").mkdir()
     (claudes / "cv").mkdir()
 
-    # Create config.sh
-    sessions_str = " ".join(DEFAULT_SESSIONS)
-    (claudes / "config.sh").write_text(
-        f'CLAUDES_HOME="{tmp_path}"\n'
-        f"SESSIONS=({sessions_str})\n"
-        f'PREFIX="cc-test"\n'
+    # Create config.toml (primary config format)
+    sessions_toml = ", ".join(f'"{s}"' for s in DEFAULT_SESSIONS)
+    (claudes / "config.toml").write_text(
+        f'claudes_home = "{tmp_path}"\nsessions = [{sessions_toml}]\nprefix = "cc-test"\n'
     )
 
     # Initialize database from schema
@@ -62,9 +63,7 @@ def tmp_project(tmp_path):
 
     # Create session .md files
     for name in DEFAULT_SESSIONS:
-        (claudes / "sessions" / f"{name}.md").write_text(
-            f"# {name}\n\n## Current task\n(none)\n\n## @inbox\n"
-        )
+        (claudes / "sessions" / f"{name}.md").write_text(f"# {name}\n\n## Current task\n(none)\n\n## @inbox\n")
 
     return tmp_path
 
@@ -90,59 +89,10 @@ def db_conn(db_path):
 
 @pytest.fixture
 def db(db_path):
-    """Return a DB helper instance for the temp project.
+    """Return a BoardDB instance for the temp project."""
+    from lib.board_db import BoardDB
 
-    This fixture attempts to import the Python rewrite's DB class.
-    If not yet available, it provides a lightweight shim that offers
-    the same interface so tests can run before the rewrite lands.
-    """
-    try:
-        import sys
-
-        sys.path.insert(0, str(Path(__file__).parent.parent))
-        from lib.common import DB
-
-        return DB(db_path)
-    except ImportError:
-        # Provide a lightweight shim for testing before lib/common.py exists
-        return _DBShim(db_path)
-
-
-class _DBShim:
-    """Minimal DB wrapper matching the expected lib.common.DB interface.
-
-    Used as a fallback when the Python rewrite has not yet landed.
-    """
-
-    def __init__(self, path):
-        self.path = Path(path)
-        self._conn = sqlite3.connect(str(self.path))
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
-
-    def execute(self, query, params=()):
-        cur = self._conn.execute(query, params)
-        self._conn.commit()
-        return cur
-
-    def query(self, query, params=()):
-        cur = self._conn.execute(query, params)
-        return cur.fetchall()
-
-    def scalar(self, query, params=()):
-        cur = self._conn.execute(query, params)
-        row = cur.fetchone()
-        if row is None:
-            return None
-        return row[0]
-
-    def insert_returning_id(self, query, params=()):
-        cur = self._conn.execute(query, params)
-        self._conn.commit()
-        return cur.lastrowid
-
-    def close(self):
-        self._conn.close()
+    return BoardDB(db_path)
 
 
 @pytest.fixture
@@ -155,8 +105,3 @@ def sessions_dir(tmp_project):
 def files_dir(tmp_project):
     """Return the shared files directory path."""
     return tmp_project / ".claudes" / "files"
-
-
-def ts():
-    """Return a timestamp in the same format as the board."""
-    return time.strftime("%Y-%m-%d %H:%M")

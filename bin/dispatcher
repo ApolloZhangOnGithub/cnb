@@ -1,796 +1,151 @@
-#!/usr/bin/env bash
-set -uo pipefail
-
-# dispatcher.sh — Session keepalive + health monitoring
-#
-# 1. Keep dev sessions alive (restart if Claude exits)
-# 2. Keep Coral alive
-# 3. Periodic health check via Coral
-# 4. Detect team-wide idle → write to Orca inbox
-
-_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
-source "$CLAUDES_HOME/lib/discover.sh"
-
-PREFIX="cc"
-DISPATCHER_SESSION="${DISPATCHER_SESSION:-dispatcher}"; CORAL_SESS="${PREFIX}-${DISPATCHER_SESSION}"
-BOARD_SH="${PROJECT_ROOT}/board.sh"
-SAY_SH="${PROJECT_ROOT}/say.sh"
-LOG_DIR="${PROJECT_ROOT}/.swarm-logs"
-OKR_DIR="${CLAUDES_DIR}/okr"
-mkdir -p "$LOG_DIR"
-
-# Fail fast if paths are wrong
-for _required in \
-    "$SESSIONS_DIR" \
-    "$BOARD_DIR" \
-    "${BOARD_SH}"; do
-    if [ ! -e "$_required" ]; then
-        echo "FATAL: missing ${_required}" >&2
-        echo "  PROJECT_ROOT=${PROJECT_ROOT}" >&2
-        exit 1
-    fi
-done
-
-# Auto-detect dev sessions from tmux (excludes dispatcher and lead)
-get_sessions() {
-    tmux list-sessions -F '#{session_name}' 2>/dev/null \
-        | grep "^${PREFIX}-" \
-        | sed "s/^${PREFIX}-//" \
-        | grep -v -E "^(dispatcher|lead)$" \
-        || true
-}
-
-HEALTH_INTERVAL=600
-HEALTH_INTERVAL_MAX=3600
-KEEPALIVE_INTERVAL=2
-DEV_CHECK_INTERVAL=5
-CORAL_POKE_INTERVAL=120
-BOOT_WAIT=8
-IDLE_THRESHOLD=1800  # 30 min with no status update = idle
-
-last_health_check=0
-last_idle_alert=0
-last_dev_check=0
-last_dispatcher_poke=$(date +%s)
-last_announced_hour=-1
-health_interval=$HEALTH_INTERVAL
-
-log() { echo "[dispatcher] $(date '+%H:%M:%S') $*"; }
-
-is_claude_running() {
-    local sess="$1"
-    tmux has-session -t "$sess" 2>/dev/null || return 1
-    local cmd
-    cmd=$(tmux list-panes -t "$sess" -F '#{pane_current_command}' 2>/dev/null | head -1)
-    case "$cmd" in
-        zsh|bash|sh|-zsh|-bash) return 1 ;;
-        *) return 0 ;;
-    esac
-}
-
-is_suspended() { grep -qx "$1" "${CLAUDES_DIR}/suspended.list" 2>/dev/null; }
-
-_date_to_epoch() {
-    local ts="$1" fmt="${2:-%Y-%m-%d %H:%M}"
-    if date -j -f "$fmt" "$ts" +%s 2>/dev/null; then return; fi
-    date -d "$ts" +%s 2>/dev/null || echo 0
-}
-
-check_okr_throughput() {
-    : # TODO: implement OKR throughput checking
-}
-
-# --- Resource monitoring (via resource-monitor.sh) ---
-RESOURCE_MONITOR="${CLAUDES_HOME}/lib/resources.sh"
-CPU_HIGH_THRESHOLD=80
-CPU_LOW_THRESHOLD=60
-THROTTLE_MULTIPLIER=1  # 1 = normal, 2/4 = throttled
-THROTTLE_MAX=4
-last_cpu_check=0
-CPU_CHECK_INTERVAL=10
-RESOURCE_CHECK_INTERVAL=60
-last_resource_check=0
-last_resource_state=""
-
-# Parse resource-monitor.sh --json output, cache result
-CACHED_RESOURCE_JSON=""
-CACHED_RESOURCE_TS=0
-
-refresh_resource_cache() {
-    local now
-    now=$(date +%s)
-    if [ $((now - CACHED_RESOURCE_TS)) -lt 5 ]; then return; fi
-    CACHED_RESOURCE_JSON=$("$RESOURCE_MONITOR" --json 2>/dev/null || echo '{}')
-    CACHED_RESOURCE_TS=$now
-}
-
-get_cpu_busy() {
-    refresh_resource_cache
-    echo "$CACHED_RESOURCE_JSON" | python3 -c "
-import sys,json
-try:
-    d=json.load(sys.stdin)
-    print(d.get('cpu',{}).get('usage',50))
-except: print(50)
-" 2>/dev/null || echo 50
-}
-
-update_throttle() {
-    local now=$1
-    if [ $((now - last_cpu_check)) -lt "$CPU_CHECK_INTERVAL" ]; then return; fi
-    last_cpu_check=$now
-    local cpu
-    cpu=$(get_cpu_busy 2>/dev/null || echo 50)
-    if [ "$cpu" -gt "$CPU_HIGH_THRESHOLD" ]; then
-        if [ "$THROTTLE_MULTIPLIER" -lt "$THROTTLE_MAX" ]; then
-            THROTTLE_MULTIPLIER=$((THROTTLE_MULTIPLIER * 2))
-            log "THROTTLE: CPU=${cpu}% > ${CPU_HIGH_THRESHOLD}%, interval x${THROTTLE_MULTIPLIER}"
-        fi
-    elif [ "$cpu" -lt "$CPU_LOW_THRESHOLD" ] && [ "$THROTTLE_MULTIPLIER" -gt 1 ]; then
-        THROTTLE_MULTIPLIER=1
-        log "THROTTLE: CPU=${cpu}% < ${CPU_LOW_THRESHOLD}%, restored normal interval"
-    fi
-}
-
-check_resources() {
-    local now
-    now=$(date +%s)
-    if [ $((now - last_resource_check)) -lt "$RESOURCE_CHECK_INTERVAL" ]; then return; fi
-    last_resource_check=$now
-
-    refresh_resource_cache
-    [ -z "$CACHED_RESOURCE_JSON" ] && return
-
-    local state
-    state=$(echo "$CACHED_RESOURCE_JSON" | python3 -c "
-import sys,json
-try:
-    d=json.load(sys.stdin)
-    b=d.get('battery',{})
-    m=d.get('memory',{})
-    c=d.get('cpu',{})
-    print(f\"{b.get('status','?')}|{b.get('pct',100)}|{m.get('status','?')}|{m.get('pressure','?')}|{c.get('status','?')}|{c.get('usage',0)}\")
-except: print('?|100|?|?|?|0')
-" 2>/dev/null || echo "?|100|?|?|?|0")
-
-    if [ "$state" = "$last_resource_state" ]; then return; fi
-    last_resource_state="$state"
-
-    local batt_status batt_pct mem_status mem_pressure cpu_status cpu_usage
-    IFS='|' read -r batt_status batt_pct mem_status mem_pressure cpu_status cpu_usage <<< "$state"
-
-    if [ "$batt_status" = "CRITICAL" ]; then
-        log "RESOURCE: Battery CRITICAL (${batt_pct}%), suspending non-essential sessions"
-        "$BOARD_SH" --as dispatcher send All "[Resource] 电池严重不足 (${batt_pct}%)，暂停非关键 session。" 2>/dev/null || true
-        local sessions
-        sessions=$(get_sessions)
-        for name in $sessions; do
-            local sess="${PREFIX}-${name}"
-            if is_claude_running "$sess"; then
-                tmux send-keys -t "$sess" -l "[系统] 电池严重不足，请立即保存状态。"
-                tmux send-keys -t "$sess" Enter
-            fi
-        done
-    elif [ "$batt_status" = "LOW" ]; then
-        log "RESOURCE: Battery LOW (${batt_pct}%)"
-        "$BOARD_SH" --as dispatcher send All "[Resource] 电池低 (${batt_pct}%)，建议减少活跃 session 到 2-3 个。" 2>/dev/null || true
-    fi
-
-    if [ "$mem_status" = "CRITICAL" ]; then
-        log "RESOURCE: Memory pressure CRITICAL"
-        "$BOARD_SH" --as dispatcher send All "[Resource] 内存压力严重！建议重启最大的 session 释放内存。" 2>/dev/null || true
-    elif [ "$mem_status" = "WARNING" ]; then
-        log "RESOURCE: Memory pressure WARNING"
-        "$BOARD_SH" --as dispatcher send All "[Resource] 内存压力升高，关注中。" 2>/dev/null || true
-    fi
-
-    if [ "$cpu_status" = "SATURATED" ]; then
-        log "RESOURCE: CPU saturated (${cpu_usage}%)"
-    fi
-}
-
-SUSPENDED_FILE="$BOARD_DIR/suspended.list"
-
-# --- Mentor-Intern mapping (bash 3 compatible) ---
-MENTOR_NOTIFY_DIR="${LOG_DIR}/mentor-notify"
-mkdir -p "$MENTOR_NOTIFY_DIR"
-MENTOR_CHECK_INTERVAL=300  # 5 min
-last_mentor_check=0
-
-check_mentor_notifications() {
-    local now
-    now=$(date +%s)
-    [ $((now - last_mentor_check)) -lt "$MENTOR_CHECK_INTERVAL" ] && return
-    last_mentor_check=$now
-
-}
-
-# --- Coral lifecycle ---
-
-ensure_dispatcher() {
-    if is_claude_running "$CORAL_SESS"; then return 0; fi
-    log "Starting Coral..."
-    tmux kill-session -t "$CORAL_SESS" 2>/dev/null || true
-    tmux new-session -d -s "$CORAL_SESS" -x 200 -y 50
-    tmux send-keys -t "$CORAL_SESS" "cd '${PROJECT_ROOT}'" Enter
-    sleep 0.5
-    tmux send-keys -t "$CORAL_SESS" -l "claude --name dispatcher --append-system-prompt '你是 Coral。启动后运行 cat dispatcher-role.md，然后等指令。回复不超过3行。'"
-    tmux send-keys -t "$CORAL_SESS" Enter
-    record_boot_time "dispatcher"
-    log "Coral started, waiting ${BOOT_WAIT}s..."
-    sleep "$BOOT_WAIT"
-}
-
-# --- Idle kill tracking ---
-IDLE_KILL_DIR="${LOG_DIR}/idle-since"
-BOOT_GRACE_DIR="${LOG_DIR}/boot-time"
-BOOT_GRACE_SECONDS=120  # 2 min grace period after session start
-mkdir -p "$IDLE_KILL_DIR" "$BOOT_GRACE_DIR"
-
-record_boot_time() {
-    local name="$1"
-    echo "$(date +%s)" > "${BOOT_GRACE_DIR}/${name}"
-}
-
-in_grace_period() {
-    local name="$1" now
-    now=$(date +%s)
-    local boot_file="${BOOT_GRACE_DIR}/${name}"
-    [ -f "$boot_file" ] || return 1
-    local boot_ts
-    boot_ts=$(cat "$boot_file")
-    [ $((now - boot_ts)) -lt "$BOOT_GRACE_SECONDS" ]
-}
-
-kill_idle_sessions() {
-    local now sessions
-    now=$(date +%s)
-    sessions=$(get_sessions)
-    for name in $sessions; do
-        local sess="${PREFIX}-${name}"
-        tmux has-session -t "$sess" 2>/dev/null || continue
-        is_claude_running "$sess" || continue
-
-        # Record boot time for newly discovered sessions
-        if [ ! -f "${BOOT_GRACE_DIR}/${name}" ]; then
-            record_boot_time "$name"
-        fi
-
-        # Skip sessions in boot grace period
-        if in_grace_period "$name"; then
-            continue
-        fi
-
-        local idle_file="${IDLE_KILL_DIR}/${name}"
-        if is_session_idle "$sess"; then
-            if [ ! -f "$idle_file" ]; then
-                echo "$now" > "$idle_file"
-            else
-                local since
-                since=$(cat "$idle_file")
-                local elapsed=$((now - since))
-                if [ "$elapsed" -ge "$IDLE_THRESHOLD" ]; then
-                    log "${name}: idle ${elapsed}s (>30min), killing session"
-                    tmux kill-session -t "$sess" 2>/dev/null || true
-                    rm -f "$idle_file"
-                    "$BOARD_SH" --as dispatcher send All "[Dispatcher] ${name} 闲置超过 30 分钟，已终止。" 2>/dev/null || true
-                fi
-            fi
-        else
-            rm -f "$idle_file"
-        fi
-    done
-}
-
-# --- Dev session keepalive ---
-
-check_dev_sessions() {
-    local sessions
-    sessions=$(get_sessions)
-    for name in $sessions; do
-        if is_suspended "$name"; then continue; fi
-        local sess="${PREFIX}-${name}"
-        tmux has-session -t "$sess" 2>/dev/null || continue
-        if ! is_claude_running "$sess"; then
-            log "${name}: agent exited, NOT restarting (idle policy)"
-            rm -f "${IDLE_KILL_DIR}/${name}"
-        fi
-    done
-}
-
-# --- Batch idle detection (single 1s sleep for ALL sessions) ---
-
-IDLE_CACHE_FILE="${LOG_DIR}/idle-cache"
-
-refresh_idle_cache() {
-    : > "$IDLE_CACHE_FILE"
-    local all_sessions
-    all_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep "^${PREFIX}-" || true)
-
-    local snap_file="${LOG_DIR}/snap1"
-    : > "$snap_file"
-    for sess in $all_sessions; do
-        # User typing (check LAST prompt line only — if it has >3 chars after ❯)
-        local last_prompt
-        last_prompt=$(tmux capture-pane -t "$sess" -p 2>/dev/null | grep '^❯' | tail -1 || true)
-        if [ -n "$last_prompt" ] && echo "$last_prompt" | grep -qE '^❯ .{3,}'; then
-            echo "$sess busy" >> "$IDLE_CACHE_FILE"
-            continue
-        fi
-
-        # Check for transient tool processes spawned by Claude
-        # Claude always has caffeinate + uv as persistent children — ignore those
-        local has_tool_proc=false
-        local pane_pid claude_pid
-        pane_pid=$(tmux display-message -t "$sess" -p '#{pane_pid}' 2>/dev/null) || pane_pid=""
-        if [ -n "$pane_pid" ]; then
-            claude_pid=$(pgrep -P "$pane_pid" 2>/dev/null | head -1) || claude_pid=""
-            if [ -n "$claude_pid" ]; then
-                local child_pids
-                child_pids=$(pgrep -P "$claude_pid" 2>/dev/null) || child_pids=""
-                for cpid in $child_pids; do
-                    local cname
-                    cname=$(ps -p "$cpid" -o comm= 2>/dev/null) || cname=""
-                    cname="${cname##*/}"
-                    case "$cname" in
-                        caffeinate|uv|"") ;;
-                        *) has_tool_proc=true; break ;;
-                    esac
-                done
-            fi
-        fi
-        if $has_tool_proc; then
-            echo "$sess busy" >> "$IDLE_CACHE_FILE"
-            continue
-        fi
-
-        echo "$sess $(tmux capture-pane -t "$sess" -p 2>/dev/null | md5)" >> "$snap_file"
-    done
-
-    sleep 1
-
-    while read -r sess hash1; do
-        local hash2
-        hash2=$(tmux capture-pane -t "$sess" -p 2>/dev/null | md5)
-        if [ "$hash1" = "$hash2" ]; then
-            echo "$sess idle" >> "$IDLE_CACHE_FILE"
-        else
-            echo "$sess busy" >> "$IDLE_CACHE_FILE"
-        fi
-    done < "$snap_file"
-    rm -f "$snap_file"
-}
-
-is_session_idle() {
-    local sess="$1"
-    grep -q "^${sess} idle$" "$IDLE_CACHE_FILE" 2>/dev/null
-}
-
-# --- Unread inbox detection → nudge session to check ---
-# --- Idle session nudge → trigger autonomous work loop ---
-
-IDLE_NUDGE_DIR="${LOG_DIR}/idle-nudged"
-mkdir -p "$IDLE_NUDGE_DIR"
-IDLE_NUDGE_COOLDOWN=300
-
-check_unread_inboxes() {
-    local sessions
-    sessions=$(get_sessions)
-    for name in $sessions; do
-        nudge_if_unread "$name"
-    done
-}
-
-nudge_idle_sessions() {
-    local sessions now
-    sessions=$(get_sessions)
-    now=$(date +%s)
-    for name in $sessions; do
-        if is_suspended "$name"; then continue; fi
-        local sess="${PREFIX}-${name}"
-        tmux has-session -t "$sess" 2>/dev/null || continue
-        is_claude_running "$sess" || continue
-        is_session_idle "$sess" || continue
-
-        local nudge_file="${IDLE_NUDGE_DIR}/${name}"
-        if [ -f "$nudge_file" ]; then
-            local last_nudge
-            last_nudge=$(cat "$nudge_file")
-            [ $((now - last_nudge)) -lt "$IDLE_NUDGE_COOLDOWN" ] && continue
-        fi
-
-        log "${name}: idle, nudging autonomous loop"
-        tmux send-keys -t "$sess" -l "继续工作。检查你的 OKR (${OKR_DIR}/${name}.md)，推进你的活跃 KR。自己决定优先级。"
-        tmux send-keys -t "$sess" Enter
-        echo "$now" > "$nudge_file"
-    done
-}
-
-nudge_if_unread() {
-    local name="$1"
-    local unread
-    if [ -f "$BOARD_DB" ]; then
-        unread=$(sqlite3 "$BOARD_DB" "SELECT COUNT(*) FROM inbox WHERE session='$name' AND read=0;" 2>/dev/null || echo 0)
-    else
-        unread=$("$BOARD_SH" --as "$name" inbox 2>/dev/null | grep -oE '[0-9]+ 条未读' | grep -oE '[0-9]+' || echo 0)
-    fi
-    [ "${unread:-0}" -gt 0 ] || return 0
-
-    local sess="${PREFIX}-${name}"
-    tmux has-session -t "$sess" 2>/dev/null || return 0
-    is_claude_running "$sess" || return 0
-
-    log "INBOX: ${name} has ${unread} unread → nudging"
-    tmux send-keys -t "$sess" -l "./board.sh --as ${name} inbox"
-    tmux send-keys -t "$sess" Enter
-}
-
-# --- Event-driven file watcher (kqueue on macOS) ---
-
-WATCH_FIFO="/tmp/dispatcher-watch-$$"
-WATCH_PID=""
-WATCH_PID_FILE="${CLAUDES_DIR}/dispatcher-watcher.pid"
-
-# Kill orphan Python watchers left behind by previous dispatcher instances.
-# This handles the case where dispatcher crashes (SIGKILL) or restarts without
-# its trap handler firing, leaving the old Python kqueue watcher running.
-cleanup_old_watchers() {
-    # Kill any previous watcher recorded in the PID file
-    if [ -f "$WATCH_PID_FILE" ]; then
-        local old_pid
-        old_pid=$(cat "$WATCH_PID_FILE" 2>/dev/null)
-        if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
-            log "Killing old watcher from PID file (pid=$old_pid)"
-            kill "$old_pid" 2>/dev/null || true
-            wait "$old_pid" 2>/dev/null || true
-        fi
-        rm -f "$WATCH_PID_FILE"
-    fi
-
-    # Belt-and-suspenders: find any Python processes watching our sessions dir
-    # that weren't started by this dispatcher instance
-    local stale_pids
-    stale_pids=$(pgrep -f "python3.*${SESSIONS_DIR}.*dispatcher-watch" 2>/dev/null || true)
-    for pid in $stale_pids; do
-        log "Killing orphan watcher process (pid=$pid)"
-        kill "$pid" 2>/dev/null || true
-    done
-
-    # Clean up stale FIFOs from previous instances
-    for fifo in /tmp/dispatcher-watch-*; do
-        [ -e "$fifo" ] || continue
-        [ "$fifo" = "$WATCH_FIFO" ] && continue
-        log "Removing stale FIFO: $fifo"
-        rm -f "$fifo"
-    done
-}
-
-start_file_watcher() {
-    rm -f "$WATCH_FIFO"
-    mkfifo "$WATCH_FIFO"
-
-    python3 - "$SESSIONS_DIR" "$WATCH_FIFO" <<'PYTHON' &
-import os, sys, select, signal
-watch_dir = sys.argv[1]
-fifo_path = sys.argv[2]
-signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-
-kq = select.kqueue()
-dir_fd = os.open(watch_dir, os.O_RDONLY)
-dir_event = select.kevent(dir_fd,
-    filter=select.KQ_FILTER_VNODE,
-    flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
-    fflags=select.KQ_NOTE_WRITE)
-kq.control([dir_event], 0)
-
-file_fds = {}
-def refresh():
-    for f in os.listdir(watch_dir):
-        if not f.endswith('.md'):
-            continue
-        path = os.path.join(watch_dir, f)
-        if path in file_fds:
-            continue
-        try:
-            fd = os.open(path, os.O_RDONLY)
-            ev = select.kevent(fd,
-                filter=select.KQ_FILTER_VNODE,
-                flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
-                fflags=select.KQ_NOTE_WRITE | select.KQ_NOTE_EXTEND)
-            kq.control([ev], 0)
-            file_fds[path] = fd
-        except OSError:
-            pass
-
-refresh()
-fifo = open(fifo_path, 'w')
-while True:
-    fd_to_path = {fd: path for path, fd in file_fds.items()}
+#!/usr/bin/env python3
+"""dispatcher — Session keepalive + health monitoring daemon.
+
+Concerns (each with independent check intervals):
+  CoralManager       — dispatcher Claude session lifecycle
+  SessionKeepAlive   — detect dead dev sessions
+  IdleDetector       — batch screen snapshot comparison
+  IdleKiller         — kill sessions idle >30min
+  IdleNudger         — nudge idle sessions to continue working
+  InboxNudger        — detect unread inboxes, nudge sessions
+  CoralPoker         — periodic heartbeat to dispatcher session
+  HealthChecker      — periodic full status report + team idle detection
+  BugSLAChecker      — check overdue bugs
+  ResourceMonitor    — battery/memory/CPU
+  TimeAnnouncer      — hourly/daily announcements
+  FileWatcher        — kqueue-based instant inbox detection (background thread)
+  AdaptiveThrottle   — slow down main loop when CPU is high
+"""
+
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
+_self = Path(__file__).resolve()
+CLAUDES_HOME = _self.parent.parent
+sys.path.insert(0, str(CLAUDES_HOME))
+
+from lib.common import ClaudesEnv
+from lib.concerns import (
+    AdaptiveThrottle,
+    BugSLAChecker,
+    Concern,
+    CoralManager,
+    CoralPoker,
+    DispatcherConfig,
+    FileWatcher,
+    HealthChecker,
+    IdleDetector,
+    IdleKiller,
+    IdleNudger,
+    InboxNudger,
+    ResourceMonitor,
+    SessionKeepAlive,
+    TimeAnnouncer,
+    log,
+    tmux_ok,
+)
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+env = ClaudesEnv.load()
+DISPATCHER_SESSION = os.environ.get("DISPATCHER_SESSION", "dispatcher")
+
+cfg = DispatcherConfig(
+    prefix=env.prefix,
+    project_root=env.project_root,
+    claudes_dir=env.claudes_dir,
+    sessions_dir=env.sessions_dir,
+    board_db=env.board_db,
+    suspended_file=env.suspended_file,
+    board_sh=str(CLAUDES_HOME / "bin" / "board"),
+    coral_sess=f"{env.prefix}-{DISPATCHER_SESSION}",
+    dispatcher_session=DISPATCHER_SESSION,
+    log_dir=env.claudes_dir / "logs",
+    okr_dir=env.claudes_dir / "okr",
+    dev_sessions=sorted(sf.stem for sf in env.sessions_dir.glob("*.md") if sf.stem != "dispatcher"),
+)
+
+cfg.log_dir.mkdir(parents=True, exist_ok=True)
+
+for _p in [cfg.sessions_dir, cfg.claudes_dir]:
+    if not _p.exists():
+        print(f"FATAL: missing {_p}", file=sys.stderr)
+        sys.exit(1)
+if not Path(cfg.board_sh).exists():
+    print(f"FATAL: missing {cfg.board_sh}", file=sys.stderr)
+    sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    base_interval = 2
+
+    coral = CoralManager(cfg)
+    idle = IdleDetector(cfg)
+    poker = CoralPoker(cfg)
+    inbox = InboxNudger(cfg)
+    throttle = AdaptiveThrottle()
+    file_watcher = FileWatcher(cfg, inbox)
+
+    # Order matters: idle must tick before idle_killer / idle_nudger
+    concerns: list[Concern] = [
+        coral,
+        TimeAnnouncer(cfg),
+        idle,
+        SessionKeepAlive(cfg),
+        IdleKiller(cfg, idle, coral),
+        inbox,
+        IdleNudger(cfg, idle),
+        poker,
+        BugSLAChecker(cfg, poker),
+        HealthChecker(cfg, poker, coral),
+        ResourceMonitor(cfg),
+        file_watcher,
+        throttle,
+    ]
+
+    log(f"Starting (base_interval:{base_interval}s concerns:{len(concerns)})")
+    log("Ctrl-C to stop")
+
+    file_watcher.start()
+
+    running = True
+
+    def _shutdown(signum, frame):
+        nonlocal running
+        running = False
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
     try:
-        events = kq.control(None, 8, 10.0)
-    except (InterruptedError, OSError):
-        break
-    if not events:
-        refresh()
-        continue
-    changed = set()
-    for ev in events:
-        if ev.ident == dir_fd:
-            refresh()
-        elif ev.ident in fd_to_path:
-            changed.add(fd_to_path[ev.ident])
-    for path in changed:
-        name = os.path.basename(path).replace('.md', '')
-        try:
-            fifo.write(name + '\n')
-            fifo.flush()
-        except (BrokenPipeError, OSError):
-            sys.exit(0)
-PYTHON
-    WATCH_PID=$!
-    echo "$WATCH_PID" > "$WATCH_PID_FILE"
-    log "File watcher started (pid=$WATCH_PID)"
-}
+        while running:
+            now = int(time.time())
 
-stop_file_watcher() {
-    if [ -n "$WATCH_PID" ]; then
-        kill "$WATCH_PID" 2>/dev/null || true
-        wait "$WATCH_PID" 2>/dev/null || true
-    fi
-    rm -f "$WATCH_FIFO" "$WATCH_PID_FILE"
-}
+            if not tmux_ok("has-session", "-t", cfg.coral_sess):
+                log("Coral session gone. Shutting down.")
+                break
 
-drain_watch_events() {
-    [ -p "$WATCH_FIFO" ] || return 0
-    # Only read if watcher is alive (otherwise open() blocks on FIFO with no writer)
-    [ -n "$WATCH_PID" ] && kill -0 "$WATCH_PID" 2>/dev/null || return 0
-    while read -t 0.1 name <> "$WATCH_FIFO" 2>/dev/null; do
-        [ -z "$name" ] && continue
-        is_suspended "$name" && continue
-        nudge_if_unread "$name"
-    done || true
-}
+            for c in concerns:
+                c.maybe_tick(now)
 
-# --- Idle detection → Orca inbox ---
+            deadline = time.time() + base_interval * throttle.multiplier
+            while running and time.time() < deadline:
+                time.sleep(min(0.5, max(0, deadline - time.time())))
+    finally:
+        log("Shutting down...")
+        file_watcher.stop()
+        log("Stopped.")
 
-check_idle_sessions() {
-    local now idle_list="" idle_count=0 total=0
-    now=$(date +%s)
 
-    local sessions
-    sessions=$(get_sessions)
-    for name in $sessions; do
-        if is_suspended "$name"; then continue; fi
-        local sess="${PREFIX}-${name}"
-        tmux has-session -t "$sess" 2>/dev/null || continue
-        is_claude_running "$sess" || continue
-        if in_grace_period "$name"; then continue; fi
-        total=$((total + 1))
-
-        local last_update=""
-        if [ -f "$BOARD_DB" ]; then
-            last_update=$(sqlite3 "$BOARD_DB" "SELECT updated_at FROM sessions WHERE name='$name';" 2>/dev/null || echo "")
-        else
-            local sf="$SESSIONS_DIR/${name}.md"
-            if [ -f "$sf" ]; then
-                local ts_line
-                ts_line=$(awk '/^## Status/{getline; print; exit}' "$sf" 2>/dev/null)
-                if echo "$ts_line" | grep -qoE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'; then
-                    last_update=$(echo "$ts_line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}' | tail -1)
-                fi
-            fi
-        fi
-        if [ -n "$last_update" ]; then
-            local update_epoch
-            update_epoch=$(_date_to_epoch "$last_update")
-            local age=$((now - update_epoch))
-            if [ "$age" -gt "$IDLE_THRESHOLD" ]; then
-                idle_list="${idle_list} ${name}(${age}s)"
-                idle_count=$((idle_count + 1))
-            fi
-        fi
-    done
-
-    if [ "$idle_count" -gt 0 ] && [ "$idle_count" -eq "$total" ]; then
-        local elapsed=$((now - last_idle_alert))
-        if [ "$elapsed" -gt 3600 ]; then
-            log "All sessions idle: ${idle_list}"
-            "$BOARD_SH" --as dispatcher send lead "[Dispatcher] 全员空闲超过 $((IDLE_THRESHOLD/60)) 分钟:${idle_list}。可能需要分配工作。" 2>/dev/null || true
-            last_idle_alert=$now
-        fi
-    fi
-}
-
-# --- Poke Coral for health check ---
-
-poke_dispatcher() {
-    local msg="$1"
-    if ! tmux has-session -t "$CORAL_SESS" 2>/dev/null; then return 1; fi
-    is_claude_running "$CORAL_SESS" || return 1
-    # Don't inject if user is typing (check LAST prompt line only)
-    local last_prompt
-    last_prompt=$(tmux capture-pane -t "$CORAL_SESS" -p 2>/dev/null | grep '^❯' | tail -1 || true)
-    if [ -n "$last_prompt" ] && echo "$last_prompt" | grep -qE '^❯ .{3,}'; then
-        log "Coral: skip (typing)"
-        return 1
-    fi
-    # Don't inject if screen is changing (Claude thinking/outputting)
-    local h1 h2
-    h1=$(tmux capture-pane -t "$CORAL_SESS" -p 2>/dev/null | md5)
-    sleep 1
-    h2=$(tmux capture-pane -t "$CORAL_SESS" -p 2>/dev/null | md5)
-    if [ "$h1" != "$h2" ]; then
-        log "Coral: skip (busy)"
-        return 1
-    fi
-    log "Coral: poking"
-    tmux send-keys -t "$CORAL_SESS" -l "$msg"
-    tmux send-keys -t "$CORAL_SESS" Enter
-}
-
-compact_status() {
-    local parts="" sessions
-    sessions=$(get_sessions)
-    for name in $sessions; do
-        local online="off"
-        tmux has-session -t "${PREFIX}-${name}" 2>/dev/null && online="on"
-        parts="${parts}${name}:${online} "
-    done
-    echo "${parts% }"
-}
-
-# --- Hourly/daily time announcements ---
-
-announce_time() {
-    local hour minute day_of_week
-    hour=$(date '+%H')
-    minute=$(date '+%M')
-    day_of_week=$(date '+%A')
-
-    # Only fire at minute :00 and only once per hour
-    [ "$minute" != "00" ] && return
-    [ "$hour" -eq "$last_announced_hour" ] && return
-    last_announced_hour=$hour
-
-    local time_str
-    time_str=$(date '+%Y-%m-%d %H:%M')
-
-    # Daily summary at 09:00
-    if [ "$hour" -eq "09" ]; then
-        local msg="[Clock] ${time_str} (${day_of_week}) — 新一天。检查 KR 列表，确认优先级。"
-        "$BOARD_SH" --as dispatcher send All "$msg" 2>/dev/null || true
-        log "Daily announcement sent"
-    else
-        local msg="[Clock] 现在是 ${time_str}。"
-        "$BOARD_SH" --as dispatcher send All "$msg" 2>/dev/null || true
-        log "Hourly announcement: ${hour}:00"
-    fi
-}
-
-# --- Build DEV_SESSIONS from session files (everything except dispatcher) ---
-DEV_SESSIONS=()
-for _sf in "${SESSIONS_DIR}"/*.md; do
-    _name="$(basename "$_sf" .md)"
-    [ "$_name" = "dispatcher" ] && continue
-    DEV_SESSIONS+=("$_name")
-done
-
-# --- Main loop ---
-
-log "Starting (keepalive:${KEEPALIVE_INTERVAL}s health:${HEALTH_INTERVAL}s idle:${IDLE_THRESHOLD}s)"
-log "Ctrl-C to stop"
-
-# Start event-driven file watcher if kqueue available
-if python3 -c "import select; assert hasattr(select, 'kqueue')" 2>/dev/null; then
-    cleanup_old_watchers
-    start_file_watcher
-    trap 'stop_file_watcher; exit 0' INT TERM
-else
-    log "kqueue unavailable, using polling only"
-    trap 'exit 0' INT TERM
-fi
-
-while true; do
-    now=$(date +%s)
-
-    # If Coral session is gone, dispatcher shuts itself down
-    if ! tmux has-session -t "$CORAL_SESS" 2>/dev/null; then
-        log "Coral session gone. Dispatcher shutting down."
-        stop_file_watcher 2>/dev/null || true
-        exit 0
-    fi
-
-    # Hourly/daily time announcement
-    announce_time
-
-    # Coral keepalive — only if at least one dev session is running
-    dev_alive=false
-    for s in "${DEV_SESSIONS[@]}"; do
-        if is_claude_running "${PREFIX}-${s}" 2>/dev/null; then
-            dev_alive=true
-            break
-        fi
-    done
-    if $dev_alive && ! is_suspended "dispatcher"; then
-        ensure_dispatcher
-    fi
-
-    # Dev session keepalive every DEV_CHECK_INTERVAL
-    if [ $(( now - last_dev_check )) -ge "$DEV_CHECK_INTERVAL" ]; then
-        refresh_idle_cache
-        check_dev_sessions
-        kill_idle_sessions
-        check_unread_inboxes
-        nudge_idle_sessions
-        dispatcher_has_mail=false
-        dispatcher_unread=$("$BOARD_SH" --as dispatcher inbox 2>/dev/null | grep -oE '[0-9]+ 条未读' | grep -oE '[0-9]+' || echo 0)
-        [ "${dispatcher_unread:-0}" -gt 0 ] && dispatcher_has_mail=true
-
-        if $dispatcher_has_mail; then
-            if poke_dispatcher "[Dispatcher] 你有 ${dispatcher_unread} 条未读消息"; then
-                last_dispatcher_poke=$now
-            fi
-        elif [ $(( now - last_dispatcher_poke )) -ge "$CORAL_POKE_INTERVAL" ]; then
-            if poke_dispatcher "[Dispatcher] heartbeat $(date '+%H:%M:%S')"; then
-                last_dispatcher_poke=$now
-            fi
-        fi
-        last_dev_check=$now
-    fi
-
-    # Sync user messages from JSONL to persistent log
-    if [ $(( now - last_dev_check )) -lt 2 ]; then
-        "${PROJECT_ROOT}/tools/user-log-sync.sh" 2>/dev/null || true
-    fi
-
-    # Integrity check — every health interval
-    if [ $(( now - last_health_check )) -ge "$health_interval" ]; then
-        integrity=$("${PROJECT_ROOT}/tools/integrity-check.sh" check 2>/dev/null || true)
-        if echo "$integrity" | grep -q "^TAMPERED"; then
-            log "INTEGRITY VIOLATION: ${integrity}"
-            poke_dispatcher "[ALERT] 治理文件被篡改! ${integrity}" || true
-            "$BOARD_SH" --as dispatcher send lead "[INTEGRITY] 治理文件被篡改: ${integrity}" 2>/dev/null || true
-        fi
-    fi
-
-    # Bug SLA check — every health interval
-    if [ $(( now - last_health_check )) -ge "$health_interval" ]; then
-        overdue=$("$BOARD_SH" bug overdue 2>/dev/null || true)
-        if [ -n "$overdue" ] && ! echo "$overdue" | grep -q "^No overdue"; then
-            log "Bug SLA alert: ${overdue}"
-            poke_dispatcher "[Dispatcher] Bug SLA 超时: ${overdue}" || true
-        fi
-    fi
-
-    # Health check (full status report to Coral)
-    if [ $(( now - last_health_check )) -ge "$health_interval" ]; then
-        status=$(compact_status)
-        log "Health check (interval:${health_interval}s): ${status}"
-        if [ $(( now - last_dispatcher_poke )) -ge "$CORAL_POKE_INTERVAL" ]; then
-            if poke_dispatcher "[Dispatcher] 健康巡检 $(date '+%H:%M:%S'): ${status}"; then
-                last_dispatcher_poke=$now
-            fi
-        fi
-        last_health_check=$now
-        health_interval=$(( health_interval * 2 ))
-        [ "$health_interval" -gt "$HEALTH_INTERVAL_MAX" ] && health_interval=$HEALTH_INTERVAL_MAX
-        check_idle_sessions
-    fi
-
-    # Resource monitoring (battery/memory/CPU via resource-monitor.sh)
-    check_resources
-
-    # Mentor notifications (intern online / no KR / message frequency)
-    check_mentor_notifications
-
-    # OKR throughput check (24h zero → warn, 3d zero → escalate)
-    check_okr_throughput
-
-    # Drain file-watcher events (instant inbox detection)
-    drain_watch_events
-
-    # Adaptive throttle: slow down when CPU is high
-    update_throttle "$now"
-    effective_sleep=$((KEEPALIVE_INTERVAL * THROTTLE_MULTIPLIER))
-    sleep "$effective_sleep"
-done
+if __name__ == "__main__":
+    main()

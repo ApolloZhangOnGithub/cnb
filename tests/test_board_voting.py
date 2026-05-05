@@ -17,8 +17,7 @@ from tests.conftest import ts
 def proposal_a(db_conn):
     """Create a type-A (simple majority) proposal and return its id."""
     cur = db_conn.execute(
-        "INSERT INTO proposals(number, slug, type, content, status) "
-        "VALUES (?, ?, ?, ?, 'OPEN')",
+        "INSERT INTO proposals(number, slug, type, content, status) VALUES (?, ?, ?, ?, 'OPEN')",
         ("001", "test-proposal", "A", "Should we refactor the board module?"),
     )
     db_conn.commit()
@@ -29,8 +28,7 @@ def proposal_a(db_conn):
 def proposal_s(db_conn):
     """Create a type-S (supermajority 2/3) proposal and return its id."""
     cur = db_conn.execute(
-        "INSERT INTO proposals(number, slug, type, content, status) "
-        "VALUES (?, ?, ?, ?, 'OPEN')",
+        "INSERT INTO proposals(number, slug, type, content, status) VALUES (?, ?, ?, ?, 'OPEN')",
         ("002", "charter-amendment", "S", "Amend the team charter section 3"),
     )
     db_conn.commit()
@@ -40,12 +38,8 @@ def proposal_s(db_conn):
 @pytest.fixture
 def with_dispatcher_meta(db_conn):
     """Insert the dispatcher session name into the meta table."""
-    db_conn.execute(
-        "INSERT OR REPLACE INTO meta(key, value) VALUES ('dispatcher_session', 'dispatcher')"
-    )
-    db_conn.execute(
-        "INSERT OR IGNORE INTO sessions(name) VALUES ('dispatcher')"
-    )
+    db_conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('dispatcher_session', 'dispatcher')")
+    db_conn.execute("INSERT OR IGNORE INTO sessions(name) VALUES ('dispatcher')")
     db_conn.commit()
 
 
@@ -55,8 +49,7 @@ class TestVoteCasting:
     def test_vote_support(self, db_conn, proposal_a):
         """A session can vote SUPPORT on an open proposal."""
         db_conn.execute(
-            "INSERT INTO votes(proposal_id, voter, decision, reason) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
             (proposal_a, "alice", "SUPPORT", "looks good"),
         )
         db_conn.commit()
@@ -72,8 +65,7 @@ class TestVoteCasting:
     def test_vote_object(self, db_conn, proposal_a):
         """A session can vote OBJECT on an open proposal."""
         db_conn.execute(
-            "INSERT INTO votes(proposal_id, voter, decision, reason) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
             (proposal_a, "bob", "OBJECT", "needs more discussion"),
         )
         db_conn.commit()
@@ -87,16 +79,14 @@ class TestVoteCasting:
     def test_vote_replaces_previous_vote(self, db_conn, proposal_a):
         """A voter can change their vote (INSERT OR REPLACE on unique constraint)."""
         db_conn.execute(
-            "INSERT INTO votes(proposal_id, voter, decision, reason) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
             (proposal_a, "alice", "SUPPORT", "initially for"),
         )
         db_conn.commit()
 
         # Change vote
         db_conn.execute(
-            "INSERT OR REPLACE INTO votes(proposal_id, voter, decision, reason, ts) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO votes(proposal_id, voter, decision, reason, ts) VALUES (?, ?, ?, ?, ?)",
             (proposal_a, "alice", "OBJECT", "changed my mind", ts()),
         )
         db_conn.commit()
@@ -111,8 +101,7 @@ class TestVoteCasting:
     def test_unique_constraint_per_voter_per_proposal(self, db_conn, proposal_a):
         """The (proposal_id, voter) pair is unique."""
         db_conn.execute(
-            "INSERT INTO votes(proposal_id, voter, decision, reason) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
             (proposal_a, "alice", "SUPPORT", "reason 1"),
         )
         db_conn.commit()
@@ -120,8 +109,7 @@ class TestVoteCasting:
         # Attempting a plain INSERT (not OR REPLACE) should fail
         with pytest.raises(sqlite3.IntegrityError):
             db_conn.execute(
-                "INSERT INTO votes(proposal_id, voter, decision, reason) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
                 (proposal_a, "alice", "OBJECT", "reason 2"),
             )
 
@@ -137,8 +125,7 @@ class TestVoteTally:
             ("charlie", "OBJECT"),
         ]:
             db_conn.execute(
-                "INSERT INTO votes(proposal_id, voter, decision, reason) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
                 (proposal_a, voter, decision, "reason"),
             )
         db_conn.commit()
@@ -175,8 +162,7 @@ class TestAutoDecision:
         voters = ["alice", "bob", "charlie"]
         for i in range(threshold):
             db_conn.execute(
-                "INSERT INTO votes(proposal_id, voter, decision, reason) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
                 (proposal_a, voters[i], "SUPPORT", "in favor"),
             )
         db_conn.commit()
@@ -194,9 +180,7 @@ class TestAutoDecision:
         )
         db_conn.commit()
 
-        status = db_conn.execute(
-            "SELECT status FROM proposals WHERE id=?", (proposal_a,)
-        ).fetchone()["status"]
+        status = db_conn.execute("SELECT status FROM proposals WHERE id=?", (proposal_a,)).fetchone()["status"]
         assert status == "PASSED"
 
     def test_type_s_supermajority_threshold(self, db_conn, proposal_s, with_dispatcher_meta):
@@ -209,8 +193,7 @@ class TestAutoDecision:
         voters = ["alice", "bob", "charlie"]
         for v in voters:
             db_conn.execute(
-                "INSERT INTO votes(proposal_id, voter, decision, reason) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
                 (proposal_s, v, "SUPPORT", "agreed"),
             )
         db_conn.commit()
@@ -230,8 +213,7 @@ class TestAutoDecision:
         # If 2 out of 3 OBJECT, threshold of 2 SUPPORT is impossible
         for voter in ["alice", "bob"]:
             db_conn.execute(
-                "INSERT INTO votes(proposal_id, voter, decision, reason) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO votes(proposal_id, voter, decision, reason) VALUES (?, ?, ?, ?)",
                 (proposal_a, voter, "OBJECT", "against"),
             )
         db_conn.commit()
@@ -255,9 +237,7 @@ class TestVotingRestrictions:
         The DB itself does not prevent it, but the test validates the
         data model supports the restriction check.
         """
-        dispatcher_name = db_conn.execute(
-            "SELECT value FROM meta WHERE key='dispatcher_session'"
-        ).fetchone()[0]
+        dispatcher_name = db_conn.execute("SELECT value FROM meta WHERE key='dispatcher_session'").fetchone()[0]
         assert dispatcher_name == "dispatcher"
 
         # Application should check: voter != dispatcher_session before inserting
@@ -265,39 +245,32 @@ class TestVotingRestrictions:
     def test_cannot_vote_on_decided_proposal(self, db_conn):
         """Voting on a PASSED or FAILED proposal should be rejected."""
         cur = db_conn.execute(
-            "INSERT INTO proposals(number, slug, type, content, status, decided_at) "
-            "VALUES (?, ?, ?, ?, 'PASSED', ?)",
+            "INSERT INTO proposals(number, slug, type, content, status, decided_at) VALUES (?, ?, ?, ?, 'PASSED', ?)",
             ("003", "decided-prop", "A", "Already decided", ts()),
         )
         prop_id = cur.lastrowid
         db_conn.commit()
 
-        status = db_conn.execute(
-            "SELECT status FROM proposals WHERE id=?", (prop_id,)
-        ).fetchone()["status"]
+        status = db_conn.execute("SELECT status FROM proposals WHERE id=?", (prop_id,)).fetchone()["status"]
         assert status != "OPEN"
         # Application should check status == 'OPEN' before allowing vote
 
     def test_cannot_vote_on_failed_proposal(self, db_conn):
         """Voting on a FAILED proposal should also be rejected."""
         cur = db_conn.execute(
-            "INSERT INTO proposals(number, slug, type, content, status, decided_at) "
-            "VALUES (?, ?, ?, ?, 'FAILED', ?)",
+            "INSERT INTO proposals(number, slug, type, content, status, decided_at) VALUES (?, ?, ?, ?, 'FAILED', ?)",
             ("004", "failed-prop", "A", "This was rejected", ts()),
         )
         prop_id = cur.lastrowid
         db_conn.commit()
 
-        status = db_conn.execute(
-            "SELECT status FROM proposals WHERE id=?", (prop_id,)
-        ).fetchone()["status"]
+        status = db_conn.execute("SELECT status FROM proposals WHERE id=?", (prop_id,)).fetchone()["status"]
         assert status == "FAILED"
 
     def test_proposal_number_unique(self, db_conn):
         """Proposal numbers must be unique."""
         db_conn.execute(
-            "INSERT INTO proposals(number, slug, type, content) "
-            "VALUES ('005', 'first', 'A', 'first proposal')"
+            "INSERT INTO proposals(number, slug, type, content) VALUES ('005', 'first', 'A', 'first proposal')"
         )
         db_conn.commit()
 
@@ -310,20 +283,15 @@ class TestVotingRestrictions:
     def test_proposal_lookup_by_padded_number(self, db_conn):
         """Proposals can be looked up by zero-padded or raw number."""
         db_conn.execute(
-            "INSERT INTO proposals(number, slug, type, content) "
-            "VALUES ('007', 'test-prop', 'A', 'test content')"
+            "INSERT INTO proposals(number, slug, type, content) VALUES ('007', 'test-prop', 'A', 'test content')"
         )
         db_conn.commit()
 
         # Lookup by padded
-        row = db_conn.execute(
-            "SELECT slug FROM proposals WHERE number='007'"
-        ).fetchone()
+        row = db_conn.execute("SELECT slug FROM proposals WHERE number='007'").fetchone()
         assert row is not None
         assert row["slug"] == "test-prop"
 
         # Lookup by raw (application handles both)
-        row2 = db_conn.execute(
-            "SELECT slug FROM proposals WHERE number='007' OR number='7'"
-        ).fetchone()
+        row2 = db_conn.execute("SELECT slug FROM proposals WHERE number='007' OR number='7'").fetchone()
         assert row2 is not None

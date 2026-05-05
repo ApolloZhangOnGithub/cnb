@@ -1,0 +1,328 @@
+#!/usr/bin/env python3
+"""claudes-code doctor — system health check.
+
+Checks environment, database integrity, config, and session status.
+"""
+
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+from pathlib import Path
+
+# Resolve CLAUDES_HOME
+_self = Path(__file__).resolve()
+CLAUDES_HOME = _self.parent.parent
+sys.path.insert(0, str(CLAUDES_HOME))
+
+from lib.common import ClaudesEnv
+
+
+def _ok(msg: str) -> None:
+    print(f"  ✓ {msg}")
+
+
+def _warn(msg: str) -> None:
+    print(f"  ⚠ {msg}")
+
+
+def _err(msg: str) -> None:
+    print(f"  ✗ {msg}")
+
+
+# ---------------------------------------------------------------------------
+# Environment checks
+# ---------------------------------------------------------------------------
+
+
+def check_python() -> bool:
+    v = sys.version_info
+    if v >= (3, 11):
+        _ok(f"Python {v.major}.{v.minor}.{v.micro}")
+        return True
+    _err(f"Python {v.major}.{v.minor} < 3.11 required")
+    return False
+
+
+def check_tmux() -> bool:
+    if shutil.which("tmux"):
+        r = subprocess.run(["tmux", "-V"], capture_output=True, text=True)
+        _ok(f"tmux {r.stdout.strip()}")
+        return True
+    _err("tmux not found (brew install tmux)")
+    return False
+
+
+def check_git() -> bool:
+    if shutil.which("git"):
+        r = subprocess.run(["git", "--version"], capture_output=True, text=True)
+        _ok(r.stdout.strip())
+        return True
+    _err("git not found")
+    return False
+
+
+def check_claude_cli() -> bool:
+    if shutil.which("claude"):
+        _ok("claude CLI found")
+        return True
+    _warn("claude CLI not found (npm install -g @anthropic-ai/claude-code)")
+    return False
+
+
+def check_disk(path: Path) -> bool:
+    try:
+        stat = os.statvfs(path)
+        free_gb = (stat.f_frsize * stat.f_bavail) / (1024**3)
+        if free_gb > 1:
+            _ok(f"Disk free: {free_gb:.1f} GB")
+            return True
+        _warn(f"Low disk space: {free_gb:.1f} GB")
+        return False
+    except OSError:
+        _warn("Cannot check disk space")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Database checks
+# ---------------------------------------------------------------------------
+
+
+def check_db(path: Path) -> bool:
+    if not path.exists():
+        _err(f"board.db not found at {path}")
+        return False
+    _ok(f"board.db found ({path.stat().st_size} bytes)")
+    return True
+
+
+def check_foreign_keys(path: Path) -> bool:
+    """Check that foreign key constraints exist in table definitions."""
+    try:
+        conn = sqlite3.connect(str(path))
+        # PRAGMA foreign_keys is connection-level; check table definitions instead
+        rows = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND sql LIKE '%REFERENCES%'"
+        ).fetchall()
+        conn.close()
+        if rows:
+            _ok(f"Foreign keys defined ({len(rows)} tables)")
+            return True
+        _warn("No foreign key constraints defined")
+        return False
+    except sqlite3.Error as e:
+        _err(f"FK check failed: {e}")
+        return False
+
+
+def check_orphans(path: Path) -> bool:
+    """Detect orphaned rows that violate referential integrity."""
+    ok = True
+    try:
+        conn = sqlite3.connect(str(path))
+        conn.row_factory = sqlite3.Row
+
+        # inbox referencing missing sessions
+        orphans = conn.execute(
+            "SELECT COUNT(*) FROM inbox WHERE session NOT IN (SELECT name FROM sessions)"
+        ).fetchone()[0]
+        if orphans:
+            _warn(f"{orphans} inbox rows reference missing sessions")
+            ok = False
+
+        # inbox referencing missing messages
+        orphans = conn.execute(
+            "SELECT COUNT(*) FROM inbox WHERE message_id NOT IN (SELECT id FROM messages)"
+        ).fetchone()[0]
+        if orphans:
+            _warn(f"{orphans} inbox rows reference missing messages")
+            ok = False
+
+        # votes referencing missing proposals
+        orphans = conn.execute(
+            "SELECT COUNT(*) FROM votes WHERE proposal_id NOT IN (SELECT id FROM proposals)"
+        ).fetchone()[0]
+        if orphans:
+            _warn(f"{orphans} votes reference missing proposals")
+            ok = False
+
+        # tasks referencing missing sessions
+        orphans = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE session NOT IN (SELECT name FROM sessions)"
+        ).fetchone()[0]
+        if orphans:
+            _warn(f"{orphans} tasks reference missing sessions")
+            ok = False
+
+        # suspended referencing missing sessions
+        orphans = conn.execute(
+            "SELECT COUNT(*) FROM suspended WHERE name NOT IN (SELECT name FROM sessions)"
+        ).fetchone()[0]
+        if orphans:
+            _warn(f"{orphans} suspended entries reference missing sessions")
+            ok = False
+
+        # thread_replies referencing missing threads
+        orphans = conn.execute(
+            "SELECT COUNT(*) FROM thread_replies WHERE thread_id NOT IN (SELECT id FROM threads)"
+        ).fetchone()[0]
+        if orphans:
+            _warn(f"{orphans} replies reference missing threads")
+            ok = False
+
+        conn.close()
+        if ok:
+            _ok("No orphaned data")
+        return ok
+    except sqlite3.Error as e:
+        _err(f"Orphan check failed: {e}")
+        return False
+
+
+def check_schema_version(path: Path) -> bool:
+    try:
+        conn = sqlite3.connect(str(path))
+        row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        conn.close()
+        v = row[0] if row else "unknown"
+        _ok(f"Schema version: {v}")
+        return True
+    except sqlite3.Error as e:
+        _warn(f"Schema version check failed: {e}")
+        return False
+
+
+def check_migrations_pending(env: ClaudesEnv) -> bool:
+    try:
+        from lib.migrate import run_migrations
+
+        applied = run_migrations(env.board_db, env.install_home)
+        if applied:
+            print(f"\n  → Applied {applied} pending migration(s)")
+            return True
+        return True
+    except SystemExit:
+        raise
+    except Exception as e:
+        _err(f"Migration check failed: {e}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Config checks
+# ---------------------------------------------------------------------------
+
+
+def check_config(env: ClaudesEnv) -> bool:
+    ok = True
+    if env.sessions:
+        _ok(f"Sessions: {', '.join(env.sessions)}")
+    else:
+        _warn("No sessions configured")
+        ok = False
+
+    if env.prefix:
+        _ok(f"Prefix: {env.prefix}")
+    else:
+        _warn("No prefix configured")
+        ok = False
+
+    if env.install_home.exists():
+        _ok(f"Install home: {env.install_home}")
+    else:
+        _err(f"Install home not found: {env.install_home}")
+        ok = False
+
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# Session status
+# ---------------------------------------------------------------------------
+
+
+def check_sessions(env: ClaudesEnv) -> bool:
+    running = 0
+    stopped = 0
+    suspended = set()
+    if env.suspended_file.exists():
+        suspended = set(env.suspended_file.read_text().splitlines())
+
+    for name in env.sessions:
+        sess = f"{env.prefix}-{name}"
+        r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True)
+        if r.returncode == 0:
+            running += 1
+        elif name in suspended:
+            pass  # expected — suspended sessions aren't running
+        else:
+            stopped += 1
+
+    susp_count = len(suspended)
+    status_parts = [f"{running} running"]
+    if stopped:
+        status_parts.append(f"{stopped} stopped")
+    if susp_count:
+        status_parts.append(f"{susp_count} suspended")
+
+    _ok(f"Session status: {', '.join(status_parts)}")
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    try:
+        env = ClaudesEnv.load()
+    except (FileNotFoundError, SystemExit):
+        print("Doctor: project not initialized")
+        print("  Run: claudes-code init <session-names>")
+        print("\n--- Environment Check ---")
+        check_python()
+        check_tmux()
+        check_git()
+        check_claude_cli()
+        print("\nResult: project not initialized — run 'claudes-code init' first")
+        sys.exit(1)
+
+    print("=== claudes-code Doctor ===\n")
+
+    # ── Environment ──
+    print("── Environment ──")
+    env_ok = all([check_python(), check_tmux(), check_git(), check_claude_cli(), check_disk(env.claudes_dir)])
+
+    # ── Configuration ──
+    print("\n── Configuration ──")
+    cfg_ok = check_config(env)
+
+    # ── Database ──
+    print("\n── Database ──")
+    db_ok = check_db(env.board_db)
+    if db_ok:
+        fk_ok = check_foreign_keys(env.board_db)
+        orph_ok = check_orphans(env.board_db)
+        ver_ok = check_schema_version(env.board_db)
+        mig_ok = check_migrations_pending(env)
+        db_ok = all([fk_ok, orph_ok, ver_ok, mig_ok])
+
+    # ── Sessions ──
+    print("\n── Sessions ──")
+    sess_ok = check_sessions(env)
+
+    # ── Result ──
+    print()
+    all_ok = all([env_ok, cfg_ok, db_ok, sess_ok])
+    if all_ok:
+        print("✓ All checks passed.")
+    else:
+        print("⚠ Some checks failed — review warnings above.")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

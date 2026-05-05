@@ -9,13 +9,9 @@ The Python rewrite will use either mkdir or an SQLite-based approach.
 These tests verify the logic at the data/state level.
 """
 
-import os
 import time
-import tempfile
-from pathlib import Path
 
 import pytest
-
 
 STALE_THRESHOLD = 600  # 10 minutes in seconds
 

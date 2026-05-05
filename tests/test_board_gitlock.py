@@ -17,17 +17,7 @@ GIT_LOCK_TTL = 60  # Same as in board.sh
 
 @pytest.fixture
 def git_lock_table(db_conn):
-    """Create the git_locks table (as the board does on first use)."""
-    db_conn.execute(
-        """CREATE TABLE IF NOT EXISTS git_locks (
-            id          INTEGER PRIMARY KEY CHECK (id = 1),
-            session     TEXT NOT NULL,
-            reason      TEXT DEFAULT '',
-            acquired_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
-            expires_at  INTEGER NOT NULL
-        )"""
-    )
-    db_conn.commit()
+    """Alias for db_conn — git_locks table is created by schema.sql."""
     return db_conn
 
 
@@ -39,15 +29,12 @@ class TestGitLockAcquire:
         conn = git_lock_table
         expires = int(time.time()) + GIT_LOCK_TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, ?, ?, ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, ?, ?, ?)",
             ("alice", "git commit", expires),
         )
         conn.commit()
 
-        row = conn.execute(
-            "SELECT session, reason, expires_at FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT session, reason, expires_at FROM git_locks WHERE id=1").fetchone()
         assert row is not None
         assert row["session"] == "alice"
         assert row["reason"] == "git commit"
@@ -57,17 +44,14 @@ class TestGitLockAcquire:
         conn = git_lock_table
         expires = int(time.time()) + GIT_LOCK_TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, ?, ?, ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, ?, ?, ?)",
             ("alice", "git push", expires),
         )
         conn.commit()
 
         # Bob tries to acquire -- the CHECK constraint (id=1) plus PRIMARY KEY
         # means only one lock can exist
-        holder = conn.execute(
-            "SELECT session FROM git_locks WHERE id=1"
-        ).fetchone()
+        holder = conn.execute("SELECT session FROM git_locks WHERE id=1").fetchone()
         assert holder is not None
         assert holder["session"] == "alice"
         # Bob would see BLOCKED because holder != bob
@@ -77,8 +61,7 @@ class TestGitLockAcquire:
         conn = git_lock_table
         old_expires = int(time.time()) + 10  # Short TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, ?, ?, ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, ?, ?, ?)",
             ("alice", "git commit", old_expires),
         )
         conn.commit()
@@ -93,9 +76,7 @@ class TestGitLockAcquire:
         )
         conn.commit()
 
-        row = conn.execute(
-            "SELECT expires_at, reason FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT expires_at, reason FROM git_locks WHERE id=1").fetchone()
         assert row["expires_at"] == new_expires
         assert row["reason"] == "extended"
 
@@ -104,8 +85,7 @@ class TestGitLockAcquire:
         conn = git_lock_table
         expires = int(time.time()) + GIT_LOCK_TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'first', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'first', ?)",
             (expires,),
         )
         conn.commit()
@@ -113,16 +93,14 @@ class TestGitLockAcquire:
         # Cannot insert another row with id=1 (PRIMARY KEY violation)
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
-                "INSERT INTO git_locks(id, session, reason, expires_at) "
-                "VALUES (1, 'bob', 'second', ?)",
+                "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'bob', 'second', ?)",
                 (expires,),
             )
 
         # Cannot insert a row with id=2 (CHECK constraint violation)
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
-                "INSERT INTO git_locks(id, session, reason, expires_at) "
-                "VALUES (2, 'bob', 'second', ?)",
+                "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (2, 'bob', 'second', ?)",
                 (expires,),
             )
 
@@ -135,8 +113,7 @@ class TestGitLockRelease:
         conn = git_lock_table
         expires = int(time.time()) + GIT_LOCK_TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'git push', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'git push', ?)",
             (expires,),
         )
         conn.commit()
@@ -145,9 +122,7 @@ class TestGitLockRelease:
         conn.execute("DELETE FROM git_locks WHERE id=1")
         conn.commit()
 
-        row = conn.execute(
-            "SELECT session FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT session FROM git_locks WHERE id=1").fetchone()
         assert row is None
 
     def test_unlock_by_non_holder_should_be_blocked(self, git_lock_table):
@@ -155,16 +130,13 @@ class TestGitLockRelease:
         conn = git_lock_table
         expires = int(time.time()) + GIT_LOCK_TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'git push', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'git push', ?)",
             (expires,),
         )
         conn.commit()
 
         # Application would check: holder != bob, so refuse
-        holder = conn.execute(
-            "SELECT session FROM git_locks WHERE id=1"
-        ).fetchone()
+        holder = conn.execute("SELECT session FROM git_locks WHERE id=1").fetchone()
         assert holder["session"] == "alice"
         assert holder["session"] != "bob"
 
@@ -173,8 +145,7 @@ class TestGitLockRelease:
         conn = git_lock_table
         expires = int(time.time()) + GIT_LOCK_TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'long operation', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'long operation', ?)",
             (expires,),
         )
         conn.commit()
@@ -183,9 +154,7 @@ class TestGitLockRelease:
         conn.execute("DELETE FROM git_locks WHERE id=1")
         conn.commit()
 
-        row = conn.execute(
-            "SELECT session FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT session FROM git_locks WHERE id=1").fetchone()
         assert row is None
 
     def test_force_unlock_creates_notification(self, git_lock_table):
@@ -193,8 +162,7 @@ class TestGitLockRelease:
         conn = git_lock_table
         expires = int(time.time()) + GIT_LOCK_TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'git push', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'git push', ?)",
             (expires,),
         )
         conn.commit()
@@ -202,25 +170,21 @@ class TestGitLockRelease:
         # Simulate notification
         now = ts()
         conn.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) "
-            "VALUES (?, 'SYSTEM', 'alice', ?)",
+            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'SYSTEM', 'alice', ?)",
             (now, "[GIT-LOCK] bob force-released your git lock"),
         )
         conn.execute("DELETE FROM git_locks WHERE id=1")
         conn.commit()
 
         msg = conn.execute(
-            "SELECT body FROM messages WHERE recipient='alice' "
-            "AND body LIKE '%force-released%'"
+            "SELECT body FROM messages WHERE recipient='alice' AND body LIKE '%force-released%'"
         ).fetchone()
         assert msg is not None
 
     def test_unlock_already_free(self, git_lock_table):
         """Unlocking when no lock is held is a no-op."""
         conn = git_lock_table
-        row = conn.execute(
-            "SELECT session FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT session FROM git_locks WHERE id=1").fetchone()
         assert row is None
         # No error -- just "OK git lock is already free"
 
@@ -234,22 +198,17 @@ class TestGitLockStaleCleanup:
         # Insert a lock that expired 10 seconds ago
         expired_time = int(time.time()) - 10
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'stale operation', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'stale operation', ?)",
             (expired_time,),
         )
         conn.commit()
 
         # Cleanup stale locks (as the board does before acquire/unlock)
         now_epoch = int(time.time())
-        conn.execute(
-            "DELETE FROM git_locks WHERE expires_at < ?", (now_epoch,)
-        )
+        conn.execute("DELETE FROM git_locks WHERE expires_at < ?", (now_epoch,))
         conn.commit()
 
-        row = conn.execute(
-            "SELECT session FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT session FROM git_locks WHERE id=1").fetchone()
         assert row is None
 
     def test_non_expired_lock_survives_cleanup(self, git_lock_table):
@@ -257,22 +216,17 @@ class TestGitLockStaleCleanup:
         conn = git_lock_table
         future_expires = int(time.time()) + 300  # 5 minutes from now
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'active operation', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'active operation', ?)",
             (future_expires,),
         )
         conn.commit()
 
         # Run cleanup
         now_epoch = int(time.time())
-        conn.execute(
-            "DELETE FROM git_locks WHERE expires_at < ?", (now_epoch,)
-        )
+        conn.execute("DELETE FROM git_locks WHERE expires_at < ?", (now_epoch,))
         conn.commit()
 
-        row = conn.execute(
-            "SELECT session FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT session FROM git_locks WHERE id=1").fetchone()
         assert row is not None
         assert row["session"] == "alice"
 
@@ -283,10 +237,7 @@ class TestGitLockStatus:
     def test_status_when_free(self, git_lock_table):
         """Status query returns no rows when lock is free."""
         conn = git_lock_table
-        row = conn.execute(
-            "SELECT session, reason, acquired_at, expires_at "
-            "FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT session, reason, acquired_at, expires_at FROM git_locks WHERE id=1").fetchone()
         assert row is None
 
     def test_status_when_locked(self, git_lock_table):
@@ -294,16 +245,12 @@ class TestGitLockStatus:
         conn = git_lock_table
         expires = int(time.time()) + GIT_LOCK_TTL
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'git rebase', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'git rebase', ?)",
             (expires,),
         )
         conn.commit()
 
-        row = conn.execute(
-            "SELECT session, reason, acquired_at, expires_at "
-            "FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT session, reason, acquired_at, expires_at FROM git_locks WHERE id=1").fetchone()
         assert row["session"] == "alice"
         assert row["reason"] == "git rebase"
         assert row["expires_at"] == expires
@@ -313,14 +260,11 @@ class TestGitLockStatus:
         conn = git_lock_table
         expires = int(time.time()) + 30  # 30 seconds from now
         conn.execute(
-            "INSERT INTO git_locks(id, session, reason, expires_at) "
-            "VALUES (1, 'alice', 'quick op', ?)",
+            "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, 'alice', 'quick op', ?)",
             (expires,),
         )
         conn.commit()
 
-        row = conn.execute(
-            "SELECT expires_at FROM git_locks WHERE id=1"
-        ).fetchone()
+        row = conn.execute("SELECT expires_at FROM git_locks WHERE id=1").fetchone()
         remaining = row["expires_at"] - int(time.time())
         assert 0 < remaining <= 30

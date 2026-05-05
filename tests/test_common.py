@@ -5,13 +5,12 @@ DB parameterized queries, SQL injection prevention, ts() format,
 is_suspended(), and date_to_epoch().
 """
 
-import os
 import sqlite3
 import time
 
 import pytest
 
-from tests.conftest import SCHEMA_PATH, ts
+from tests.conftest import ts
 
 
 class TestFindClaudesDir:
@@ -56,24 +55,24 @@ class TestFindClaudesDir:
 
 
 class TestClaudesEnvConfig:
-    """Parsing the config.sh file."""
+    """Parsing the config.toml file."""
 
     def test_config_contains_sessions(self, tmp_project):
         """Config file lists the configured sessions."""
-        config = (tmp_project / ".claudes" / "config.sh").read_text()
+        config = (tmp_project / ".claudes" / "config.toml").read_text()
         assert "alice" in config
         assert "bob" in config
         assert "charlie" in config
 
     def test_config_contains_prefix(self, tmp_project):
-        """Config file has a PREFIX variable."""
-        config = (tmp_project / ".claudes" / "config.sh").read_text()
-        assert "PREFIX=" in config
+        """Config file has a prefix variable."""
+        config = (tmp_project / ".claudes" / "config.toml").read_text()
+        assert "prefix" in config
 
     def test_config_contains_claudes_home(self, tmp_project):
-        """Config file has CLAUDES_HOME pointing to the project root."""
-        config = (tmp_project / ".claudes" / "config.sh").read_text()
-        assert "CLAUDES_HOME=" in config
+        """Config file has claudes_home pointing to the project root."""
+        config = (tmp_project / ".claudes" / "config.toml").read_text()
+        assert "claudes_home" in config
         assert str(tmp_project) in config
 
 
@@ -82,9 +81,7 @@ class TestDBParameterizedQueries:
 
     def test_basic_query(self, db_conn):
         """Simple parameterized query works."""
-        rows = db_conn.execute(
-            "SELECT name FROM sessions WHERE name=?", ("alice",)
-        ).fetchall()
+        rows = db_conn.execute("SELECT name FROM sessions WHERE name=?", ("alice",)).fetchall()
         assert len(rows) == 1
         assert rows[0]["name"] == "alice"
 
@@ -97,9 +94,7 @@ class TestDBParameterizedQueries:
         )
         db_conn.commit()
 
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM messages WHERE sender=?", ("alice",)
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM messages WHERE sender=?", ("alice",)).fetchone()[0]
         assert count == 1
 
     def test_scalar_query(self, db_conn):
@@ -127,9 +122,7 @@ class TestSQLInjectionPrevention:
         assert count >= 3  # Original sessions intact
 
         # The malicious string was stored as a literal name
-        row = db_conn.execute(
-            "SELECT name FROM sessions WHERE name=?", (malicious_name,)
-        ).fetchone()
+        row = db_conn.execute("SELECT name FROM sessions WHERE name=?", (malicious_name,)).fetchone()
         assert row is not None
         assert row["name"] == malicious_name
 
@@ -144,18 +137,14 @@ class TestSQLInjectionPrevention:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT body FROM messages WHERE sender='alice'"
-        ).fetchone()
+        row = db_conn.execute("SELECT body FROM messages WHERE sender='alice'").fetchone()
         assert row["body"] == malicious_body
 
     def test_injection_in_where_clause(self, db_conn):
         """Parameterized WHERE clause prevents injection."""
         malicious_input = "alice' OR '1'='1"
 
-        rows = db_conn.execute(
-            "SELECT name FROM sessions WHERE name=?", (malicious_input,)
-        ).fetchall()
+        rows = db_conn.execute("SELECT name FROM sessions WHERE name=?", (malicious_input,)).fetchall()
         # Should return nothing (no session with that literal name)
         assert len(rows) == 0
 
@@ -163,15 +152,12 @@ class TestSQLInjectionPrevention:
         """Malicious bug description stored safely."""
         malicious_desc = "'; UPDATE bugs SET status='FIXED' WHERE '1'='1"
         db_conn.execute(
-            "INSERT INTO bugs(id, severity, sla, reporter, status, description) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO bugs(id, severity, sla, reporter, status, description) VALUES (?, ?, ?, ?, ?, ?)",
             ("BUG-001", "P1", "4h", "alice", "OPEN", malicious_desc),
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT description, status FROM bugs WHERE id='BUG-001'"
-        ).fetchone()
+        row = db_conn.execute("SELECT description, status FROM bugs WHERE id='BUG-001'").fetchone()
         assert row["description"] == malicious_desc
         assert row["status"] == "OPEN"
 
@@ -184,15 +170,11 @@ class TestSQLInjectionPrevention:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT content FROM proposals WHERE number='001'"
-        ).fetchone()
+        row = db_conn.execute("SELECT content FROM proposals WHERE number='001'").fetchone()
         assert row["content"] == malicious
 
         # Table still exists
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM proposals"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM proposals").fetchone()[0]
         assert count == 1
 
     def test_null_bytes_in_input(self, db_conn):
@@ -204,9 +186,7 @@ class TestSQLInjectionPrevention:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT body FROM messages WHERE sender='alice'"
-        ).fetchone()
+        row = db_conn.execute("SELECT body FROM messages WHERE sender='alice'").fetchone()
         # SQLite may strip or preserve null bytes -- either is safe
         assert row is not None
 
@@ -215,19 +195,23 @@ class TestTimestamp:
     """Timestamp formatting."""
 
     def test_ts_format(self):
-        """Timestamp follows YYYY-MM-DD HH:MM format."""
+        """Timestamp follows YYYY-MM-DD HH:MM:SS format."""
         result = ts()
-        assert len(result) == 16
+        assert len(result) == 19
         assert result[4] == "-"
         assert result[7] == "-"
         assert result[10] == " "
         assert result[13] == ":"
+        assert result[16] == ":"
 
     def test_ts_is_current(self):
-        """Timestamp reflects the current time (within 1 minute tolerance)."""
+        """Timestamp reflects the current time (within 2 seconds tolerance)."""
         result = ts()
-        expected = time.strftime("%Y-%m-%d %H:%M")
-        assert result == expected
+        expected = time.strftime("%Y-%m-%d %H:%M:%S")
+        # Allow up to 2 seconds difference due to execution timing
+        result_epoch = int(time.mktime(time.strptime(result, "%Y-%m-%d %H:%M:%S")))
+        expected_epoch = int(time.mktime(time.strptime(expected, "%Y-%m-%d %H:%M:%S")))
+        assert abs(result_epoch - expected_epoch) <= 2
 
 
 class TestIsSuspended:
@@ -241,16 +225,12 @@ class TestIsSuspended:
         )
         db_conn.commit()
 
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM suspended WHERE name='alice'"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM suspended WHERE name='alice'").fetchone()[0]
         assert count == 1
 
     def test_non_suspended_session_not_detected(self, db_conn):
         """A non-suspended session is absent from the suspended table."""
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM suspended WHERE name='alice'"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM suspended WHERE name='alice'").fetchone()[0]
         assert count == 0
 
     def test_resume_removes_from_suspended(self, db_conn):
@@ -264,9 +244,7 @@ class TestIsSuspended:
         db_conn.execute("DELETE FROM suspended WHERE name='alice'")
         db_conn.commit()
 
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM suspended WHERE name='alice'"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM suspended WHERE name='alice'").fetchone()[0]
         assert count == 0
 
     def test_suspend_records_who_suspended(self, db_conn):
@@ -277,9 +255,7 @@ class TestIsSuspended:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT suspended_by FROM suspended WHERE name='bob'"
-        ).fetchone()
+        row = db_conn.execute("SELECT suspended_by FROM suspended WHERE name='bob'").fetchone()
         assert row["suspended_by"] == "lead"
 
 
@@ -311,11 +287,11 @@ class TestDateToEpoch:
         assert back == original
 
 
-class TestDBShim:
-    """Test the DB shim from conftest."""
+class TestBoardDB:
+    """Test the BoardDB wrapper."""
 
     def test_db_execute(self, db):
-        """DB.execute runs a query."""
+        """BoardDB.execute runs a query."""
         db.execute(
             "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, ?, ?)",
             (ts(), "alice", "bob", "test message"),
@@ -336,14 +312,12 @@ class TestDBShim:
 
     def test_db_scalar_no_rows(self, db):
         """DB.scalar returns None when no rows match."""
-        result = db.scalar(
-            "SELECT name FROM sessions WHERE name='nonexistent'"
-        )
+        result = db.scalar("SELECT name FROM sessions WHERE name='nonexistent'")
         assert result is None
 
-    def test_db_insert_returning_id(self, db):
-        """DB.insert_returning_id returns the new row's ID."""
-        row_id = db.insert_returning_id(
+    def test_db_execute_returns_lastrowid(self, db):
+        """DB.execute returns the new row's lastrowid."""
+        row_id = db.execute(
             "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, ?, ?)",
             (ts(), "alice", "bob", "test"),
         )
@@ -379,9 +353,7 @@ class TestSchemaIntegrity:
 
     def test_indexes_exist(self, db_conn):
         """Expected indexes are created."""
-        rows = db_conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        ).fetchall()
+        rows = db_conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
         index_names = {r["name"] for r in rows}
         expected_indexes = {
             "idx_msg_ts",
@@ -397,9 +369,7 @@ class TestSchemaIntegrity:
     def test_sessions_primary_key(self, db_conn):
         """Session name is the primary key."""
         with pytest.raises(sqlite3.IntegrityError):
-            db_conn.execute(
-                "INSERT INTO sessions(name) VALUES ('alice')"
-            )  # alice already exists
+            db_conn.execute("INSERT INTO sessions(name) VALUES ('alice')")  # alice already exists
 
     def test_message_autoincrement(self, db_conn):
         """Messages get auto-incrementing IDs."""

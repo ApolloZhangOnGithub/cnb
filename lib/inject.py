@@ -12,7 +12,6 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Optional
 
 # Try to import common; fall back gracefully for standalone use
 try:
@@ -33,23 +32,28 @@ def detect_mode(prefix: str) -> str:
     try:
         r = subprocess.run(
             ["tmux", "list-sessions", "-F", "#{session_name}"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if r.returncode == 0:
             for line in r.stdout.splitlines():
                 if line.startswith(f"{prefix}-"):
                     return "tmux"
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         pass
 
     # Check screen
     try:
         r = subprocess.run(
-            ["screen", "-list"], capture_output=True, text=True, timeout=5,
+            ["screen", "-list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if f".{prefix}-" in (r.stdout + r.stderr):
             return "screen"
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         pass
 
     if shutil.which("tmux"):
@@ -65,12 +69,13 @@ def send_tmux(prefix: str, name: str, message: str) -> bool:
     try:
         r = subprocess.run(
             ["tmux", "has-session", "-t", sess],
-            capture_output=True, timeout=5,
+            capture_output=True,
+            timeout=5,
         )
         if r.returncode != 0:
             print(f"  {name}: not running")
             return False
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         print(f"  {name}: not running")
         return False
 
@@ -86,29 +91,35 @@ def send_screen(prefix: str, name: str, message: str) -> bool:
     sess = f"{prefix}-{name}"
     try:
         r = subprocess.run(
-            ["screen", "-list"], capture_output=True, text=True, timeout=5,
+            ["screen", "-list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if f".{sess}" not in (r.stdout + r.stderr):
             print(f"  {name}: not running")
             return False
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         print(f"  {name}: not running")
         return False
 
     oneline = message.replace("\n", " ")
     subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", oneline], timeout=5,
+        ["screen", "-S", sess, "-p", "0", "-X", "stuff", oneline],
+        timeout=5,
     )
     import time
+
     time.sleep(0.3)
     subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"], timeout=5,
+        ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"],
+        timeout=5,
     )
     print(f"  {name}: injected (screen)")
     return True
 
 
-def inject(target: str, message: str, prefix: Optional[str] = None, sessions: Optional[list] = None) -> None:
+def inject(target: str, message: str, prefix: str | None = None, sessions: list | None = None) -> None:
     """Inject a message to *target* (a session name or 'all')."""
     if prefix is None or sessions is None:
         env = ClaudesEnv.load()

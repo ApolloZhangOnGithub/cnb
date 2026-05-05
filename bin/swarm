@@ -14,7 +14,6 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 # ---------------------------------------------------------------------------
 # Resolve CLAUDES_HOME and load shared environment
@@ -24,43 +23,53 @@ CLAUDES_HOME = _self.parent.parent
 
 # Add lib/ to path so we can import common
 sys.path.insert(0, str(CLAUDES_HOME / "lib"))
-from common import ClaudesEnv, is_suspended  # noqa: E402
+from common import ClaudesEnv, is_suspended
 
-env = ClaudesEnv.load()
-
-PREFIX: str = env.prefix
-SUSPENDED_FILE: Path = env.suspended_file
-LOG_DIR: Path = env.log_dir
-SESSIONS: List[str] = env.sessions
-PROJECT_ROOT: Path = env.project_root
-CLAUDES_DIR: Path = env.claudes_dir
-SESSIONS_DIR: Path = env.sessions_dir
-CV_DIR: Path = env.cv_dir
-ATTENDANCE_LOG: Path = env.attendance_log
-
-# Agent configuration: SWARM_AGENT=claude|trae|qwen (default: claude)
-#
-# Quality notes from real-world testing (2026-05-04):
-#   claude — production quality, recommended
-#   trae   — usable as fallback when Claude quota is exhausted
-#   qwen   — NOT RECOMMENDED. 5 hours of Qwen-driven sessions produced mass
-#             low-quality commits, broke core scripts, injected phantom sessions,
-#             and required a full rollback. Use only for basic smoke testing.
-SWARM_AGENT: str = os.environ.get("SWARM_AGENT", "claude")
-
-# Ensure log directory exists
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-# DeepSeek sessions (disabled — all sessions use Claude)
+# Module state — initialized by _load(), not at import time.
+PREFIX: str = ""
+SUSPENDED_FILE: Path = Path()
+LOG_DIR: Path = Path()
+SESSIONS: list[str] = []
+PROJECT_ROOT: Path = Path()
+CLAUDES_DIR: Path = Path()
+SESSIONS_DIR: Path = Path()
+CV_DIR: Path = Path()
+ATTENDANCE_LOG: Path = Path()
+SWARM_AGENT: str = ""
 DEEPSEEK_SESSIONS: str = ""
+ROSTER_FILE: Path = Path()
 
-# ROSTER file for role lookup
-ROSTER_FILE: Path = CLAUDES_DIR / "ROSTER.md"
+_loaded = False
+
+
+def _load() -> None:
+    global _loaded, PREFIX, SUSPENDED_FILE, LOG_DIR, SESSIONS, PROJECT_ROOT
+    global CLAUDES_DIR, SESSIONS_DIR, CV_DIR, ATTENDANCE_LOG
+    global SWARM_AGENT, DEEPSEEK_SESSIONS, ROSTER_FILE, MODE
+    if _loaded:
+        return
+    env = ClaudesEnv.load()
+    PREFIX = env.prefix
+    SUSPENDED_FILE = env.suspended_file
+    LOG_DIR = env.log_dir
+    SESSIONS = env.sessions
+    PROJECT_ROOT = env.project_root
+    CLAUDES_DIR = env.claudes_dir
+    SESSIONS_DIR = env.sessions_dir
+    CV_DIR = env.cv_dir
+    ATTENDANCE_LOG = env.attendance_log
+    SWARM_AGENT = os.environ.get("SWARM_AGENT", "claude")
+    DEEPSEEK_SESSIONS = ""
+    ROSTER_FILE = CLAUDES_DIR / "ROSTER.md"
+    MODE = detect_mode()
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    _loaded = True
 
 
 # ---------------------------------------------------------------------------
 # Mode detection
 # ---------------------------------------------------------------------------
+
 
 def detect_mode() -> str:
     override = os.environ.get("SWARM_MODE", "")
@@ -73,12 +82,13 @@ def detect_mode() -> str:
     return "none"
 
 
-MODE: str = detect_mode()
+MODE: str = ""
 
 
 # ---------------------------------------------------------------------------
 # Attendance (打卡)
 # ---------------------------------------------------------------------------
+
 
 def clock_in(name: str) -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -119,6 +129,7 @@ def do_attendance() -> None:
 # Logging
 # ---------------------------------------------------------------------------
 
+
 def log_startup(name: str) -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     msg = f"[{ts}] Starting {name} with agent: {SWARM_AGENT}\n"
@@ -132,6 +143,7 @@ def log_startup(name: str) -> None:
 # Agent command builder
 # ---------------------------------------------------------------------------
 
+
 def is_deepseek_session(name: str) -> bool:
     return name in DEEPSEEK_SESSIONS.split()
 
@@ -139,10 +151,7 @@ def is_deepseek_session(name: str) -> bool:
 def build_agent_cmd(name: str) -> str:
     env_prefix = ""
     if is_deepseek_session(name):
-        env_prefix = (
-            "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic "
-            "ANTHROPIC_API_KEY=$DEEPSEEK_API_KEY "
-        )
+        env_prefix = "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_API_KEY=$DEEPSEEK_API_KEY "
     if SWARM_AGENT == "claude":
         if is_deepseek_session(name):
             return (
@@ -177,7 +186,7 @@ def get_initial_prompt(name: str) -> str:
         f"按 CLAUDE.md 的启动流程执行："
         f"1. 读取 {SESSIONS_DIR}/{name}.md，"
         f"2. 读取 {CV_DIR}/{name}.md（如果存在），"
-        f"3. 用 ./board.sh --as {name} inbox 检查未读消息，"
+        f"3. 用 '{CLAUDES_HOME}/bin/board' --as {name} inbox 检查未读消息，"
         f"4. 根据 session 文件中的下一步继续工作，"
         f"如果没有明确任务，读 ROADMAP.md 自主找活干。"
     )
@@ -186,6 +195,7 @@ def get_initial_prompt(name: str) -> str:
 # ---------------------------------------------------------------------------
 # Role filtering
 # ---------------------------------------------------------------------------
+
 
 def get_role(name: str) -> str:
     if not ROSTER_FILE.exists():
@@ -207,8 +217,8 @@ def get_role(name: str) -> str:
     return "unknown"
 
 
-def filter_by_role(role_filter: str, exclude_filter: str) -> List[str]:
-    result: List[str] = []
+def filter_by_role(role_filter: str, exclude_filter: str) -> list[str]:
+    result: list[str] = []
     for name in SESSIONS:
         role = get_role(name)
         if exclude_filter and role == exclude_filter:
@@ -226,6 +236,7 @@ def is_valid_session(name: str) -> bool:
 # ---------------------------------------------------------------------------
 # tmux backend
 # ---------------------------------------------------------------------------
+
 
 def tmux_is_running(name: str) -> bool:
     sess = f"{PREFIX}-{name}"
@@ -249,9 +260,7 @@ def _inject_initial_prompt(name: str, sess: str) -> None:
         pane_text = r.stdout if r.returncode == 0 else ""
         if "❯" in pane_text:
             time.sleep(1)  # small buffer after prompt appears
-            subprocess.run(
-                ["tmux", "send-keys", "-t", sess, "-l", initial_prompt]
-            )
+            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", initial_prompt])
             subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"])
             return
         time.sleep(2)
@@ -269,24 +278,16 @@ def tmux_start_one(name: str) -> None:
 
     log_startup(name)
 
+    subprocess.run(["tmux", "new-session", "-d", "-s", sess, "-x", "200", "-y", "50"])
     subprocess.run(
-        ["tmux", "new-session", "-d", "-s", sess, "-x", "200", "-y", "50"]
-    )
-    subprocess.run(
-        ["tmux", "send-keys", "-t", sess,
-         "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null", "Enter"]
+        ["tmux", "send-keys", "-t", sess, "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null", "Enter"]
     )
     time.sleep(0.5)
-    subprocess.run(
-        ["tmux", "send-keys", "-t", sess, f"cd '{PROJECT_ROOT}'", "Enter"]
-    )
+    subprocess.run(["tmux", "send-keys", "-t", sess, f"cd '{PROJECT_ROOT}'", "Enter"])
     time.sleep(0.5)
 
     if is_deepseek_session(name):
-        subprocess.run(
-            ["tmux", "send-keys", "-t", sess,
-             "claude /logout 2>/dev/null; true", "Enter"]
-        )
+        subprocess.run(["tmux", "send-keys", "-t", sess, "claude /logout 2>/dev/null; true", "Enter"])
         time.sleep(1)
 
     agent_cmd = build_agent_cmd(name)
@@ -309,13 +310,11 @@ def tmux_stop_one(name: str) -> None:
     save_cmd = (
         f"git add -A && git commit -m '[WIP][{name}] auto-save before shutdown' "
         f"--allow-empty-message 2>/dev/null; "
-        f"./board.sh --as {name} status 'shutdown: state saved'"
+        f"'{CLAUDES_HOME}/bin/board' --as {name} status 'shutdown: state saved'"
     )
     subprocess.run(["tmux", "send-keys", "-t", sess, "C-c"])
     time.sleep(1)
-    subprocess.run(
-        ["tmux", "send-keys", "-t", sess, f"! {save_cmd}", "Enter"]
-    )
+    subprocess.run(["tmux", "send-keys", "-t", sess, f"! {save_cmd}", "Enter"])
     time.sleep(3)
 
     subprocess.run(["tmux", "send-keys", "-t", sess, "/exit", "Enter"])
@@ -361,6 +360,7 @@ def tmux_inject(name: str, message: str) -> None:
 # screen backend
 # ---------------------------------------------------------------------------
 
+
 def screen_is_running(name: str) -> bool:
     sess_tag = f".{PREFIX}-{name}"
     r = subprocess.run(["screen", "-list"], capture_output=True, text=True)
@@ -378,32 +378,20 @@ def screen_start_one(name: str) -> None:
 
     subprocess.run(["screen", "-dmS", sess])
     time.sleep(1)
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", f"cd '{PROJECT_ROOT}'"]
-    )
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"]
-    )
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", f"cd '{PROJECT_ROOT}'"])
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
     time.sleep(0.5)
 
     agent_cmd = build_agent_cmd(name)
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", agent_cmd]
-    )
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"]
-    )
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", agent_cmd])
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
 
     if needs_prompt_injection():
         time.sleep(3)
         initial_prompt = get_initial_prompt(name)
-        subprocess.run(
-            ["screen", "-S", sess, "-p", "0", "-X", "stuff", initial_prompt]
-        )
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", initial_prompt])
         time.sleep(0.3)
-        subprocess.run(
-            ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"]
-        )
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
 
     print(f"  {name}: started (screen: {sess}, agent: {SWARM_AGENT})")
 
@@ -418,20 +406,14 @@ def screen_stop_one(name: str) -> None:
     save_cmd = (
         f"git add -A && git commit -m '[WIP][{name}] auto-save before shutdown' "
         f"--allow-empty-message 2>/dev/null; "
-        f"./board.sh --as {name} status 'shutdown: state saved'"
+        f"'{CLAUDES_HOME}/bin/board' --as {name} status 'shutdown: state saved'"
     )
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\x03"]
-    )
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\x03"])
     time.sleep(1)
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", f"! {save_cmd}\r"]
-    )
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", f"! {save_cmd}\r"])
     time.sleep(3)
 
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", "/exit\r"]
-    )
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "/exit\r"])
 
     # Wait up to 15s for graceful exit
     waited = 0
@@ -474,19 +456,16 @@ def screen_inject(name: str, message: str) -> None:
         print(f"  {name}: not running")
         sys.exit(1)
     oneline = message.replace("\n", " ")
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", oneline]
-    )
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", oneline])
     time.sleep(0.3)
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"]
-    )
+    subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
     print(f"  {name}: injected")
 
 
 # ---------------------------------------------------------------------------
 # Backend dispatch helpers
 # ---------------------------------------------------------------------------
+
 
 def backend_is_running(name: str) -> bool:
     if MODE == "tmux":
@@ -526,12 +505,16 @@ def backend_attach(name: str) -> None:
 # High-level commands
 # ---------------------------------------------------------------------------
 
-def do_start(args: List[str]) -> None:
+
+def do_start(args: list[str]) -> None:
     role_filter = ""
     exclude_filter = ""
-    names: List[str] = []
+    dry_run = False
+    names: list[str] = []
     for arg in args:
-        if arg.startswith("--role="):
+        if arg == "--dry-run":
+            dry_run = True
+        elif arg.startswith("--role="):
             role_filter = arg.split("=", 1)[1]
         elif arg.startswith("--exclude="):
             exclude_filter = arg.split("=", 1)[1]
@@ -546,14 +529,24 @@ def do_start(args: List[str]) -> None:
     else:
         targets = names
 
+    if dry_run:
+        print(f"=== DRY RUN: would start {len(targets)} session(s) ===")
+        for name in targets:
+            if is_suspended(name, SUSPENDED_FILE):
+                print(f"  {name}: SUSPENDED (would skip)")
+            elif backend_is_running(name):
+                print(f"  {name}: already running (would skip)")
+            else:
+                print(f"  {name}: would start (mode: {MODE}, agent: {SWARM_AGENT})")
+        return
+
     if MODE == "tmux":
-        subprocess.run(["tmux", "set", "-g", "mouse", "on"],
-                        capture_output=True)
+        subprocess.run(["tmux", "set", "-g", "mouse", "on"], capture_output=True)
 
     started = 0
     for name in targets:
         if is_suspended(name, SUSPENDED_FILE):
-            print(f"  {name}: SUSPENDED (use './swarm.sh resume {name}' to reactivate)")
+            print(f"  {name}: SUSPENDED (use './swarm resume {name}' to reactivate)")
             continue
         backend_start_one(name)
         clock_in(name)
@@ -566,7 +559,7 @@ def do_start(args: List[str]) -> None:
         print(f"  tmux attach -t {PREFIX}-<name>   # attach (Ctrl-B D to detach)")
     else:
         print(f"  screen -r {PREFIX}-<name>        # attach (Ctrl-A D to detach)")
-    print("  ./swarm.sh status                 # who's running")
+    print("  ./swarm status                 # who's running")
 
 
 def do_status() -> None:
@@ -574,18 +567,52 @@ def do_status() -> None:
     backend_status()
 
 
-def do_stop(args: List[str]) -> None:
-    if not args:
+def do_stop(args: list[str]) -> None:
+    dry_run = False
+    force = False
+    names: list[str] = []
+    for arg in args:
+        if arg in ("--dry-run",):
+            dry_run = True
+        elif arg in ("--force", "--yes", "-y"):
+            force = True
+        else:
+            names.append(arg)
+
+    if not names:
         targets = list(SESSIONS)
     else:
-        targets = args
+        targets = names
+
+    if dry_run:
+        print(f"=== DRY RUN: would stop {len(targets)} session(s) ===")
+        for name in targets:
+            if backend_is_running(name):
+                print(f"  {name}: would stop (running)")
+            else:
+                print(f"  {name}: not running (would skip)")
+        return
+
+    # Confirmation when stopping all sessions
+    if not names and not force:
+        running_count = sum(1 for n in targets if backend_is_running(n))
+        if running_count > 0:
+            print(f"About to stop ALL sessions ({running_count} running).")
+            try:
+                answer = input("Continue? [y/N] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\nCancelled.")
+                return
+            if answer not in ("y", "yes"):
+                print("Cancelled.")
+                return
 
     for name in targets:
         backend_stop_one(name)
         clock_out(name)
 
     # If stopping all sessions, also kill dispatcher by PID file
-    if not args:
+    if not names:
         for pidname in ("dispatcher.pid", "dispatcher-watchdog.pid"):
             pidfile = CLAUDES_DIR / pidname
             if pidfile.exists():
@@ -598,21 +625,20 @@ def do_stop(args: List[str]) -> None:
                 pidfile.unlink(missing_ok=True)
 
 
-def do_attach(args: List[str]) -> None:
+def do_attach(args: list[str]) -> None:
     if not args:
-        print("Usage: ./swarm.sh attach <name>", file=sys.stderr)
+        print("Usage: ./swarm attach <name>", file=sys.stderr)
         sys.exit(1)
     backend_attach(args[0])
 
 
-def do_suspend(args: List[str]) -> None:
+def do_suspend(args: list[str]) -> None:
     if not args:
-        print("Usage: ./swarm.sh suspend <name> [names...]", file=sys.stderr)
+        print("Usage: ./swarm suspend <name> [names...]", file=sys.stderr)
         sys.exit(1)
     for name in args:
         if not is_valid_session(name):
-            print(f"  {name}: unknown session (valid: {' '.join(SESSIONS)})",
-                  file=sys.stderr)
+            print(f"  {name}: unknown session (valid: {' '.join(SESSIONS)})", file=sys.stderr)
             continue
         if is_suspended(name, SUSPENDED_FILE):
             print(f"  {name}: already suspended")
@@ -625,14 +651,13 @@ def do_suspend(args: List[str]) -> None:
         print(f"  {name}: suspended")
 
 
-def do_resume(args: List[str]) -> None:
+def do_resume(args: list[str]) -> None:
     if not args:
-        print("Usage: ./swarm.sh resume <name> [names...]", file=sys.stderr)
+        print("Usage: ./swarm resume <name> [names...]", file=sys.stderr)
         sys.exit(1)
     for name in args:
         if not is_valid_session(name):
-            print(f"  {name}: unknown session (valid: {' '.join(SESSIONS)})",
-                  file=sys.stderr)
+            print(f"  {name}: unknown session (valid: {' '.join(SESSIONS)})", file=sys.stderr)
             continue
         if not is_suspended(name, SUSPENDED_FILE):
             print(f"  {name}: not suspended")
@@ -648,13 +673,12 @@ def do_resume(args: List[str]) -> None:
             print(f"  {name}: resumed + started")
         else:
             print(
-                f"  {name}: resumed but FAILED to start "
-                f"(check tmux/claude availability)",
+                f"  {name}: resumed but FAILED to start (check tmux/claude availability)",
                 file=sys.stderr,
             )
 
 
-def do_restart(args: List[str]) -> None:
+def do_restart(args: list[str]) -> None:
     if not args:
         targets = [n for n in SESSIONS if not is_suspended(n, SUSPENDED_FILE)]
     else:
@@ -663,7 +687,7 @@ def do_restart(args: List[str]) -> None:
     print(f"=== Restarting {len(targets)} session(s) ===")
     for name in targets:
         if is_suspended(name, SUSPENDED_FILE):
-            print(f"  {name}: SUSPENDED (use './swarm.sh resume {name}' to reactivate)")
+            print(f"  {name}: SUSPENDED (use './swarm resume {name}' to reactivate)")
             continue
         backend_stop_one(name)
         time.sleep(1)
@@ -673,7 +697,7 @@ def do_restart(args: List[str]) -> None:
 
 def do_morning() -> None:
     print("=== Morning startup (all non-intern, non-dispatcher) ===")
-    targets: List[str] = []
+    targets: list[str] = []
     for name in SESSIONS:
         role = get_role(name)
         if role in ("intern", "dispatcher"):
@@ -702,13 +726,13 @@ def do_morning() -> None:
     print(f"Results: {started} started, {resumed} resumed from suspend, {failed} failed")
     print("Skipped roles: intern, dispatcher")
     print()
-    print("To also start interns: ./swarm.sh start --role=intern")
-    print("To start dispatcher:   ./swarm.sh start <dispatcher>")
+    print("To also start interns: ./swarm start --role=intern")
+    print("To start dispatcher:   ./swarm start <dispatcher>")
 
 
 def cmd_help() -> None:
     print(f"""\
-swarm.sh — manage multi-agent session swarm
+swarm — manage multi-agent session swarm
 
 Mode: {MODE} (override with SWARM_MODE=tmux|screen)
 Agent: {SWARM_AGENT} (override with SWARM_AGENT=claude|trae|qwen)
@@ -728,21 +752,23 @@ Agent: {SWARM_AGENT} (override with SWARM_AGENT=claude|trae|qwen)
 Roles (from ROSTER.md): lead, dev, intern, dispatcher
 
 Examples:
-  ./swarm.sh start                           # launch all with Claude (default)
-  SWARM_AGENT=trae ./swarm.sh start          # launch all with Trae
-  SWARM_AGENT=qwen ./swarm.sh start          # launch all with Qwen
-  SWARM_AGENT=qwen ./swarm.sh start alice bob  # launch specific sessions with Qwen
-  ./swarm.sh start alice bob                 # launch two with default agent
-  ./swarm.sh attach alice                     # interactive access
-  ./swarm.sh stop bob                       # stop one
-  SWARM_MODE=screen ./swarm.sh start         # force screen mode""")
+  ./swarm start                           # launch all with Claude (default)
+  SWARM_AGENT=trae ./swarm start          # launch all with Trae
+  SWARM_AGENT=qwen ./swarm start          # launch all with Qwen
+  SWARM_AGENT=qwen ./swarm start alice bob  # launch specific sessions with Qwen
+  ./swarm start alice bob                 # launch two with default agent
+  ./swarm attach alice                     # interactive access
+  ./swarm stop bob                       # stop one
+  SWARM_MODE=screen ./swarm start         # force screen mode""")
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
+    _load()
     if MODE == "none":
         print(
             "ERROR: neither tmux nor screen found. Install one: brew install tmux",
@@ -772,7 +798,7 @@ def main() -> None:
     if handler:
         handler()
     else:
-        print(f"Unknown: {cmd} (try ./swarm.sh help)", file=sys.stderr)
+        print(f"Unknown: {cmd} (try ./swarm help)", file=sys.stderr)
         sys.exit(1)
 
 

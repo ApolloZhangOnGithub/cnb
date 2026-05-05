@@ -5,14 +5,12 @@ Usage:
     ./lib/panel.py [interval_seconds]
 """
 
-import os
 import re
 import select
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 # Try to import common; fall back gracefully for standalone use
 try:
@@ -23,7 +21,7 @@ except ImportError:
     from lib.common import ClaudesEnv
 
 
-def _tmux(*args: str) -> Optional[str]:
+def _tmux(*args: str) -> str | None:
     try:
         r = subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=5)
         return r.stdout.strip() if r.returncode == 0 else None
@@ -113,7 +111,9 @@ def main() -> None:
             deadline = time.time() + interval
             while time.time() < deadline:
                 # Non-blocking stdin read (Unix only)
-                import termios, tty
+                import termios
+                import tty
+
                 old_settings = termios.tcgetattr(sys.stdin)
                 try:
                     tty.setcbreak(sys.stdin.fileno())

@@ -19,7 +19,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional, Tuple
 
 # Try to import common; fall back gracefully
 try:
@@ -41,7 +40,7 @@ class BuildLock:
         self.lock_dir = lock_dir
         self.info_file = lock_dir / "info"
 
-    def read_info(self) -> Tuple[str, int, str]:
+    def read_info(self) -> tuple[str, int, str]:
         """Parse the info file. Returns (holder, locked_at, target)."""
         if self.info_file.exists():
             try:
@@ -50,8 +49,9 @@ class BuildLock:
                 locked_at = int(parts[1]) if len(parts) > 1 else 0
                 target = parts[2] if len(parts) > 2 else "unknown"
                 return holder, locked_at, target
-            except Exception:
-                pass
+            except (OSError, ValueError) as e:
+                print(f"WARNING: corrupted lock info file ({e}), resetting", file=sys.stderr)
+                self._remove()
         return "unknown", 0, "unknown"
 
     def _try_mkdir(self) -> bool:
@@ -75,16 +75,19 @@ class BuildLock:
     def _remove(self) -> None:
         """Remove the lock directory tree."""
         import shutil
+
         try:
             shutil.rmtree(self.lock_dir)
         except FileNotFoundError:
             pass
+        except OSError as e:
+            print(f"WARNING: failed to remove lock dir: {e}", file=sys.stderr)
 
     def _write_info(self, session: str, target: str) -> None:
         """Write metadata into the lock directory."""
         self.info_file.write_text(f"{session}|{int(time.time())}|{target}")
 
-    def acquire(self, session: str, target: str = "unknown") -> Tuple[bool, str]:
+    def acquire(self, session: str, target: str = "unknown") -> tuple[bool, str]:
         """Try to get the build lock.
 
         Returns (success, message) where message is e.g. "OK|sess|target"
@@ -95,15 +98,14 @@ class BuildLock:
             return True, f"OK|{session}|{target}"
 
         # Lock exists -- check for staleness
-        if self._force_release_stale():
-            if self._try_mkdir():
-                self._write_info(session, target)
-                return True, f"OK|{session}|{target}"
+        if self._force_release_stale() and self._try_mkdir():
+            self._write_info(session, target)
+            return True, f"OK|{session}|{target}"
 
         holder, _, lock_target = self.read_info()
         return False, f"BUSY|{holder}|{lock_target}"
 
-    def release(self, session: str) -> Tuple[bool, str]:
+    def release(self, session: str) -> tuple[bool, str]:
         """Release the build lock held by *session*."""
         if not self.lock_dir.is_dir():
             return True, "OK (no lock)"
@@ -170,6 +172,7 @@ class BuildLock:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     env = ClaudesEnv.load()

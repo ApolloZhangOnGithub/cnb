@@ -1,16 +1,16 @@
 """Tests for the project initialization (bin/init).
 
-Covers: directory structure creation, config.sh generation,
+Covers: directory structure creation, config.toml generation,
 database initialization from schema, session .md file creation,
-CLAUDE.md generation, and idempotency.
+CLAUDE.md generation, idempotency, and session name validation.
 """
 
+import re
 import sqlite3
-from pathlib import Path
 
 import pytest
 
-from tests.conftest import SCHEMA_PATH, DEFAULT_SESSIONS
+from tests.conftest import DEFAULT_SESSIONS, SCHEMA_PATH
 
 
 class TestDirectoryStructure:
@@ -42,28 +42,28 @@ class TestDirectoryStructure:
 
 
 class TestConfigGeneration:
-    """Config.sh generation."""
+    """config.toml generation."""
 
     def test_config_file_exists(self, tmp_project):
-        """config.sh is created."""
-        assert (tmp_project / ".claudes" / "config.sh").is_file()
+        """config.toml is created."""
+        assert (tmp_project / ".claudes" / "config.toml").is_file()
 
     def test_config_has_claudes_home(self, tmp_project):
-        """config.sh contains CLAUDES_HOME."""
-        config = (tmp_project / ".claudes" / "config.sh").read_text()
-        assert "CLAUDES_HOME=" in config
+        """config.toml contains claudes_home."""
+        config = (tmp_project / ".claudes" / "config.toml").read_text()
+        assert "claudes_home" in config
 
     def test_config_has_sessions_array(self, tmp_project):
-        """config.sh contains the SESSIONS array with all session names."""
-        config = (tmp_project / ".claudes" / "config.sh").read_text()
-        assert "SESSIONS=" in config
+        """config.toml contains the sessions array with all session names."""
+        config = (tmp_project / ".claudes" / "config.toml").read_text()
+        assert "sessions" in config
         for name in DEFAULT_SESSIONS:
             assert name in config
 
     def test_config_has_prefix(self, tmp_project):
-        """config.sh contains a PREFIX variable."""
-        config = (tmp_project / ".claudes" / "config.sh").read_text()
-        assert "PREFIX=" in config
+        """config.toml contains a prefix variable."""
+        config = (tmp_project / ".claudes" / "config.toml").read_text()
+        assert "prefix" in config
 
 
 class TestDatabaseInitialization:
@@ -79,9 +79,7 @@ class TestDatabaseInitialization:
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
 
-        rows = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        ).fetchall()
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()
         tables = {r["name"] for r in rows}
         conn.close()
 
@@ -137,25 +135,19 @@ class TestSessionFiles:
     def test_session_file_has_header(self, tmp_project):
         """Each session file starts with a header containing the session name."""
         for name in DEFAULT_SESSIONS:
-            content = (
-                tmp_project / ".claudes" / "sessions" / f"{name}.md"
-            ).read_text()
+            content = (tmp_project / ".claudes" / "sessions" / f"{name}.md").read_text()
             assert f"# {name}" in content
 
     def test_session_file_has_current_task_section(self, tmp_project):
         """Each session file has a Current task section."""
         for name in DEFAULT_SESSIONS:
-            content = (
-                tmp_project / ".claudes" / "sessions" / f"{name}.md"
-            ).read_text()
+            content = (tmp_project / ".claudes" / "sessions" / f"{name}.md").read_text()
             assert "## Current task" in content
 
     def test_session_file_has_inbox_section(self, tmp_project):
         """Each session file has an @inbox section."""
         for name in DEFAULT_SESSIONS:
-            content = (
-                tmp_project / ".claudes" / "sessions" / f"{name}.md"
-            ).read_text()
+            content = (tmp_project / ".claudes" / "sessions" / f"{name}.md").read_text()
             assert "## @inbox" in content
 
 
@@ -169,9 +161,7 @@ class TestIdempotency:
         # Simulate re-init: try inserting sessions again with INSERT OR IGNORE
         conn = sqlite3.connect(str(db_path))
         for name in DEFAULT_SESSIONS:
-            conn.execute(
-                "INSERT OR IGNORE INTO sessions(name) VALUES (?)", (name,)
-            )
+            conn.execute("INSERT OR IGNORE INTO sessions(name) VALUES (?)", (name,))
         conn.commit()
 
         count = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
@@ -226,9 +216,7 @@ class TestSchemaApplication:
         conn = sqlite3.connect(":memory:")
         conn.executescript(SCHEMA_PATH.read_text())
 
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         conn.close()
 
         assert len(tables) > 0
@@ -238,11 +226,97 @@ class TestSchemaApplication:
         conn = sqlite3.connect(":memory:")
         conn.executescript(SCHEMA_PATH.read_text())
 
-        indexes = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        ).fetchall()
+        indexes = conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
         conn.close()
 
         index_names = {r[0] for r in indexes}
         assert "idx_msg_ts" in index_names
         assert "idx_inbox" in index_names
+
+
+# ── session name validation (bin/init) ──
+
+VALID_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
+RESERVED = frozenset({"all", "dispatcher", "lead", "system"})
+
+
+def _validate(name: str) -> str:
+    """Replicate the validation logic from bin/init for testing."""
+    clean = name.strip().lower()
+    if not clean:
+        raise ValueError("empty")
+    if len(clean) > 64:
+        raise ValueError("too long")
+    if clean in RESERVED:
+        raise ValueError(f"reserved: {clean}")
+    if not VALID_NAME.match(clean):
+        raise ValueError(f"invalid chars: {name}")
+    return clean
+
+
+class TestSessionNameValidation:
+    """Session name validation rejects dangerous or reserved names."""
+
+    @pytest.mark.parametrize("name", [
+        "alice",
+        "bob",
+        "charlie",
+        "a",            # single char
+        "zz",           # two chars
+        "my-agent",     # hyphen
+        "agent_42",     # underscore + digits
+        "a-b-c_d",      # mixed
+        "x" * 64,        # max length
+    ])
+    def test_valid_names_pass(self, name):
+        """Valid session names are accepted."""
+        result = _validate(name)
+        assert result == name.lower()
+
+    @pytest.mark.parametrize("name", [
+        "",             # empty
+        "   ",          # whitespace only
+    ])
+    def test_empty_name_rejected(self, name):
+        """Empty or whitespace-only names raise an error."""
+        with pytest.raises(ValueError):
+            _validate(name)
+
+    @pytest.mark.parametrize("name", [
+        "all",
+        "dispatcher",
+        "lead",
+        "system",
+        "ALL",          # case-insensitive
+        "Dispatcher",
+    ])
+    def test_reserved_names_rejected(self, name):
+        """Reserved names are rejected."""
+        with pytest.raises(ValueError):
+            _validate(name)
+
+    @pytest.mark.parametrize("name", [
+        "<dicksuck>",
+        "a/b",
+        "hello world",
+        "../evil",
+        "name;rm",
+        "a|b",
+        "user@host",
+        "name!yes",
+        "a..b",
+        "-leading",     # starts with hyphen
+        "trailing-",    # ends with hyphen
+        "_leading",     # starts with underscore
+        "trailing_",    # ends with underscore
+
+    ])
+    def test_invalid_chars_rejected(self, name):
+        """Names with dangerous characters are rejected."""
+        with pytest.raises(ValueError):
+            _validate(name)
+
+    def test_too_long_name_rejected(self):
+        """Names over 64 chars are rejected."""
+        with pytest.raises(ValueError):
+            _validate("a" * 65)

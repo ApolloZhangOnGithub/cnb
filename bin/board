@@ -1,1475 +1,168 @@
-#!/usr/bin/env bash
-set -euo pipefail
-_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
-source "$CLAUDES_HOME/lib/discover.sh"
+#!/usr/bin/env python3
+"""board — multi-session coordination CLI (SQLite backend, parameterized queries).
+
+Uses a declarative command registry with lazy module imports instead of
+if/elif chains and ad-hoc lambda dicts.
+"""
+
+import sys
+from dataclasses import dataclass, field
+from importlib import import_module
+from pathlib import Path
+
+CLAUDES_HOME = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(CLAUDES_HOME))
+
+from lib.board_db import BoardDB
+from lib.common import ClaudesEnv, parse_flags
 
 
-# board.sh v2 — Multi-session coordination tool (SQLite backend)
-# CLI-compatible with v1. Internal storage: SQLite instead of raw files.
-# .md files are auto-generated views from the database.
+# ---------------------------------------------------------------------------
+# Command registry
+# ---------------------------------------------------------------------------
 
-DB="$BOARD_DB"
+@dataclass
+class Command:
+    """Declarative command entry — no lambdas, no late-binding traps."""
 
-# Initialize DB if missing
-if [ ! -f "$DB" ]; then
-    echo "ERROR: board.db not found. Run: python3 tools/board-v2/board-migrate.py" >&2
-    exit 1
-fi
+    name: str
+    module: str
+    function: str
+    help: str
+    usage: str = ""
+    needs_identity: bool = True
+    takes_rest: bool = True
+    aliases: list[str] = field(default_factory=list)
 
-ts() { date '+%Y-%m-%d %H:%M'; }
 
-# SQLite helper: run a query, return results
-sql() { sqlite3 -batch "$DB" "$1"; }
-sql_quote() { printf '%s' "$1" | tr -d '\0' | sed "s/'/''/g"; }
+COMMANDS: list[Command] = [
+    # ── messaging ──
+    Command("send",   "lib.board_msg",  "cmd_send",   "send a message",              "send <to> <msg> [--attach <f>]"),
+    Command("status", "lib.board_msg",  "cmd_status", "update your current task",    "status <description>"),
+    Command("inbox",  "lib.board_msg",  "cmd_inbox",  "check unread messages",       "inbox",   takes_rest=False),
+    Command("ack",    "lib.board_msg",  "cmd_ack",    "clear inbox",                 "ack",     takes_rest=False),
+    Command("log",    "lib.board_msg",  "cmd_log",    "message history",             "log [n] [--mine]"),
+    # ── views ──
+    Command("view",       "lib.board_view", "cmd_view",       "session dashboard",         "view",      takes_rest=False),
+    Command("overview",   "lib.board_view", "cmd_overview",   "project overview (default)", "overview", needs_identity=False, takes_rest=False),
+    Command("dashboard",  "lib.board_view", "cmd_dashboard",  "live team status",          "dashboard", needs_identity=False, takes_rest=False, aliases=["dash"]),
+    Command("p0",         "lib.board_view", "cmd_p0",         "P0 lock status",            "p0",        needs_identity=False, takes_rest=False),
+    Command("pre-build",  "lib.board_view", "cmd_prebuild",   "pre-build readiness check", "pre-build", needs_identity=False, takes_rest=False),
+    Command("dirty",      "lib.board_view", "cmd_dirty",      "show uncommitted changes",  "dirty",     needs_identity=False, takes_rest=False),
+    Command("files",      "lib.board_view", "cmd_files",      "list shared files",         "files",     needs_identity=False, takes_rest=False),
+    Command("get",        "lib.board_view", "cmd_get",        "view shared file content",  "get <hash|name>", needs_identity=False),
+    Command("roster",     "lib.board_view", "cmd_roster",     "team roster",               "roster",    needs_identity=False, takes_rest=False),
+    Command("history",    "lib.board_view", "cmd_history",    "session message history",   "history <session> [limit]", needs_identity=False),
+    Command("freshness",  "lib.board_view", "cmd_freshness",  "data freshness per session","freshness", needs_identity=False, takes_rest=False),
+    Command("relations",  "lib.board_view", "cmd_relations",  "inter-session message flow","relations", needs_identity=False, takes_rest=False),
+    # ── BBS ──
+    Command("post",     "lib.board_bbs",  "cmd_post",     "BBS: create new thread",  "post <标题> <内容>"),
+    Command("reply",    "lib.board_bbs",  "cmd_reply",    "BBS: reply to thread",    "reply <帖子ID> <内容>"),
+    Command("thread",   "lib.board_bbs",  "cmd_thread",   "BBS: view thread",        "thread <帖子ID>", needs_identity=False),
+    Command("threads",  "lib.board_bbs",  "cmd_threads",  "BBS: list all threads",   "threads", needs_identity=False, takes_rest=False),
+    # ── bug ──
+    Command("bug",      "lib.board_bug",  "cmd_bug",      "bug tracker",             "bug {report|assign|fix|list|overdue}"),
+    # ── task ──
+    Command("task",     "lib.board_task", "cmd_task",     "task queue management",   "task {add|done|list|next}"),
+    # ── voting ──
+    Command("vote",     "lib.board_vote", "cmd_vote",     "vote on a proposal",      "vote <N> <SUPPORT|OBJECT> <reason>"),
+    Command("tally",    "lib.board_vote", "cmd_tally",    "recount votes",           "tally <N>", needs_identity=False),
+    # ── admin ──
+    Command("kudos",       "lib.board_admin", "cmd_kudos",       "give public recognition",  "kudos <target> <reason>"),
+    Command("kudos-list",  "lib.board_admin", "cmd_kudos_list",  "kudos leaderboard",        "kudos-list", needs_identity=False, takes_rest=False, aliases=["kudos-board"]),
+    Command("suspend",     "lib.board_admin", "cmd_suspend",     "suspend a session",        "suspend <session>"),
+    Command("resume",      "lib.board_admin", "cmd_resume",      "resume a session",         "resume <session>"),
+    # ── git lock ──
+    Command("git-lock",        "lib.board_lock", "cmd_git_lock",        "acquire git index lock",  "git-lock [reason]"),
+    Command("git-unlock",      "lib.board_lock", "cmd_git_unlock",      "release git index lock",  "git-unlock"),
+    Command("git-lock-status", "lib.board_lock", "cmd_git_lock_status", "git lock status",         "git-lock-status", needs_identity=False, takes_rest=False),
+    # ── maintenance ──
+    Command("prune",   "lib.board_maintenance", "cmd_prune",   "prune old messages",     "prune [--before DAYS] [--dry-run]", needs_identity=False),
+    Command("backup",  "lib.board_maintenance", "cmd_backup",  "backup database",        "backup [--output <path>]",    needs_identity=False),
+    Command("restore", "lib.board_maintenance", "cmd_restore", "restore from backup",    "restore <file> [--force]",    needs_identity=False),
+]
 
-# portable reverse (tail -r is macOS-only)
-_reverse() {
-    if command -v tac &>/dev/null; then tac
-    elif command -v tail &>/dev/null && tail -r /dev/null 2>/dev/null; then tail -r
-    else awk '{a[NR]=$0} END{for(i=NR;i>=1;i--)print a[i]}'
-    fi
-}
+# Build lookup map (name + aliases → Command)
+_CMD_MAP: dict[str, Command] = {}
+for c in COMMANDS:
+    _CMD_MAP[c.name] = c
+    for a in c.aliases:
+        _CMD_MAP[a] = c
 
-# portable date-to-epoch (date -j -f is macOS-only)
-_date_to_epoch() {
-    local ts="$1" fmt="${2:-%Y-%m-%d %H:%M}"
-    if date -j -f "$fmt" "$ts" +%s 2>/dev/null; then return; fi
-    date -d "$ts" +%s 2>/dev/null || echo 0
-}
 
-# portable file mtime (stat -f %m is macOS-only)
-_file_mtime() {
-    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
-}
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
 
-# Parse --as <name> from any position in args
-BOARD_IDENTITY=""
-parse_as_flag() {
-    local new_args=()
-    while [ $# -gt 0 ]; do
-        if [ "$1" = "--as" ]; then
-            if [ $# -lt 2 ]; then
-                echo "ERROR: --as requires a name" >&2; exit 1
-            fi
-            BOARD_IDENTITY="$2"; shift 2
-        else
-            new_args+=("$1"); shift
-        fi
-    done
-    REMAINING_ARGS=("${new_args[@]+"${new_args[@]}"}")
-}
+def _dispatch(cmd: Command, db: BoardDB, identity: str, rest: list[str]) -> None:
+    """Lazy-import the handler module and call the registered function."""
+    module = import_module(cmd.module)
+    handler = getattr(module, cmd.function)
 
-need_identity() {
-    if [ -z "$BOARD_IDENTITY" ]; then
-        echo "ERROR: identity required. Use: ./board.sh --as <name> <command>" >&2; exit 1
-    fi
-    echo "$BOARD_IDENTITY"
-}
+    # Match the handler's declared parameter pattern
+    if cmd.needs_identity and cmd.takes_rest:
+        handler(db, identity, rest)
+    elif cmd.needs_identity:
+        handler(db, identity)
+    elif cmd.takes_rest:
+        handler(db, rest)
+    else:
+        handler(db)
 
-# Ensure session exists in DB
-ensure_session() {
-    local name_lower
-    name_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
-    local q_name; q_name=$(sql_quote "$name_lower")
-    local exists
-    exists=$(sql "SELECT COUNT(*) FROM sessions WHERE name='$q_name';")
-    if [ "$exists" -eq 0 ]; then
-        sql "INSERT INTO sessions(name) VALUES ('$q_name');"
-    fi
-}
 
-# --- Commands ---
+def _fmt_command(cmd: Command, width: int) -> str:
+    name = cmd.name
+    if cmd.aliases:
+        name += f" ({', '.join(cmd.aliases)})"
+    return f"  {name:<{width}}  {cmd.help}"
 
-cmd_send() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    local attach_file="" send_args=()
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --attach|-a)
-                if [ $# -lt 2 ]; then echo "ERROR: --attach requires a file path" >&2; exit 1; fi
-                attach_file="$2"; shift 2 ;;
-            *) send_args+=("$1"); shift ;;
-        esac
-    done
-    set -- "${send_args[@]+"${send_args[@]}"}"
-    if [ $# -lt 1 ]; then echo "Usage: ./board.sh --as <name> send <to> <message> [--attach <file>]" >&2; exit 1; fi
-    local to="$1"; shift; local msg="${*:-}"
 
-    local attach_ref=""
-    if [ -n "$attach_file" ]; then
-        if [ ! -f "$attach_file" ]; then echo "ERROR: file not found: $attach_file" >&2; exit 1; fi
-        local hash; hash=$(shasum -a 256 "$attach_file" | cut -c1-12)
-        local ext; ext="${attach_file##*.}"
-        [ "$ext" = "$attach_file" ] && ext=""
-        local orig; orig=$(basename "$attach_file")
-        local stored_path="files/${hash}.${ext}"
-        mkdir -p "$BOARD_DIR/files"
-        cp "$attach_file" "$BOARD_DIR/$stored_path" 2>/dev/null || true
+def print_help() -> None:
+    max_name = max(len(c.name) + (2 + len(", ".join(c.aliases)) if c.aliases else 0) for c in COMMANDS) + 2
+    print("board v2 — agent coordination tool (SQLite backend, Python)\n")
+    print("Usage: board --as <name> <command> [args...]\n")
+    print("Commands:")
+    last_module = ""
+    for c in COMMANDS:
+        mod = c.module.rsplit(".", 1)[-1]  # board_msg, board_view, etc.
+        if mod != last_module:
+            if last_module:
+                print()
+            print(f"  [{mod}]")
+            last_module = mod
+        print(_fmt_command(c, max_name))
+    print()
 
-        local q_orig; q_orig=$(sql_quote "$orig")
-        local q_hash; q_hash=$(sql_quote "$hash")
-        local q_ext; q_ext=$(sql_quote "$ext")
-        local q_name_s; q_name_s=$(sql_quote "$name_lower")
-        local q_stored; q_stored=$(sql_quote "$stored_path")
-        sql "INSERT OR IGNORE INTO files(hash, original_name, extension, sender, stored_path) VALUES ('$q_hash', '$q_orig', '$q_ext', '$q_name_s', '$q_stored');"
-        attach_ref=" [附件: ${orig} → $stored_path]"
-        [ -z "$msg" ] && msg="分享文件: ${orig}"
-    fi
 
-    local full_msg="${msg}${attach_ref}"
-    local q_msg; q_msg=$(sql_quote "$full_msg")
-    local to_lower; to_lower=$(echo "$to" | tr '[:upper:]' '[:lower:]')
-    local q_name; q_name=$(sql_quote "$name_lower")
-    local q_to; q_to=$(sql_quote "$to_lower")
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
-    # Insert message and get its ID in one connection
-    local attach_val; attach_val=$([ -n "$attach_ref" ] && echo "'$(sql_quote "${hash:-}")'" || echo "NULL")
-    local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body, attachment) VALUES ('$(ts)', '$q_name', '$q_to', '$q_msg', $attach_val); SELECT last_insert_rowid();")
+def main() -> None:
+    env = ClaudesEnv.load()
+    db = BoardDB(env)
 
-    # Deliver to inbox
-    if [ "$to_lower" = "all" ]; then
-        local sessions; sessions=$(sql "SELECT name FROM sessions WHERE name != '$q_name';")
-        while IFS= read -r target; do
-            [ -z "$target" ] && continue
-            local q_target; q_target=$(sql_quote "$target")
-            sql "INSERT INTO inbox(session, message_id) VALUES ('$q_target', $msg_id);"
-            _sync_inbox_to_file "$target"
-        done <<< "$sessions"
-    else
-        ensure_session "$to_lower"
-        sql "INSERT INTO inbox(session, message_id) VALUES ('$q_to', $msg_id);"
-        _sync_inbox_to_file "$to_lower"
-    fi
+    flags, filtered = parse_flags(sys.argv[1:], value_flags={"as": ["--as"]})
+    identity = str(flags["as"]) if "as" in flags else ""
 
-    echo "OK sent"
-    if [ -n "$attach_ref" ]; then
-        echo "  附件已存储: $stored_path"
-    fi
-}
+    cmd_name = filtered[0] if filtered else "help"
+    rest = filtered[1:]
 
-cmd_status() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ $# -eq 0 ]; then echo "Usage: ./board.sh --as <name> status <description>" >&2; exit 1; fi
-    local desc="$*"
-    local now; now=$(ts)
-    local full_status="$desc — $now"
-    local q_status; q_status=$(sql_quote "$full_status")
-
-    local q_name; q_name=$(sql_quote "$name_lower")
-    sql "UPDATE sessions SET status='$q_status', updated_at='$now' WHERE name='$q_name';"
-
-    # Sync to .md view
-    _sync_status_to_file "$name_lower" "$full_status"
-    echo "OK status updated"
-}
-
-cmd_vote() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ "$name_lower" = "${DISPATCHER_SESSION:-dispatcher}" ]; then
-        echo "ERROR: Coral has no voting rights (charter §二)" >&2; exit 1
-    fi
-    if [ $# -lt 3 ]; then echo "Usage: ./board.sh --as <name> vote <number> <SUPPORT|OBJECT> <reason>" >&2; exit 1; fi
-
-    local num="$1" decision="$2"; shift 2; local reason="$*"
-    decision=$(echo "$decision" | tr '[:lower:]' '[:upper:]')
-    if [[ "$decision" != "SUPPORT" && "$decision" != "OBJECT" ]]; then
-        echo "ERROR: must be SUPPORT or OBJECT" >&2; exit 1
-    fi
-
-    local padded; padded=$(printf "%03d" "$num" 2>/dev/null || echo "$num")
-    local q_padded; q_padded=$(sql_quote "$padded")
-    local q_num; q_num=$(sql_quote "$num")
-    local prop_id; prop_id=$(sql "SELECT id FROM proposals WHERE number='$q_padded' OR number='$q_num' LIMIT 1;")
-    if [ -z "$prop_id" ]; then echo "ERROR: proposal $num not found" >&2; exit 1; fi
-
-    # Check if already decided
-    local prop_status; prop_status=$(sql "SELECT status FROM proposals WHERE id=$prop_id;")
-    if [ "$prop_status" != "OPEN" ]; then
-        echo "ERROR: proposal $num already decided ($prop_status)" >&2; exit 1
-    fi
-
-    local q_reason; q_reason=$(sql_quote "$reason")
-    local q_name; q_name=$(sql_quote "$name_lower")
-    sql "INSERT OR REPLACE INTO votes(proposal_id, voter, decision, reason, ts) VALUES ($prop_id, '$q_name', '$decision', '$q_reason', '$(ts)');"
-    echo "OK voted $decision"
-
-    # Tally
-    echo ""
-    echo "Tally:"
-    local s; s=$(sql "SELECT COUNT(*) FROM votes WHERE proposal_id=$prop_id AND decision='SUPPORT';")
-    local o; o=$(sql "SELECT COUNT(*) FROM votes WHERE proposal_id=$prop_id AND decision='OBJECT';")
-
-    sql "SELECT voter || ': ' || decision || ' — ' || reason FROM votes WHERE proposal_id=$prop_id;" | sed 's/^/  /'
-
-    # Determine threshold
-    local prop_type; prop_type=$(sql "SELECT type FROM proposals WHERE id=$prop_id;")
-    local eligible; eligible=$(sql "SELECT COUNT(*) FROM sessions WHERE name != (SELECT value FROM meta WHERE key='dispatcher_session');")
-    local threshold
-    if [ "$prop_type" = "S" ]; then
-        threshold=$(( (eligible * 2 + 2) / 3 ))
-    else
-        threshold=$(( eligible / 2 + 1 ))
-    fi
-
-    echo ""
-    echo "  SUPPORT=$s OBJECT=$o | type=$prop_type threshold=$threshold/$eligible"
-
-    # Auto-decide
-    if [ "$s" -ge "$threshold" ]; then
-        sql "UPDATE proposals SET status='PASSED', decided_at='$(ts)' WHERE id=$prop_id;"
-        echo ""
-        echo ">>> PASSED (${prop_type}级, ${s}/${eligible} >= ${threshold}) <<<"
-        local q_pass_body; q_pass_body=$(sql_quote "[VOTE] Proposal ${padded} PASSED (${s}S/${o}O, threshold ${threshold})")
-        sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'All', '$q_pass_body');"
-    elif [ "$o" -gt $((eligible - threshold)) ]; then
-        sql "UPDATE proposals SET status='FAILED', decided_at='$(ts)' WHERE id=$prop_id;"
-        echo ""
-        echo ">>> FAILED (无法达到 ${threshold} 票) <<<"
-        local q_fail_body; q_fail_body=$(sql_quote "[VOTE] Proposal ${padded} FAILED (${s}S/${o}O, threshold ${threshold})")
-        sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'All', '$q_fail_body');"
-    else
-        echo "  (待定，还需 $((threshold - s)) 票 SUPPORT 通过)"
-    fi
-}
-
-cmd_tally() {
-    if [ $# -lt 1 ]; then echo "Usage: ./board.sh tally <number>" >&2; exit 1; fi
-    local num="$1"
-    local padded; padded=$(printf "%03d" "$num" 2>/dev/null || echo "$num")
-    local q_padded; q_padded=$(sql_quote "$padded")
-    local q_num; q_num=$(sql_quote "$num")
-    local prop_id; prop_id=$(sql "SELECT id FROM proposals WHERE number='$q_padded' OR number='$q_num' LIMIT 1;")
-    if [ -z "$prop_id" ]; then echo "ERROR: proposal $num not found" >&2; exit 1; fi
-
-    local prop_status; prop_status=$(sql "SELECT status FROM proposals WHERE id=$prop_id;")
-    if [ "$prop_status" != "OPEN" ]; then
-        echo "Already $prop_status: $(sql "SELECT decided_at FROM proposals WHERE id=$prop_id;")"
+    if cmd_name in ("help", "-h", "--help"):
+        print_help()
         return
-    fi
 
-    sql "SELECT voter || ': ' || decision || ' — ' || reason FROM votes WHERE proposal_id=$prop_id;" | sed 's/^/  /'
+    cmd = _CMD_MAP.get(cmd_name)
+    if not cmd:
+        print(f"ERROR: unknown command '{cmd_name}'. Try 'board help'.", file=sys.stderr)
+        raise SystemExit(1)
 
-    local s; s=$(sql "SELECT COUNT(*) FROM votes WHERE proposal_id=$prop_id AND decision='SUPPORT';")
-    local o; o=$(sql "SELECT COUNT(*) FROM votes WHERE proposal_id=$prop_id AND decision='OBJECT';")
-    local prop_type; prop_type=$(sql "SELECT type FROM proposals WHERE id=$prop_id;")
-    local eligible; eligible=$(sql "SELECT COUNT(*) FROM sessions WHERE name != (SELECT value FROM meta WHERE key='dispatcher_session');")
-    local threshold
-    if [ "$prop_type" = "S" ]; then
-        threshold=$(( (eligible * 2 + 2) / 3 ))
-    else
-        threshold=$(( eligible / 2 + 1 ))
-    fi
-    echo "  SUPPORT=$s OBJECT=$o | type=$prop_type threshold=$threshold/$eligible"
-}
+    if cmd.needs_identity and not identity:
+        print("ERROR: identity required. Use: board --as <name> <command>", file=sys.stderr)
+        raise SystemExit(1)
 
-cmd_log() {
-    local n=20 filter=""
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --mine) filter="$(need_identity)"; shift ;;
-            *) n="$1"; shift ;;
-        esac
-    done
+    _dispatch(cmd, db, identity, rest)
 
-    if [ -n "$filter" ]; then
-        local f_lower; f_lower=$(echo "$filter" | tr '[:upper:]' '[:lower:]')
-        local q_filter; q_filter=$(sql_quote "$f_lower")
-        sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || body FROM messages WHERE sender='$q_filter' OR recipient='$q_filter' OR recipient='all' ORDER BY id DESC LIMIT $n;" | _reverse
-    else
-        sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || body FROM messages ORDER BY id DESC LIMIT $n;" | _reverse
-    fi
-}
 
-cmd_view() {
-    echo "=== Board ==="
-    echo ""
-
-    # P0 lock check
-    local roadmap="$PROJECT_ROOT/ROADMAP.md"
-    local p0_locked=false
-    if [ -f "$roadmap" ]; then
-        local sb; sb=$(awk '/端到端状态/{f=1} f && /^## [A-Z]/{exit} f{print}' "$roadmap" 2>/dev/null)
-        if echo "$sb" | grep -qE '从未|未验证|阻塞'; then
-            p0_locked=true
-            echo "!!! P0 LOCKED — 端到端未验证，全员聚焦 P0 !!!"
-            echo "    运行 ./board.sh p0 查看详情"
-            echo ""
-        fi
-    fi
-
-    # Inbox check
-    if [ -n "$BOARD_IDENTITY" ]; then
-        local me_lower; me_lower=$(echo "$BOARD_IDENTITY" | tr '[:upper:]' '[:lower:]')
-        local q_me; q_me=$(sql_quote "$me_lower")
-        local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$q_me' AND read=0;")
-        if [ "$count" -gt 0 ]; then
-            echo ">>> 你有 ${count} 条未读消息，运行 ./board.sh inbox 查看 <<<"
-            echo ""
-        fi
-    fi
-
-    # Status
-    echo "Status:"
-    sql "SELECT name, status FROM sessions ORDER BY name;" | while IFS='|' read -r sname task; do
-        sname_cap="$(echo "${sname:0:1}" | tr '[:lower:]' '[:upper:]')${sname:1}"
-        [ -z "$task" ] && task="(none)"
-        local tag=""
-        if $p0_locked && ! echo "$task" | grep -q '\[P0\]'; then
-            tag=" [!! 未标 P0]"
-        fi
-        [ ${#task} -gt 72 ] && task="${task:0:69}..."
-        printf "  %-8s %s%s\n" "$sname_cap" "$task" "$tag"
-    done
-    echo ""
-
-    # Recent messages
-    echo "Recent messages:"
-    sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 80) FROM messages ORDER BY id DESC LIMIT 8;" | _reverse | sed 's/^/  /'
-    echo ""
-
-    # Active proposals
-    echo "Proposals:"
-    local found=false
-    sql "SELECT number || '-' || slug, status, (SELECT COUNT(*) FROM votes v WHERE v.proposal_id=p.id AND v.decision='SUPPORT'), (SELECT COUNT(*) FROM votes v WHERE v.proposal_id=p.id AND v.decision='OBJECT') FROM proposals p WHERE status='OPEN';" | while IFS='|' read -r pname status s o; do
-        echo "  $pname [OPEN] S=$s O=$o"
-        found=true
-    done
-    if ! $found; then echo "  (none)"; fi
-}
-
-cmd_inbox() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    local q_name; q_name=$(sql_quote "$name_lower")
-
-    local result; result=$(sql "SELECT m.ts, m.sender, m.body FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$q_name' AND i.read=0 ORDER BY m.ts;")
-    if [ -z "$result" ]; then
-        echo "收件箱为空"
-    else
-        local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$q_name' AND read=0;")
-        echo "你有 ${count} 条未读:"
-        sql "SELECT '- [' || m.ts || '] **' || m.sender || '**: ' || m.body FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$q_name' AND i.read=0 ORDER BY m.ts;"
-        echo ""
-        echo "(处理完后运行 ./board.sh --as ${name} ack)"
-    fi
-
-    _task_print_queue "$name_lower"
-}
-
-cmd_ack() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    local q_name; q_name=$(sql_quote "$name_lower")
-
-    local count; count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$q_name' AND read=0;")
-    if [ "$count" -eq 0 ]; then
-        echo "收件箱已经是空的"
-        # Still clear the .md file — a concurrent send may have written stale
-        # messages to the file after a previous ack already marked them read=1
-        # in SQLite.  Without this, the PostToolBatch hook (which reads the .md
-        # file, not SQLite) would keep showing ghost messages indefinitely.
-        _clear_inbox_file "$name_lower"
-        return 0
-    fi
-
-    sql "UPDATE inbox SET read=1 WHERE session='$q_name' AND read=0;"
-    echo "OK ${count} 条已清空（完整记录在 messages.log）"
-
-    # Sync: clear @inbox in session file
-    _clear_inbox_file "$name_lower"
-}
-
-cmd_prebuild() {
-    echo "=== Pre-build Check ==="
-    echo ""
-    local has_fail=false
-
-    # 1. Uncommitted code changes
-    local dirty; dirty=$(git -C "$PROJECT_ROOT" status --porcelain 2>/dev/null | grep -v '^??' | grep -v 'board/' || true)
-    if [ -n "$dirty" ]; then
-        echo "FAIL: uncommitted code changes:"
-        echo "$dirty" | sed 's/^/  /'
-        has_fail=true
-    else
-        echo "OK: working tree clean (code files)"
-    fi
-
-    # 2. Build queue lock check
-    local build_queue="${ROOT}/tools/build-queue.sh"
-    if [ -x "$build_queue" ]; then
-        local lock_status
-        lock_status=$("$build_queue" status 2>/dev/null || echo "ERROR")
-        if echo "$lock_status" | grep -q "^LOCKED"; then
-            echo "WARN: $lock_status"
-            echo "  Use './tools/build-queue.sh wrap <session> <cmd>' to queue your build."
-        elif echo "$lock_status" | grep -q "^FREE"; then
-            echo "OK: build queue free"
-        fi
-    fi
-
-    # 3. Resource check (skip build if battery critical or memory critical)
-    local res_monitor="${ROOT}/tools/resource-monitor.sh"
-    if [ -x "$res_monitor" ]; then
-        local res_json
-        res_json=$("$res_monitor" --json 2>/dev/null || echo '{}')
-        local batt_status mem_status
-        batt_status=$(echo "$res_json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('battery',{}).get('status','?'))" 2>/dev/null || echo "?")
-        mem_status=$(echo "$res_json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('memory',{}).get('status','?'))" 2>/dev/null || echo "?")
-        if [ "$batt_status" = "CRITICAL" ]; then
-            echo "FAIL: battery critical — do not build"
-            has_fail=true
-        elif [ "$mem_status" = "CRITICAL" ]; then
-            echo "FAIL: memory pressure critical — do not build"
-            has_fail=true
-        else
-            echo "OK: resources nominal (battery:${batt_status}, memory:${mem_status})"
-        fi
-    fi
-
-    echo ""
-    echo "Last 3 commits:"
-    git -C "$PROJECT_ROOT" log --oneline -3 | sed 's/^/  /'
-    echo ""
-
-    if $has_fail; then
-        echo "NOT ready to build. Fix issues above first."
-        return 1
-    fi
-    echo "Ready to build."
-}
-
-cmd_p0() {
-    local roadmap="$PROJECT_ROOT/ROADMAP.md"
-    if [ ! -f "$roadmap" ]; then
-        echo "ERROR: ROADMAP.md not found" >&2; exit 1
-    fi
-    local status_block
-    status_block=$(awk '/端到端状态/{found=1} found && /^## [A-Z]/{exit} found{print}' "$roadmap" 2>/dev/null)
-    local locked=false
-    if echo "$status_block" | grep -qE '从未|未验证|阻塞'; then
-        locked=true
-    fi
-
-    if $locked; then
-        echo "=== P0 LOCKED ==="
-        echo ""
-        echo "Status from ROADMAP.md:"
-        echo "$status_block" | sed 's/^/  /'
-        echo ""
-        echo "Session alignment:"
-        sql "SELECT name, status FROM sessions ORDER BY name;" | while IFS='|' read -r sname task; do
-            sname_cap="$(echo "${sname:0:1}" | tr '[:lower:]' '[:upper:]')${sname:1}"
-            [ -z "$task" ] && task="(no status)"
-            if echo "$task" | grep -q '\[P0\]'; then
-                printf "  %-8s [OK] %s\n" "$sname_cap" "$task"
-            else
-                printf "  %-8s [!!] %s\n" "$sname_cap" "$task"
-            fi
-        done
-    else
-        echo "=== P0 CLEAR ==="
-        echo "No active P0 blocker. Normal work allowed."
-    fi
-}
-
-cmd_dirty() {
-    echo "=== Uncommitted Changes ==="
-    echo ""
-    local changes; changes=$(git -C "$PROJECT_ROOT" status --porcelain 2>/dev/null || true)
-    if [ -z "$changes" ]; then
-        echo "Working tree clean."
-        return
-    fi
-    local code; code=$(echo "$changes" | grep -v 'board/' || true)
-    if [ -n "$code" ]; then
-        echo "Code:"
-        echo "$code" | sed 's/^/  /'
-        echo ""
-    fi
-    local board; board=$(echo "$changes" | grep 'board/' || true)
-    if [ -n "$board" ]; then
-        local bcount; bcount=$(echo "$board" | wc -l | tr -d ' ')
-        echo "Board: $bcount files (normal churn)"
-    fi
-    echo ""
-    echo "Last commit: $(git -C "$PROJECT_ROOT" log --oneline -1 2>/dev/null)"
-}
-
-cmd_dashboard() {
-    local all_sessions
-    all_sessions=$(sql "SELECT name FROM sessions ORDER BY name;")
-    local prefix="cc"
-    echo "=== Team Dashboard $(date '+%H:%M') ==="
-    echo ""
-    while IFS= read -r name; do
-        [ -z "$name" ] && continue
-        local status="offline"
-        if tmux has-session -t "${prefix}-${name}" 2>/dev/null; then
-            local cmd
-            cmd=$(tmux list-panes -t "${prefix}-${name}" -F '#{pane_current_command}' 2>/dev/null | head -1)
-            case "$cmd" in
-                zsh|bash|sh|-zsh|-bash) status="DEAD" ;;
-                *) status="running" ;;
-            esac
-        fi
-        local q_name_d; q_name_d=$(sql_quote "$name")
-        local inbox_count; inbox_count=$(sql "SELECT COUNT(*) FROM inbox WHERE session='$q_name_d' AND read=0;")
-        local inbox_str=""
-        [ "$inbox_count" -gt 0 ] && inbox_str=" [${inbox_count}msg]"
-        local task; task=$(sql "SELECT substr(status, 1, 50) FROM sessions WHERE name='$q_name_d';")
-        [ -z "$task" ] && task="-"
-        printf "  %-7s %-8s%s\n" "$name" "$status" "$inbox_str"
-        printf "         %s\n" "$task"
-    done <<< "$all_sessions"
-    echo ""
-    if pgrep -f 'dispatcher.sh' >/dev/null 2>&1; then
-        echo "  dispatcher: running (PID $(pgrep -f 'dispatcher.sh' | head -1))"
-    else
-        echo "  dispatcher: NOT RUNNING"
-    fi
-}
-
-cmd_files() {
-    echo "=== 共享文件 ==="
-    echo ""
-    local result; result=$(sql "SELECT hash, original_name, sender, ts FROM files ORDER BY ts DESC;")
-    if [ -z "$result" ]; then
-        echo "  (none)"
-    else
-        echo "$result" | while IFS='|' read -r hash orig sender date; do
-            local stored="$BOARD_DIR/files/${hash}.*"
-            local size=0
-            for f in $stored; do
-                [ -f "$f" ] && size=$(wc -c < "$f" | tr -d ' ') && break
-            done
-            printf "  %-14s %-30s %6s bytes  by %-6s  %s\n" "$hash" "$orig" "$size" "$sender" "$date"
-        done
-    fi
-    echo ""
-    echo "查看文件: ./board.sh get <hash前缀或文件名>"
-}
-
-cmd_get() {
-    if [ $# -lt 1 ]; then echo "Usage: ./board.sh get <hash-prefix|filename>" >&2; exit 1; fi
-    local query="$1"
-    local q_query; q_query=$(sql_quote "$query")
-
-    local q_query_like; q_query_like=$(sql_quote "$query")
-    local result; result=$(sql "SELECT hash, original_name, sender, ts, stored_path FROM files WHERE hash LIKE '${q_query_like}%' OR original_name='$q_query' LIMIT 1;")
-    if [ -z "$result" ]; then
-        echo "ERROR: no file matching '$query'" >&2; exit 1
-    fi
-
-    local hash orig sender ts path
-    IFS='|' read -r hash orig sender ts path <<< "$result"
-    echo "--- 文件信息 ---"
-    echo "  Name: $orig"
-    echo "  Hash: $hash"
-    echo "  Sender: $sender"
-    echo "  Date: $ts"
-    echo ""
-    echo "--- 内容 ---"
-    local full_path="$BOARD_DIR/$path"
-    if [ -f "$full_path" ]; then
-        cat "$full_path"
-    else
-        echo "(file content not on disk)"
-    fi
-}
-
-cmd_post() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ $# -lt 2 ]; then echo "Usage: ./board.sh --as <name> post <标题> <内容>" >&2; exit 1; fi
-    local title="$1"; shift; local body="$*"
-    local id; id=$(echo "${title}$(ts)${name}" | shasum -a 256 | cut -c1-6)
-    local q_title; q_title=$(sql_quote "$title")
-    local q_body; q_body=$(sql_quote "$body")
-
-    local q_name; q_name=$(sql_quote "$name_lower")
-    local q_id; q_id=$(sql_quote "$id")
-    sql "INSERT INTO threads(id, title, author) VALUES ('$q_id', '$q_title', '$q_name');"
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '[BBS] 新帖「${q_title}」(${q_id})');"
-
-    echo "OK 帖子已创建: ${id}"
-    echo "  标题: ${title}"
-    echo "  查看: ./board.sh --as <name> thread ${id}"
-}
-
-cmd_reply() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ $# -lt 2 ]; then echo "Usage: ./board.sh --as <name> reply <帖子ID> <内容>" >&2; exit 1; fi
-    local tid="$1"; shift; local body="$*"
-
-    local q_tid; q_tid=$(sql_quote "$tid")
-    local exists; exists=$(sql "SELECT COUNT(*) FROM threads WHERE id LIKE '${q_tid}%';")
-    if [ "$exists" -eq 0 ]; then echo "ERROR: 帖子 ${tid} 不存在" >&2; exit 1; fi
-
-    local full_tid; full_tid=$(sql "SELECT id FROM threads WHERE id LIKE '${q_tid}%' LIMIT 1;")
-    local q_full_tid; q_full_tid=$(sql_quote "$full_tid")
-    local q_body; q_body=$(sql_quote "$body")
-    local q_name; q_name=$(sql_quote "$name_lower")
-    sql "INSERT INTO thread_replies(thread_id, author, body) VALUES ('$q_full_tid', '$q_name', '$q_body');"
-
-    local title; title=$(sql "SELECT title FROM threads WHERE id='$q_full_tid';")
-    local q_title; q_title=$(sql_quote "$title")
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '[BBS] 回帖「${q_title}」(${q_full_tid})');"
-    echo "OK 回帖成功 (帖子: ${full_tid})"
-}
-
-cmd_thread() {
-    if [ $# -lt 1 ]; then echo "Usage: ./board.sh thread <帖子ID>" >&2; exit 1; fi
-    local tid="$1"
-    local q_tid; q_tid=$(sql_quote "$tid")
-    local full_tid; full_tid=$(sql "SELECT id FROM threads WHERE id LIKE '${q_tid}%' LIMIT 1;")
-    if [ -z "$full_tid" ]; then echo "ERROR: 帖子 ${tid} 不存在" >&2; exit 1; fi
-
-    local q_full_tid; q_full_tid=$(sql_quote "$full_tid")
-    local title author created
-    IFS='|' read -r title author created <<< "$(sql "SELECT title, author, created_at FROM threads WHERE id='$q_full_tid';")"
-    echo "# $title"
-    echo "> @$author — $created"
-    echo ""
-
-    sql "SELECT author, body, ts FROM thread_replies WHERE thread_id='$q_full_tid' ORDER BY id;" | while IFS='|' read -r rauthor rbody rts; do
-        echo "---"
-        echo "> @$rauthor — $rts"
-        echo ""
-        echo "$rbody"
-    done
-}
-
-cmd_threads() {
-    echo "=== BBS 话题列表 ==="
-    echo ""
-    local result; result=$(sql "SELECT t.id, t.title, t.author, t.created_at, (SELECT COUNT(*) FROM thread_replies r WHERE r.thread_id=t.id) FROM threads t ORDER BY t.created_at DESC;")
-    if [ -z "$result" ]; then
-        echo "  (暂无话题)"
-        echo ""
-        echo "  发帖: ./board.sh --as <name> post <标题> <内容>"
-    else
-        echo "$result" | while IFS='|' read -r id title author date replies; do
-            printf "  [%s] %s  (%d 回帖)  by %s  %s\n" "$id" "$title" "$replies" "$author" "$date"
-        done
-    fi
-    echo ""
-}
-
-cmd_bug() {
-    local subcmd="${1:-list}"; shift 2>/dev/null || true
-    case "$subcmd" in
-        report) _bug_report "$@" ;;
-        assign) _bug_assign "$@" ;;
-        fix)    _bug_fix "$@" ;;
-        list)   _bug_list "$@" ;;
-        overdue) _bug_overdue ;;
-        *) echo "Usage: ./board.sh --as <name> bug {report|assign|fix|list|overdue}" >&2; exit 1 ;;
-    esac
-}
-
-_bug_report() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ $# -lt 2 ]; then
-        echo "Usage: ./board.sh --as <name> bug report <P0|P1|P2> <description>" >&2; exit 1
-    fi
-    local severity="$1"; shift; local desc="$*"
-    severity=$(echo "$severity" | tr '[:lower:]' '[:upper:]')
-    case "$severity" in
-        P0|P1|P2) ;;
-        *) echo "ERROR: severity must be P0, P1, or P2" >&2; exit 1 ;;
-    esac
-
-    local sla=""
-    case "$severity" in P0) sla="immediate" ;; P1) sla="4h" ;; P2) sla="24h" ;; esac
-
-    # Next bug ID
-    local max_id; max_id=$(sql "SELECT COALESCE(MAX(CAST(SUBSTR(id, 5) AS INTEGER)), 0) FROM bugs;")
-    local next_id; next_id=$(printf "BUG-%03d" $((max_id + 1)))
-
-    local q_desc; q_desc=$(sql_quote "$desc")
-    local q_name; q_name=$(sql_quote "$name_lower")
-    local q_next_id; q_next_id=$(sql_quote "$next_id")
-    sql "INSERT INTO bugs(id, severity, sla, reporter, status, description) VALUES ('$q_next_id', '$severity', '$sla', '$q_name', 'OPEN', '$q_desc');"
-
-    # Notify all
-    local q_notify_body; q_notify_body=$(sql_quote "[$next_id/$severity] $desc")
-    local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '$q_notify_body'); SELECT last_insert_rowid();")
-    local sessions; sessions=$(sql "SELECT name FROM sessions WHERE name != '$q_name';")
-    while IFS= read -r target; do
-        [ -z "$target" ] && continue
-        local q_target; q_target=$(sql_quote "$target")
-        sql "INSERT INTO inbox(session, message_id) VALUES ('$q_target', $msg_id);"
-    done <<< "$sessions"
-
-    echo "OK ${next_id} (${severity}) created"
-}
-
-_bug_assign() {
-    local name; name="$(need_identity)"
-    if [ $# -lt 2 ]; then
-        echo "Usage: ./board.sh --as <name> bug assign <BUG-NNN> <session>" >&2; exit 1
-    fi
-    local bugid="$1" assignee="$2"
-    bugid=$(echo "$bugid" | tr '[:lower:]' '[:upper:]')
-    [[ "$bugid" == BUG-* ]] || bugid="BUG-${bugid}"
-    local assignee_lower; assignee_lower=$(echo "$assignee" | tr '[:upper:]' '[:lower:]')
-
-    local q_bugid; q_bugid=$(sql_quote "$bugid")
-    local exists; exists=$(sql "SELECT COUNT(*) FROM bugs WHERE id='$q_bugid';")
-    if [ "$exists" -eq 0 ]; then echo "ERROR: ${bugid} not found" >&2; exit 1; fi
-
-    local q_assignee; q_assignee=$(sql_quote "$assignee_lower")
-    local name_lower_a; name_lower_a=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    local q_name; q_name=$(sql_quote "$name_lower_a")
-    sql "UPDATE bugs SET assignee='$q_assignee', status='ASSIGNED' WHERE id='$q_bugid';"
-    local q_assign_body; q_assign_body=$(sql_quote "[$bugid] assigned to you")
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', '$q_assignee', '$q_assign_body');"
-    echo "OK ${bugid} assigned to ${assignee}"
-}
-
-_bug_fix() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ $# -lt 2 ]; then
-        echo "Usage: ./board.sh --as <name> bug fix <BUG-NNN> <evidence>" >&2; exit 1
-    fi
-    local bugid="$1"; shift; local evidence="$*"
-    bugid=$(echo "$bugid" | tr '[:lower:]' '[:upper:]')
-    [[ "$bugid" == BUG-* ]] || bugid="BUG-${bugid}"
-
-    local q_bugid; q_bugid=$(sql_quote "$bugid")
-    local exists; exists=$(sql "SELECT COUNT(*) FROM bugs WHERE id='$q_bugid';")
-    if [ "$exists" -eq 0 ]; then echo "ERROR: ${bugid} not found" >&2; exit 1; fi
-
-    local q_evidence; q_evidence=$(sql_quote "$evidence")
-    local q_name; q_name=$(sql_quote "$name_lower")
-    sql "UPDATE bugs SET status='FIXED', fixed_at='$(ts)', evidence='$q_evidence' WHERE id='$q_bugid';"
-    local q_fix_body; q_fix_body=$(sql_quote "[$bugid] FIXED — $evidence")
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '$q_fix_body');"
-    echo "OK ${bugid} marked FIXED"
-}
-
-_bug_list() {
-    local filter="${1:-open}"
-    echo "=== Bug Tracker ==="
-    local where_clause=""
-    case "$filter" in
-        open) where_clause="WHERE status != 'FIXED'" ;;
-        all) where_clause="" ;;
-        *) local q_filter; q_filter=$(sql_quote "$(echo "$filter" | tr '[:lower:]' '[:upper:]')")
-           where_clause="WHERE status = '$q_filter'" ;;
-    esac
-
-    local result; result=$(sql "SELECT id, severity, status, assignee, reporter, reported_at, description FROM bugs $where_clause ORDER BY reported_at;")
-    if [ -z "$result" ]; then
-        echo "  (no bugs matching filter: ${filter})"
-    else
-        echo "$result" | while IFS='|' read -r id sev status assignee reporter reported desc; do
-            echo ""
-            echo "  ${id} [${sev}] ${status}"
-            echo "    Reporter: ${reporter}  Assignee: ${assignee:-unassigned}"
-            echo "    Reported: ${reported}"
-            echo "    ${desc}"
-        done
-    fi
-    echo ""
-}
-
-_bug_overdue() {
-    local now_epoch; now_epoch=$(date +%s)
-    local result; result=$(sql "SELECT id, severity, reported_at FROM bugs WHERE status != 'FIXED';")
-    local found=0
-    if [ -n "$result" ]; then
-        echo "$result" | while IFS='|' read -r id sev reported; do
-            local rep_epoch
-            rep_epoch=$(_date_to_epoch "$reported" "%Y-%m-%d %H:%M")
-            [ "$rep_epoch" -eq 0 ] && continue
-            local elapsed=$(( now_epoch - rep_epoch ))
-            local limit=0
-            case "$sev" in P0) limit=0 ;; P1) limit=14400 ;; P2) limit=86400 ;; esac
-            if [ "$elapsed" -gt "$limit" ]; then
-                found=1
-                echo "OVERDUE: ${id} [${sev}] — $((elapsed / 60))min since reported"
-            fi
-        done
-    fi
-    [ "$found" -eq 0 ] && echo "No overdue bugs."
-}
-
-_task_ensure_schema() {
-    sql "CREATE TABLE IF NOT EXISTS tasks (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        session     TEXT NOT NULL,
-        description TEXT NOT NULL,
-        status      TEXT DEFAULT 'pending',
-        priority    INTEGER DEFAULT 0,
-        created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M', 'now', 'localtime')),
-        done_at     TEXT DEFAULT NULL
-    );"
-    sql "CREATE INDEX IF NOT EXISTS idx_tasks_session_status ON tasks(session, status);"
-}
-
-_task_promote_next() {
-    local target="$1"
-    local q_target; q_target=$(sql_quote "$target")
-    local active_count
-    active_count=$(sql "SELECT COUNT(*) FROM tasks WHERE session='$q_target' AND status='active';")
-    if [ "$active_count" -gt 0 ]; then
-        return 0
-    fi
-
-    local next_id
-    next_id=$(sql "SELECT id FROM tasks WHERE session='$q_target' AND status='pending' ORDER BY priority DESC, id ASC LIMIT 1;")
-    if [ -n "$next_id" ]; then
-        sql "UPDATE tasks SET status='active' WHERE id=$next_id;"
-    fi
-}
-
-_task_print_queue() {
-    local target="$1"
-    local include_done="${2:-false}"
-    _task_ensure_schema
-
-    local q_target; q_target=$(sql_quote "$target")
-    local where="session='$q_target'"
-    if [ "$include_done" != "true" ]; then
-        where="$where AND status != 'done'"
-    fi
-
-    local result
-    result=$(sql "SELECT id, status, priority, description, created_at, COALESCE(done_at, '') FROM tasks WHERE $where ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, priority DESC, id ASC;")
-    echo ""
-    echo "任务队列:"
-    if [ -z "$result" ]; then
-        echo "  (无待办任务)"
-        return 0
-    fi
-
-    echo "$result" | while IFS='|' read -r id status priority desc created done_at; do
-        local marker=" "
-        [ "$status" = "active" ] && marker="*"
-        if [ "$status" = "done" ]; then
-            printf "  %s #%s [%s p%s] %s (done %s)\n" "$marker" "$id" "$status" "$priority" "$desc" "$done_at"
-        else
-            printf "  %s #%s [%s p%s] %s\n" "$marker" "$id" "$status" "$priority" "$desc"
-        fi
-    done
-}
-
-cmd_task() {
-    local subcmd="${1:-list}"
-    [ $# -gt 0 ] && shift
-
-    case "$subcmd" in
-        add)
-            local name; name="$(need_identity)"
-            local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-            local target="$name_lower" priority=0 args=()
-
-            while [ $# -gt 0 ]; do
-                case "$1" in
-                    --to)
-                        if [ $# -lt 2 ]; then echo "Usage: ./board.sh --as <name> task add [--to session] [--priority N] <description>" >&2; exit 1; fi
-                        target=$(echo "$2" | tr '[:upper:]' '[:lower:]')
-                        shift 2 ;;
-                    --priority|-p)
-                        if [ $# -lt 2 ]; then echo "Usage: ./board.sh --as <name> task add [--to session] [--priority N] <description>" >&2; exit 1; fi
-                        priority="$2"
-                        shift 2 ;;
-                    *) args+=("$1"); shift ;;
-                esac
-            done
-
-            if [ "${#args[@]}" -eq 0 ]; then
-                echo "Usage: ./board.sh --as <name> task add [--to session] [--priority N] <description>" >&2
-                exit 1
-            fi
-            if ! [[ "$priority" =~ ^-?[0-9]+$ ]]; then
-                echo "ERROR: priority must be an integer" >&2
-                exit 1
-            fi
-
-            local desc="${args[*]}"
-            local q_desc; q_desc=$(sql_quote "$desc")
-            _task_ensure_schema
-            ensure_session "$target"
-
-            local q_target; q_target=$(sql_quote "$target")
-            local q_name; q_name=$(sql_quote "$name_lower")
-            local status="pending"
-            local active_count
-            active_count=$(sql "SELECT COUNT(*) FROM tasks WHERE session='$q_target' AND status='active';")
-            [ "$active_count" -eq 0 ] && status="active"
-
-            local task_id
-            task_id=$(sqlite3 -batch "$DB" "INSERT INTO tasks(session, description, status, priority) VALUES ('$q_target', '$q_desc', '$status', $priority); SELECT last_insert_rowid();")
-
-            echo "OK task #${task_id} added to ${target} (${status})"
-            if [ "$target" != "$name_lower" ]; then
-                local q_msg; q_msg=$(sql_quote "[TASK #${task_id}] ${desc}")
-                local msg_id; msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', '$q_target', '$q_msg'); SELECT last_insert_rowid();")
-                sql "INSERT INTO inbox(session, message_id) VALUES ('$q_target', $msg_id);"
-                _sync_inbox_to_file "$target"
-                echo "OK notified ${target}"
-            fi
-            _task_print_queue "$target"
-            ;;
-
-        done)
-            local name; name="$(need_identity)"
-            local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-            local task_id="${1:-}"
-            _task_ensure_schema
-
-            if [ -z "$task_id" ]; then
-                _task_promote_next "$name_lower"
-                task_id=$(sql "SELECT id FROM tasks WHERE session='$name_lower' AND status='active' ORDER BY id ASC LIMIT 1;")
-            fi
-            if [ -z "$task_id" ]; then
-                echo "No active task for ${name_lower}."
-                _task_print_queue "$name_lower"
-                return 0
-            fi
-            if ! [[ "$task_id" =~ ^[0-9]+$ ]]; then
-                echo "ERROR: task id must be numeric" >&2
-                exit 1
-            fi
-
-            local row
-            row=$(sql "SELECT session, status, description FROM tasks WHERE id=$task_id;")
-            if [ -z "$row" ]; then
-                echo "ERROR: task #${task_id} not found" >&2
-                exit 1
-            fi
-
-            local assignee status desc
-            IFS='|' read -r assignee status desc <<< "$row"
-            if [ "$assignee" != "$name_lower" ] && [ "$name_lower" != "${LEAD_SESSION:-lead}" ] && [ "$name_lower" != "${DISPATCHER_SESSION:-dispatcher}" ]; then
-                echo "ERROR: task #${task_id} belongs to ${assignee}; only owner, Orca, or Coral can mark it done" >&2
-                exit 1
-            fi
-
-            if [ "$status" = "done" ]; then
-                echo "Task #${task_id} is already done."
-                _task_print_queue "$assignee"
-                return 0
-            fi
-
-            sql "UPDATE tasks SET status='done', done_at='$(ts)' WHERE id=$task_id;"
-            echo "OK task #${task_id} done: ${desc}"
-
-            _task_promote_next "$assignee"
-            local q_assignee; q_assignee=$(sql_quote "$assignee")
-            local next
-            next=$(sql "SELECT id, description FROM tasks WHERE session='$q_assignee' AND status='active' ORDER BY id ASC LIMIT 1;")
-            if [ -n "$next" ]; then
-                local next_id next_desc
-                IFS='|' read -r next_id next_desc <<< "$next"
-                echo "Next: #${next_id} ${next_desc}"
-            else
-                echo "No remaining active/pending tasks for ${assignee}."
-            fi
-            _task_print_queue "$assignee"
-            ;;
-
-        list)
-            local target="" include_done=false all_sessions=false
-            while [ $# -gt 0 ]; do
-                case "$1" in
-                    --all) all_sessions=true; shift ;;
-                    --done|--include-done) include_done=true; shift ;;
-                    --session)
-                        if [ $# -lt 2 ]; then echo "Usage: ./board.sh task list [session|--all] [--done]" >&2; exit 1; fi
-                        target=$(echo "$2" | tr '[:upper:]' '[:lower:]')
-                        shift 2 ;;
-                    *)
-                        if [ -n "$target" ]; then echo "Usage: ./board.sh task list [session|--all] [--done]" >&2; exit 1; fi
-                        target=$(echo "$1" | tr '[:upper:]' '[:lower:]')
-                        shift ;;
-                esac
-            done
-
-            _task_ensure_schema
-            if $all_sessions; then
-                echo "=== Task Queue ==="
-                local where="status != 'done'"
-                $include_done && where="1=1"
-                local rows
-                rows=$(sql "SELECT session, id, status, priority, description FROM tasks WHERE $where ORDER BY session, CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, priority DESC, id ASC;")
-                if [ -z "$rows" ]; then
-                    echo "  (no tasks)"
-                    return 0
-                fi
-                echo "$rows" | while IFS='|' read -r session id status priority desc; do
-                    printf "  %-8s #%s [%s p%s] %s\n" "$session" "$id" "$status" "$priority" "$desc"
-                done
-                return 0
-            fi
-
-            if [ -z "$target" ]; then
-                local name; name="$(need_identity)"
-                target=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-            fi
-            _task_print_queue "$target" "$include_done"
-            ;;
-
-        next)
-            local name; name="$(need_identity)"
-            local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-            _task_ensure_schema
-            _task_promote_next "$name_lower"
-            _task_print_queue "$name_lower"
-            ;;
-
-        *)
-            echo "Usage: ./board.sh --as <name> task {add|done|list|next}" >&2
-            exit 1 ;;
-    esac
-}
-
-cmd_kudos() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ $# -lt 2 ]; then
-        echo "Usage: ./board.sh --as <name> kudos <target> <reason> [--evidence <commit/link>]" >&2
-        exit 1
-    fi
-
-    local target="" reason="" evidence="" args=()
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --evidence|-e) evidence="$2"; shift 2 ;;
-            *) args+=("$1"); shift ;;
-        esac
-    done
-    target="${args[0]}"
-    reason="${args[*]:1}"
-    local target_lower; target_lower=$(echo "$target" | tr '[:upper:]' '[:lower:]')
-
-    if [ "$name_lower" = "$target_lower" ]; then
-        echo "ERROR: cannot kudos yourself" >&2; exit 1
-    fi
-
-    local q_reason; q_reason=$(sql_quote "$reason")
-    local q_name; q_name=$(sql_quote "$name_lower")
-    local q_target; q_target=$(sql_quote "$target_lower")
-    local q_evidence_val; q_evidence_val=$([ -n "$evidence" ] && echo "'$(sql_quote "$evidence")'" || echo "NULL")
-    sql "INSERT INTO kudos(sender, target, reason, evidence) VALUES ('$q_name', '$q_target', '$q_reason', $q_evidence_val);"
-    local q_kudos_body; q_kudos_body=$(sql_quote "[KUDOS] → ${target_lower}: ${reason}")
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', '$q_name', 'all', '$q_kudos_body');"
-    echo "OK kudos sent to $target (visible to all)"
-}
-
-cmd_kudos_list() {
-    echo "=== Kudos Board ==="
-    echo ""
-    echo "Leaderboard:"
-    sql "SELECT target, COUNT(*) as c FROM kudos GROUP BY target ORDER BY c DESC;" | while IFS='|' read -r who count; do
-        echo "  ${who}: ${count} kudos"
-    done
-    echo ""
-    echo "Recent:"
-    sql "SELECT '[' || ts || '] ' || sender || ' → ' || target || ': ' || reason FROM kudos ORDER BY id DESC LIMIT 10;" | _reverse | sed 's/^/  /'
-}
-
-cmd_suspend() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ "$name_lower" != "${LEAD_SESSION:-lead}" ]; then
-        echo "ERROR: only Orca can suspend sessions" >&2; exit 1
-    fi
-    local target="${1:?Usage: ./board.sh --as <lead> suspend <session>}"
-    target=$(echo "$target" | tr '[:upper:]' '[:lower:]')
-
-    local q_target; q_target=$(sql_quote "$target")
-    local q_name; q_name=$(sql_quote "$name_lower")
-    local already; already=$(sql "SELECT COUNT(*) FROM suspended WHERE name='$q_target';")
-    if [ "$already" -gt 0 ]; then
-        echo "$target 已在停工名单中"
-        return 0
-    fi
-
-    sql "INSERT INTO suspended(name, suspended_by) VALUES ('$q_target', '$q_name');"
-    echo "$target: 已停工"
-
-    local sess="cc-${target}"
-    if tmux has-session -t "$sess" 2>/dev/null; then
-        tmux send-keys -t "$sess" "/exit" Enter 2>/dev/null || true
-        sleep 2
-        tmux kill-session -t "$sess" 2>/dev/null || true
-        echo "$target: tmux session 已关闭"
-    fi
-    local q_suspend_body; q_suspend_body=$(sql_quote "SUSPEND $target by $name_lower")
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'all', '$q_suspend_body');"
-}
-
-cmd_resume() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    if [ "$name_lower" != "${LEAD_SESSION:-lead}" ]; then
-        echo "ERROR: only Orca can resume sessions" >&2; exit 1
-    fi
-    local target="${1:?Usage: ./board.sh --as <lead> resume <session>}"
-    target=$(echo "$target" | tr '[:upper:]' '[:lower:]')
-
-    local q_target; q_target=$(sql_quote "$target")
-    local q_name; q_name=$(sql_quote "$name_lower")
-    local exists; exists=$(sql "SELECT COUNT(*) FROM suspended WHERE name='$q_target';")
-    if [ "$exists" -eq 0 ]; then
-        echo "$target 不在停工名单中"
-        return 0
-    fi
-
-    sql "DELETE FROM suspended WHERE name='$q_target';"
-    echo "$target: 已恢复"
-    local q_resume_body; q_resume_body=$(sql_quote "RESUME $target by $name_lower")
-    sql "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', 'all', '$q_resume_body');"
-}
-
-cmd_roster() {
-    echo "=== 员工状态 ==="
-    sql "SELECT s.name, CASE WHEN su.name IS NOT NULL THEN 'SUSPENDED' ELSE 'active' END FROM sessions s LEFT JOIN suspended su ON s.name=su.name ORDER BY s.name;" | while IFS='|' read -r name state; do
-        local online="offline"
-        if tmux has-session -t "cc-${name}" 2>/dev/null; then
-            online="online"
-        fi
-        printf "  %-8s  %-10s  %s\n" "$name" "$state" "$online"
-    done
-}
-
-# --- New v2 commands (relation queries, history, freshness) ---
-
-cmd_history() {
-    # History of a session or topic
-    if [ $# -lt 1 ]; then echo "Usage: ./board.sh history <session|topic> [limit]" >&2; exit 1; fi
-    local subject="$1"
-    local limit="${2:-20}"
-    local subject_lower; subject_lower=$(echo "$subject" | tr '[:upper:]' '[:lower:]')
-
-    echo "=== History: $subject ==="
-    echo ""
-    local q_subject; q_subject=$(sql_quote "$subject_lower")
-    echo "Messages involving $subject (last $limit):"
-    sql "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 100) FROM messages WHERE sender='$q_subject' OR recipient='$q_subject' OR (recipient='all' AND sender='$q_subject') OR body LIKE '%$q_subject%' ORDER BY id DESC LIMIT $limit;" | _reverse | sed 's/^/  /'
-    echo ""
-
-    echo "Status changes:"
-    sql "SELECT updated_at, status FROM sessions WHERE name='$q_subject';" | while IFS='|' read -r ts status; do
-        echo "  [$ts] $status"
-    done
-}
-
-cmd_freshness() {
-    # Show how fresh each session's data is
-    echo "=== 数据新鲜度 ==="
-    echo ""
-    printf "  %-8s  %-20s  %s\n" "Session" "Last status update" "Unread inbox"
-    printf "  %-8s  %-20s  %s\n" "-------" "------------------" "------------"
-    sql "SELECT s.name, s.updated_at, (SELECT COUNT(*) FROM inbox i WHERE i.session=s.name AND i.read=0) FROM sessions s ORDER BY s.name;" | while IFS='|' read -r name updated inbox_count; do
-        printf "  %-8s  %-20s  %s\n" "$name" "${updated:-(never)}" "$inbox_count"
-    done
-}
-
-cmd_relations() {
-    # Show message flow between sessions
-    echo "=== 通信关系图 ==="
-    echo ""
-    sql "SELECT sender, recipient, COUNT(*) as c FROM messages WHERE sender != 'SYSTEM' GROUP BY sender, recipient ORDER BY c DESC LIMIT 20;" | while IFS='|' read -r from to count; do
-        printf "  %s → %s: %d messages\n" "$from" "$to" "$count"
-    done
-}
-
-# --- Git lock coordination ---
-# Prevents multiple sessions from running concurrent git operations
-# (which would conflict on .git/index.lock).
-# Lock auto-expires after GIT_LOCK_TTL seconds (default 60).
-
-GIT_LOCK_TTL=60
-
-_git_lock_ensure_schema() {
-    sql "CREATE TABLE IF NOT EXISTS git_locks (
-        id          INTEGER PRIMARY KEY CHECK (id = 1),
-        session     TEXT NOT NULL,
-        reason      TEXT DEFAULT '',
-        acquired_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
-        expires_at  INTEGER NOT NULL
-    );"
-}
-
-_git_lock_cleanup_stale() {
-    local now_epoch
-    now_epoch=$(date +%s)
-    sql "DELETE FROM git_locks WHERE expires_at < $now_epoch;"
-}
-
-cmd_git_lock() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    local reason="${*:-git operation}"
-
-    _git_lock_ensure_schema
-    _git_lock_cleanup_stale
-
-    local q_name; q_name=$(sql_quote "$name_lower")
-    # Check if lock is already held
-    local holder
-    holder=$(sql "SELECT session FROM git_locks WHERE id=1;")
-    if [ -n "$holder" ]; then
-        if [ "$holder" = "$name_lower" ]; then
-            # Re-entrant: extend the lock
-            local new_expires=$(( $(date +%s) + GIT_LOCK_TTL ))
-            local q_reason; q_reason=$(sql_quote "$reason")
-            sql "UPDATE git_locks SET expires_at=$new_expires, reason='$q_reason', acquired_at=strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime') WHERE id=1;"
-            echo "OK git-lock extended (held by you, expires in ${GIT_LOCK_TTL}s)"
-            return 0
-        fi
-        local expires_at remaining
-        expires_at=$(sql "SELECT expires_at FROM git_locks WHERE id=1;")
-        remaining=$(( expires_at - $(date +%s) ))
-        local lock_reason; lock_reason=$(sql "SELECT reason FROM git_locks WHERE id=1;")
-        echo "BLOCKED: git lock held by '$holder' (${lock_reason}, expires in ${remaining}s)" >&2
-        echo "  Wait and retry, or force with: ./board.sh --as $name git-unlock --force" >&2
-        return 1
-    fi
-
-    # Acquire lock
-    local expires=$(( $(date +%s) + GIT_LOCK_TTL ))
-    local q_reason; q_reason=$(sql_quote "$reason")
-    sql "INSERT INTO git_locks(id, session, reason, expires_at) VALUES (1, '$q_name', '$q_reason', $expires);"
-
-    echo "OK git-lock acquired by $name_lower (expires in ${GIT_LOCK_TTL}s)"
-}
-
-cmd_git_unlock() {
-    local name; name="$(need_identity)"
-    local name_lower; name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
-    local force=false
-    [ "${1:-}" = "--force" ] && force=true
-
-    _git_lock_ensure_schema
-    _git_lock_cleanup_stale
-
-    local holder
-    holder=$(sql "SELECT session FROM git_locks WHERE id=1;")
-    if [ -z "$holder" ]; then
-        echo "OK git lock is already free"
-        return 0
-    fi
-
-    if [ "$holder" != "$name_lower" ] && ! $force; then
-        echo "ERROR: git lock held by '$holder', not you. Use --force to override." >&2
-        return 1
-    fi
-
-    if [ "$holder" != "$name_lower" ] && $force; then
-        echo "WARN: force-releasing git lock held by '$holder'"
-        # Notify the holder
-        local q_msg; q_msg=$(sql_quote "[GIT-LOCK] $name_lower force-released your git lock")
-        local q_holder; q_holder=$(sql_quote "$holder")
-        local msg_id
-        msg_id=$(sqlite3 -batch "$DB" "INSERT INTO messages(ts, sender, recipient, body) VALUES ('$(ts)', 'SYSTEM', '$q_holder', '$q_msg'); SELECT last_insert_rowid();")
-        sql "INSERT INTO inbox(session, message_id) VALUES ('$q_holder', $msg_id);"
-        _sync_inbox_to_file "$holder"
-    fi
-
-    sql "DELETE FROM git_locks WHERE id=1;"
-    echo "OK git-lock released"
-
-    # Also clean up stale .git/index.lock if it exists and no git process is running
-    local index_lock="$PROJECT_ROOT/.git/index.lock"
-    if [ -f "$index_lock" ]; then
-        if ! pgrep -f "git.*${PROJECT_ROOT}" >/dev/null 2>&1; then
-            rm -f "$index_lock"
-            echo "  Also removed stale .git/index.lock"
-        else
-            echo "  WARN: .git/index.lock exists and a git process is running"
-        fi
-    fi
-}
-
-cmd_git_lock_status() {
-    _git_lock_ensure_schema
-    _git_lock_cleanup_stale
-
-    local result
-    result=$(sql "SELECT session, reason, acquired_at, expires_at FROM git_locks WHERE id=1;")
-    if [ -z "$result" ]; then
-        echo "FREE: no session holds the git lock"
-    else
-        local holder reason acquired expires_at remaining
-        IFS='|' read -r holder reason acquired expires_at <<< "$result"
-        remaining=$(( expires_at - $(date +%s) ))
-        echo "LOCKED by $holder"
-        echo "  Reason: $reason"
-        echo "  Acquired: $acquired"
-        echo "  Expires in: ${remaining}s"
-    fi
-
-    # Also report on .git/index.lock file
-    local index_lock="$PROJECT_ROOT/.git/index.lock"
-    if [ -f "$index_lock" ]; then
-        local lock_age
-        lock_age=$(( $(date +%s) - $(_file_mtime "$index_lock") ))
-        echo "  .git/index.lock exists (age: ${lock_age}s)"
-    fi
-}
-
-cmd_help() {
-    cat <<'EOF'
-board.sh v2 — agent coordination tool (SQLite backend)
-
-Usage: ./board.sh --as <name> <command> [args...]
-
-Commands (compatible with v1):
-  send <to> <msg> [--attach <f>]  send message
-  status <description>            update your task
-  vote <N> <SUPPORT|OBJECT> <why> vote on proposal
-  tally <N>                       recount votes
-  view                            dashboard
-  log [n] [--mine]                message history
-  inbox                           check @inbox
-  ack                             clear @inbox
-  files                           list shared files
-  get <hash|name>                 view shared file
-  p0                              P0 lock status
-  pre-build                       pre-build check
-  dirty                           uncommitted changes
-  dashboard                       live team status
-  post <标题> <内容>               BBS: new thread
-  reply <帖子ID> <内容>           BBS: reply
-  thread <帖子ID>                 BBS: view thread
-  threads                         BBS: list all
-  bug report|assign|fix|list|overdue  bug tracker
-  task add [--to name] <desc>     add task to queue
-  task done [id]                  finish current task and show next
-  task list [name|--all] [--done] show task queue
-  kudos <target> <reason>         public recognition
-  kudos-list                      kudos leaderboard
-  suspend|resume <session>        manage session state
-  roster                          team roster
-
-New in v2:
-  history <session> [limit]       message/status history for a session
-  freshness                       data freshness per session
-  relations                       inter-session message flow graph
-
-Git lock coordination:
-  git-lock [reason]               acquire git index lock (60s auto-expiry)
-  git-unlock                      release git index lock
-  git-lock-status                 check who holds the git lock (no --as needed)
-
-EOF
-}
-
-# --- File sync helpers (generate .md views from DB) ---
-
-_sync_inbox_to_file() {
-    local target="$1"
-    local sf="$SESSIONS_DIR/${target}.md"
-    [ -f "$sf" ] || return 0
-
-    # Build inbox content from DB
-    local q_target; q_target=$(sql_quote "$target")
-    local inbox_lines; inbox_lines=$(sql "SELECT '- [' || m.ts || '] **' || m.sender || '**: ' || substr(m.body, 1, 60) FROM inbox i JOIN messages m ON i.message_id=m.id WHERE i.session='$q_target' AND i.read=0 ORDER BY m.ts;" 2>/dev/null) || true
-
-    # If no @inbox section exists, append it
-    if ! grep -q "^## @收件箱" "$sf" 2>/dev/null; then
-        if [ -n "$inbox_lines" ]; then
-            printf '\n## @收件箱\n%s\n' "$inbox_lines" >> "$sf"
-        fi
-        return 0
-    fi
-
-    # Update the @inbox section in the file
-    local tmp="${sf}.tmp.$$"
-    if [ -n "$inbox_lines" ]; then
-        INBOX_CONTENT="$inbox_lines" awk '
-            BEGIN { inbox = ENVIRON["INBOX_CONTENT"] }
-            /^## @收件箱/ { print; print inbox; skip=1; next }
-            /^## / && skip { skip=0; print ""; print; next }
-            skip { next }
-            { print }
-        ' "$sf" > "$tmp" && mv "$tmp" "$sf" || rm -f "$tmp"
-    else
-        awk '
-            /^## @收件箱/ { print; skip=1; next }
-            /^## / && skip { skip=0; print ""; print; next }
-            skip { next }
-            { print }
-        ' "$sf" > "$tmp" && mv "$tmp" "$sf" || rm -f "$tmp"
-    fi
-    return 0
-}
-
-_clear_inbox_file() {
-    local target="$1"
-    local sf="$SESSIONS_DIR/${target}.md"
-    [ -f "$sf" ] || return 0
-    local tmp="${sf}.tmp.$$"
-    awk '
-        /^## @收件箱/ { in_inbox=1; next }
-        in_inbox && /^## / { in_inbox=0; print; next }
-        in_inbox { next }
-        { print }
-    ' "$sf" > "$tmp" && mv "$tmp" "$sf" || rm -f "$tmp"
-}
-
-_sync_status_to_file() {
-    local target="$1" status="$2"
-    local sf="$SESSIONS_DIR/${target}.md"
-    [ -f "$sf" ] || return 0
-    local tmp="${sf}.tmp.$$"
-    STATUS_CONTENT="$status" awk '
-        BEGIN { status = ENVIRON["STATUS_CONTENT"]; skip=0 }
-        /^## 当前任务/ { print; print status; skip=1; next }
-        /^## / && skip { print ""; print; skip=0; next }
-        skip { next }
-        { print }
-    ' "$sf" > "$tmp" && mv "$tmp" "$sf" || rm -f "$tmp"
-}
-
-# --- Main dispatch ---
-
-parse_as_flag "$@"
-set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
-
-case "${1:-help}" in
-    send)    shift; cmd_send "$@" ;;
-    status)  shift; cmd_status "$@" ;;
-    vote)    shift; cmd_vote "$@" ;;
-    tally)   shift; cmd_tally "$@" ;;
-    log)     shift; cmd_log "$@" ;;
-    view)    cmd_view ;;
-    inbox)   cmd_inbox ;;
-    ack)     cmd_ack ;;
-    p0)      cmd_p0 ;;
-    pre-build) cmd_prebuild ;;
-    dirty)   cmd_dirty ;;
-    dashboard|dash) cmd_dashboard ;;
-    files)   cmd_files ;;
-    get)     shift; cmd_get "$@" ;;
-    post)    shift; cmd_post "$@" ;;
-    reply)   shift; cmd_reply "$@" ;;
-    thread)  shift; cmd_thread "$@" ;;
-    threads) cmd_threads ;;
-    suspend) shift; cmd_suspend "$@" ;;
-    resume)  shift; cmd_resume "$@" ;;
-    bug)     shift; cmd_bug "$@" ;;
-    task)    shift; cmd_task "$@" ;;
-    kudos)   shift; cmd_kudos "$@" ;;
-    kudos-list|kudos-board) cmd_kudos_list ;;
-    roster)  cmd_roster ;;
-    history) shift; cmd_history "$@" ;;
-    freshness) cmd_freshness ;;
-    relations) cmd_relations ;;
-    git-lock) shift; cmd_git_lock "$@" ;;
-    git-unlock) shift; cmd_git_unlock "$@" ;;
-    git-lock-status) cmd_git_lock_status ;;
-    help|-h|--help) cmd_help ;;
-    *) echo "Unknown: $1 (try ./board.sh help)" >&2; exit 1 ;;
-esac
+if __name__ == "__main__":
+    main()

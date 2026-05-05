@@ -12,7 +12,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 # Try to import common; fall back gracefully for standalone use
 try:
@@ -38,14 +37,18 @@ NC = "\033[0m"
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _tmux(*args: str) -> Optional[str]:
+
+def _tmux(*args: str) -> str | None:
     """Run a tmux command, return stdout or None on failure."""
     try:
         r = subprocess.run(
-            ["tmux", *args], capture_output=True, text=True, timeout=5,
+            ["tmux", *args],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return r.stdout.strip() if r.returncode == 0 else None
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError):
         return None
 
 
@@ -57,7 +60,7 @@ def get_sessions(prefix: str, dispatcher: str = "dispatcher", lead: str = "lead"
     names = []
     for line in sorted(raw.splitlines()):
         if line.startswith(f"{prefix}-"):
-            name = line[len(prefix) + 1:]
+            name = line[len(prefix) + 1 :]
             if name not in (dispatcher, lead):
                 names.append(name)
     return names
@@ -95,6 +98,7 @@ def session_status(sess: str, idle_cache: Path) -> str:
 # ---------------------------------------------------------------------------
 # Main report
 # ---------------------------------------------------------------------------
+
 
 def print_health_report() -> None:
     env = ClaudesEnv.load()

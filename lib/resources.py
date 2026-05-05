@@ -17,7 +17,6 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Thresholds
@@ -33,6 +32,7 @@ CPU_SUSTAIN_CHECKS = 2
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class BatteryInfo:
@@ -58,6 +58,7 @@ class CPUInfo:
 # ---------------------------------------------------------------------------
 # Detection helpers (macOS-specific)
 # ---------------------------------------------------------------------------
+
 
 def _run(cmd: str, default: str = "") -> str:
     """Run a shell command and return stdout, or *default* on failure."""
@@ -163,9 +164,11 @@ def check_cpu() -> CPUInfo:
 # State tracking for notification dedup
 # ---------------------------------------------------------------------------
 
+
 def _state_file() -> Path:
     try:
         from lib.common import find_claudes_dir
+
         return find_claudes_dir() / "resource-monitor-state"
     except Exception:
         return Path("/tmp/resource-monitor-state")
@@ -182,9 +185,7 @@ def _save_state(state: str) -> None:
     _state_file().write_text(state + "\n")
 
 
-def notify_if_changed(
-    batt: BatteryInfo, mem: MemoryInfo, cpu: CPUInfo, board_cmd: Optional[str] = None
-) -> None:
+def notify_if_changed(batt: BatteryInfo, mem: MemoryInfo, cpu: CPUInfo, board_cmd: str | None = None) -> None:
     """Send board notifications only on state transitions."""
     current = f"{batt.status}|{mem.status}|{cpu.status}"
     prev = _load_prev_state()
@@ -199,7 +200,8 @@ def notify_if_changed(
         try:
             subprocess.run(
                 [board_cmd, "--as", "monitor", "send", "All", msg],
-                capture_output=True, timeout=10,
+                capture_output=True,
+                timeout=10,
             )
         except Exception:
             pass
@@ -227,24 +229,27 @@ def notify_if_changed(
 # JSON output helper (used by dispatcher)
 # ---------------------------------------------------------------------------
 
+
 def to_json(batt: BatteryInfo, mem: MemoryInfo, cpu: CPUInfo) -> str:
-    return json.dumps({
-        "battery": {
-            "status": batt.status,
-            "pct": batt.pct,
-            "on_battery": batt.on_battery,
-            "remaining": batt.remaining,
-        },
-        "memory": {
-            "status": mem.status,
-            "used_pct": mem.used_pct,
-            "pressure": mem.pressure,
-        },
-        "cpu": {
-            "status": cpu.status,
-            "usage": cpu.usage,
-        },
-    })
+    return json.dumps(
+        {
+            "battery": {
+                "status": batt.status,
+                "pct": batt.pct,
+                "on_battery": batt.on_battery,
+                "remaining": batt.remaining,
+            },
+            "memory": {
+                "status": mem.status,
+                "used_pct": mem.used_pct,
+                "pressure": mem.pressure,
+            },
+            "cpu": {
+                "status": cpu.status,
+                "usage": cpu.usage,
+            },
+        }
+    )
 
 
 def get_all() -> tuple:
@@ -255,6 +260,7 @@ def get_all() -> tuple:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def print_status(mode: str = "status") -> None:
     batt, mem, cpu = get_all()
@@ -316,6 +322,7 @@ def main() -> None:
         board_cmd = None
         try:
             from lib.common import find_claudes_dir
+
             bc = find_claudes_dir().parent / "board"
             if bc.exists():
                 board_cmd = str(bc)

@@ -2,11 +2,150 @@
 """claudes-code init — initialize a project for multi-agent coordination."""
 
 import hashlib
-import os
+import json
+import re
 import sqlite3
-import subprocess
 import sys
 from pathlib import Path
+
+# Ensure lib/ is importable (needed for migration runner)
+_script = Path(__file__).resolve()
+CLAUDES_HOME = _script.parent.parent
+if str(CLAUDES_HOME) not in sys.path:
+    sys.path.insert(0, str(CLAUDES_HOME))
+
+# ── Session name validation ──
+
+VALID_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
+RESERVED_NAMES: frozenset[str] = frozenset({"all", "dispatcher", "lead", "system"})
+MAX_NAME_LEN = 64
+
+
+def _validate_name(name: str) -> str:
+    """Validate and lowercase a session name. Raises SystemExit on invalid input."""
+    clean = name.strip().lower()
+    if not clean:
+        print(f"ERROR: empty session name")
+        raise SystemExit(1)
+    if len(clean) > MAX_NAME_LEN:
+        print(f"ERROR: session name too long (max {MAX_NAME_LEN} chars): {name}")
+        raise SystemExit(1)
+    if clean in RESERVED_NAMES:
+        print(f"ERROR: '{clean}' is a reserved name. Choose another.")
+        raise SystemExit(1)
+    if not VALID_NAME.match(clean):
+        print(f"ERROR: invalid session name '{name}'. Use a-z, 0-9, hyphens, underscores.")
+        print(f"       Example: claudes-code init alice bob charlie")
+        raise SystemExit(1)
+    return clean
+
+MARKER_START = "<!-- claudes-code:start -->"
+MARKER_END = "<!-- claudes-code:end -->"
+
+
+def _claude_md_snippet(sessions: list[str], claudes_home: Path) -> str:
+    board = f"{claudes_home}/bin/board"
+    lines = [
+        MARKER_START,
+        "## Multi-Agent Coordination",
+        "",
+        "This project uses claudes-code for multi-session coordination.",
+        "",
+        "### Session Startup",
+        "",
+        "You are a session. Your name is passed via `--name` when Claude Code starts.",
+        "On startup:",
+        "```bash",
+        f"{board} --as <your-name> inbox",
+        "```",
+        "",
+        "### Commands",
+        "",
+        "```bash",
+        f'{board} --as <name> send <to> "<msg>"    # message (person or "all")',
+        f"{board} --as <name> inbox                # check unread",
+        f"{board} --as <name> ack                  # clear inbox",
+        f'{board} --as <name> status "<desc>"      # update current task',
+        f'{board} --as <name> task add "<desc>"    # add task',
+        f"{board} --as <name> task done            # finish current task",
+        f"{board} --as <name> view                 # board overview",
+        f'{board} --as <name> bug report P1 "desc" # report bug',
+        f'{board} --as <name> send all "msg"       # broadcast',
+        "```",
+        "",
+        "### Rules",
+        "",
+        "- Check inbox at startup and after completing each task.",
+        "- Update status when you start or finish work.",
+        "- Commit immediately after each logical change.",
+        "- Message others via `send`, not by editing their files.",
+        "",
+        "### Sessions",
+        "",
+    ]
+    for s in sessions:
+        lines.append(f"- **{s}**")
+    lines.append(MARKER_END)
+    return "\n".join(lines) + "\n"
+
+
+def _update_claude_md(project_dir: Path, snippet: str) -> None:
+    md_path = project_dir / "CLAUDE.md"
+    if md_path.exists():
+        text = md_path.read_text()
+        if MARKER_START in text:
+            import re
+
+            text = re.sub(
+                rf"{re.escape(MARKER_START)}.*?{re.escape(MARKER_END)}\n?",
+                snippet,
+                text,
+                flags=re.DOTALL,
+            )
+        else:
+            text = text.rstrip("\n") + "\n\n" + snippet
+        md_path.write_text(text)
+    else:
+        md_path.write_text(snippet)
+
+
+def _hook_command(claudes_home: Path) -> str:
+    board = f"{claudes_home}/bin/board"
+    return (
+        f'if [ -n "$CLAUDE_SESSION_NAME" ]; then '
+        f"unread=$({board} --as $CLAUDE_SESSION_NAME inbox 2>/dev/null "
+        f"| grep -oE '[0-9]+ 条未读' | head -1); "
+        f'[ -n "$unread" ] && echo "[inbox] $unread" || true; fi'
+    )
+
+
+def _update_settings(project_dir: Path, claudes_home: Path) -> None:
+    settings_dir = project_dir / ".claude"
+    settings_dir.mkdir(exist_ok=True)
+    settings_path = settings_dir / "settings.json"
+
+    hook_entry = {"type": "command", "command": _hook_command(claudes_home)}
+
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text())
+        except (json.JSONDecodeError, ValueError):
+            settings = {}
+    else:
+        settings = {}
+
+    hooks = settings.setdefault("hooks", {})
+    post_batch = hooks.setdefault("PostToolBatch", [])
+
+    already = any(
+        (isinstance(h, dict) and "claudes-code" in h.get("command", ""))
+        or (isinstance(h, dict) and "board" in h.get("command", "") and "inbox" in h.get("command", ""))
+        for h in post_batch
+    )
+    if not already:
+        post_batch.append(hook_entry)
+
+    settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
 
 
 def main() -> None:
@@ -14,13 +153,11 @@ def main() -> None:
         print("Usage: claudes-code init <session-name> [session-name...]")
         sys.exit(1)
 
-    # Resolve CLAUDES_HOME (the repo root where this script lives)
-    script = Path(__file__).resolve()
-    claudes_home = script.parent.parent
-
-    sessions: list[str] = sys.argv[1:]
+    raw_sessions: list[str] = sys.argv[1:]
+    sessions = [_validate_name(s) for s in raw_sessions]
     project_dir = Path.cwd()
     claudes_dir = project_dir / ".claudes"
+    claudes_home = CLAUDES_HOME
 
     if (claudes_dir / "board.db").exists():
         print(f"Already initialized: {claudes_dir}")
@@ -34,109 +171,54 @@ def main() -> None:
     project_hash = hashlib.sha256(str(project_dir).encode()).hexdigest()[:4]
     prefix = f"cc-{project_hash}"
 
-    # Generate config.sh (bash-compatible, read by other scripts during transition)
-    sessions_str = " ".join(sessions)
-    config_content = (
-        f'CLAUDES_HOME="{claudes_home}"\n'
-        f"SESSIONS=({sessions_str})\n"
-        f'PREFIX="{prefix}"\n'
-    )
-    (claudes_dir / "config.sh").write_text(config_content)
+    # Generate config.toml
+    sessions_toml = ", ".join(f'"{s}"' for s in sessions)
+    toml_content = f'claudes_home = "{claudes_home}"\nsessions = [{sessions_toml}]\nprefix = "{prefix}"\n'
+    (claudes_dir / "config.toml").write_text(toml_content)
 
     # Initialize SQLite database from schema.sql
     schema_file = claudes_home / "schema.sql"
     db_path = claudes_dir / "board.db"
     conn = sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA foreign_keys=ON;")
     conn.executescript(schema_file.read_text())
+    # Insert sessions + pseudo-session 'all' for broadcast FK references
+    conn.execute("INSERT OR IGNORE INTO sessions(name, status) VALUES ('all', 'system')")
     for name in sessions:
         n = name.lower()
-        conn.execute(
-            "INSERT OR IGNORE INTO sessions(name) VALUES (?)", (n,)
-        )
-        # Create session .md file
+        conn.execute("INSERT OR IGNORE INTO sessions(name) VALUES (?)", (n,))
         md_content = f"# {n}\n\n## Current task\n(none)\n\n## @inbox\n"
         (claudes_dir / "sessions" / f"{n}.md").write_text(md_content)
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('dispatcher_session', 'dispatcher')")
+    # Record schema version so migration runner knows where we are
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1')")
     conn.commit()
     conn.close()
 
-    # Symlink bin/ scripts into project root
-    for cmd in ("board", "swarm", "dispatcher"):
-        target = claudes_home / "bin" / cmd
-        link = project_dir / cmd
-        try:
-            if link.is_symlink() or link.exists():
-                link.unlink()
-            link.symlink_to(target)
-        except OSError:
-            pass
+    # Run any pending migrations (idempotent)
+    from lib.migrate import run_migrations
 
-    # Generate CLAUDE.md
-    claude_md_lines = [
-        "# Multi-Agent Coordination",
-        "",
-        "This project uses claudes-code for multi-session coordination.",
-        "",
-        "## Session Startup",
-        "",
-        "You are a session. Your name is passed via `--name` when Claude Code starts.",
-        "On startup:",
-        "```bash",
-        "./board --as <your-name> inbox",
-        "```",
-        "",
-        "## Commands",
-        "",
-        "```bash",
-        './board --as <name> send <to> "<msg>"    # message (person or "all")',
-        "./board --as <name> inbox                # check unread",
-        "./board --as <name> ack                  # clear inbox",
-        './board --as <name> status "<desc>"      # update current task',
-        './board --as <name> task add "<desc>"    # add task',
-        "./board --as <name> task done            # finish current task",
-        "./board --as <name> view                 # board overview",
-        './board --as <name> bug report P1 "desc" # report bug',
-        './board --as <name> send all "msg"       # broadcast',
-        "```",
-        "",
-        "## Rules",
-        "",
-        "- Check inbox at startup and after completing each task.",
-        "- Update status when you start or finish work.",
-        "- Commit immediately after each logical change.",
-        "- Message others via `send`, not by editing their files.",
-        "",
-        "## Sessions",
-        "",
-    ]
-    for s in sessions:
-        claude_md_lines.append(f"- **{s}**")
-    (project_dir / "CLAUDE.md").write_text("\n".join(claude_md_lines) + "\n")
-
-    # Generate .claude/settings.json with hooks
-    claude_settings_dir = project_dir / ".claude"
-    claude_settings_dir.mkdir(exist_ok=True)
-    settings_json = """\
-{
-  "hooks": {
-    "PostToolBatch": [
-      {
-        "type": "command",
-        "command": "if [ -n \\"$CLAUDE_SESSION_NAME\\" ] && [ -x ./board ]; then unread=$(./board --as $CLAUDE_SESSION_NAME inbox 2>/dev/null | grep -oE '[0-9]+ 条未读' | head -1); [ -n \\"$unread\\" ] && echo \\"[inbox] $unread\\" || true; fi"
-      }
-    ]
-  }
-}
-"""
-    (claude_settings_dir / "settings.json").write_text(settings_json)
+    applied = run_migrations(db_path, claudes_home)
+    if applied:
+        print(f"Applied {applied} schema migration(s).")
 
     # .gitignore for generated stuff
     gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\n"
     (claudes_dir / ".gitignore").write_text(gitignore_content)
 
+    # Update CLAUDE.md (append if exists, create if not)
+    snippet = _claude_md_snippet(sessions, claudes_home)
+    _update_claude_md(project_dir, snippet)
+
+    # Update .claude/settings.json (merge hooks if exists, create if not)
+    _update_settings(project_dir, claudes_home)
+
+    sessions_str = " ".join(sessions)
     print(f"Initialized claudes-code (sessions: {sessions_str})")
     print()
-    print(f'  ./board --as {sessions[0]} send all "hello"')
-    print("  ./swarm start")
+    print(f'  claudes-code board --as {sessions[0]} send all "hello"')
+    print("  claudes-code swarm start")
 
 
 if __name__ == "__main__":

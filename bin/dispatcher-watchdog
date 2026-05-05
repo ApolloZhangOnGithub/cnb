@@ -4,7 +4,6 @@
 Usage: nohup ./dispatcher-watchdog > /tmp/dispatcher.log 2>&1 &
 """
 
-import os
 import subprocess
 import sys
 import time
@@ -15,7 +14,7 @@ from pathlib import Path
 _self = Path(__file__).resolve()
 CLAUDES_HOME = _self.parent.parent
 
-DISPATCHER = str(CLAUDES_HOME / "bin" / "dispatcher")
+DISPATCHER = CLAUDES_HOME / "bin" / "dispatcher"
 MAX_RESTARTS = 50
 COOLDOWN = 5
 CRASH_WINDOW = 60
@@ -35,7 +34,7 @@ def main() -> None:
 
     while True:
         log(f"Launching dispatcher (restart #{restart_count})")
-        result = subprocess.run(["bash", DISPATCHER])
+        result = subprocess.run([sys.executable, str(DISPATCHER)])
         exit_code = result.returncode
         now = time.time()
 
@@ -44,15 +43,9 @@ def main() -> None:
         if (now - last_crash) < CRASH_WINDOW:
             restart_count += 1
             if restart_count >= MAX_RESTARTS:
-                log(
-                    f"FATAL: {MAX_RESTARTS} rapid restarts within "
-                    f"{CRASH_WINDOW}s window. Giving up."
-                )
+                log(f"FATAL: {MAX_RESTARTS} rapid restarts within {CRASH_WINDOW}s window. Giving up.")
                 sys.exit(1)
-            log(
-                f"Rapid restart detected (#{restart_count}/{MAX_RESTARTS}), "
-                f"cooling down {COOLDOWN}s..."
-            )
+            log(f"Rapid restart detected (#{restart_count}/{MAX_RESTARTS}), cooling down {COOLDOWN}s...")
             time.sleep(COOLDOWN)
         else:
             restart_count = 0

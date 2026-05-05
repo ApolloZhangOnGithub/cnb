@@ -22,9 +22,7 @@ class TestCreateThread:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT id, title, author FROM threads WHERE id='abc123'"
-        ).fetchone()
+        row = db_conn.execute("SELECT id, title, author FROM threads WHERE id='abc123'").fetchone()
         assert row is not None
         assert row["title"] == "Architecture Discussion"
         assert row["author"] == "alice"
@@ -37,22 +35,16 @@ class TestCreateThread:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT created_at FROM threads WHERE id='def456'"
-        ).fetchone()
+        row = db_conn.execute("SELECT created_at FROM threads WHERE id='def456'").fetchone()
         assert row["created_at"] is not None
 
     def test_create_thread_id_unique(self, db_conn):
         """Thread IDs must be unique."""
-        db_conn.execute(
-            "INSERT INTO threads(id, title, author) VALUES ('abc123', 'Thread 1', 'alice')"
-        )
+        db_conn.execute("INSERT INTO threads(id, title, author) VALUES ('abc123', 'Thread 1', 'alice')")
         db_conn.commit()
 
         with pytest.raises(sqlite3.IntegrityError):
-            db_conn.execute(
-                "INSERT INTO threads(id, title, author) VALUES ('abc123', 'Thread 2', 'bob')"
-            )
+            db_conn.execute("INSERT INTO threads(id, title, author) VALUES ('abc123', 'Thread 2', 'bob')")
 
     def test_create_thread_generates_broadcast(self, db_conn):
         """Creating a thread also creates a broadcast message."""
@@ -66,13 +58,11 @@ class TestCreateThread:
         )
         db_conn.execute(
             "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-            (now, "alice", f"[BBS] New thread \"{title}\" ({thread_id})"),
+            (now, "alice", f'[BBS] New thread "{title}" ({thread_id})'),
         )
         db_conn.commit()
 
-        msg = db_conn.execute(
-            "SELECT body FROM messages WHERE body LIKE '%BBS%' AND body LIKE '%abc123%'"
-        ).fetchone()
+        msg = db_conn.execute("SELECT body FROM messages WHERE body LIKE '%BBS%' AND body LIKE '%abc123%'").fetchone()
         assert msg is not None
 
 
@@ -130,9 +120,7 @@ class TestReplyToThread:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT ts FROM thread_replies WHERE thread_id=?", (thread,)
-        ).fetchone()
+        row = db_conn.execute("SELECT ts FROM thread_replies WHERE thread_id=?", (thread,)).fetchone()
         assert row["ts"] is not None
 
     def test_reply_to_nonexistent_thread_detectable(self, db_conn):
@@ -141,9 +129,7 @@ class TestReplyToThread:
         The DB itself does not enforce a foreign key, so we test the
         lookup pattern used by the application.
         """
-        exists = db_conn.execute(
-            "SELECT COUNT(*) FROM threads WHERE id LIKE 'nonexistent%'"
-        ).fetchone()[0]
+        exists = db_conn.execute("SELECT COUNT(*) FROM threads WHERE id LIKE 'nonexistent%'").fetchone()[0]
         assert exists == 0
 
 
@@ -157,7 +143,7 @@ class TestViewThread:
             "INSERT INTO threads(id, title, author) VALUES (?, ?, ?)",
             ("view01", "API Design", "alice"),
         )
-        for i, (author, body) in enumerate(
+        for _i, (author, body) in enumerate(
             [
                 ("bob", "Looks good to me"),
                 ("charlie", "What about edge cases?"),
@@ -184,8 +170,7 @@ class TestViewThread:
     def test_view_shows_all_replies(self, db_conn, thread_with_replies):
         """Thread view includes all replies in order."""
         rows = db_conn.execute(
-            "SELECT author, body, ts FROM thread_replies "
-            "WHERE thread_id=? ORDER BY id",
+            "SELECT author, body, ts FROM thread_replies WHERE thread_id=? ORDER BY id",
             (thread_with_replies,),
         ).fetchall()
         assert len(rows) == 3
@@ -198,12 +183,8 @@ class TestListThreads:
 
     def test_list_threads_with_reply_count(self, db_conn):
         """Thread list includes the reply count for each thread."""
-        db_conn.execute(
-            "INSERT INTO threads(id, title, author) VALUES ('t1', 'Thread 1', 'alice')"
-        )
-        db_conn.execute(
-            "INSERT INTO threads(id, title, author) VALUES ('t2', 'Thread 2', 'bob')"
-        )
+        db_conn.execute("INSERT INTO threads(id, title, author) VALUES ('t1', 'Thread 1', 'alice')")
+        db_conn.execute("INSERT INTO threads(id, title, author) VALUES ('t2', 'Thread 2', 'bob')")
         # Add replies to thread 1 only
         for i in range(3):
             db_conn.execute(
@@ -231,13 +212,9 @@ class TestListThreads:
 
     def test_thread_lookup_by_prefix(self, db_conn):
         """Threads can be looked up by ID prefix (LIKE pattern)."""
-        db_conn.execute(
-            "INSERT INTO threads(id, title, author) VALUES ('abcdef', 'Test', 'alice')"
-        )
+        db_conn.execute("INSERT INTO threads(id, title, author) VALUES ('abcdef', 'Test', 'alice')")
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT id FROM threads WHERE id LIKE 'abc%' LIMIT 1"
-        ).fetchone()
+        row = db_conn.execute("SELECT id FROM threads WHERE id LIKE 'abc%' LIMIT 1").fetchone()
         assert row is not None
         assert row["id"] == "abcdef"

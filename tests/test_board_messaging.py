@@ -4,11 +4,6 @@ Covers: send, inbox, ack, log, broadcast (send to 'all'),
 attachments, and the --mine filter.
 """
 
-import sqlite3
-import time
-
-import pytest
-
 from tests.conftest import ts
 
 
@@ -24,9 +19,7 @@ class TestSendMessage:
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT sender, recipient, body FROM messages WHERE sender='alice'"
-        ).fetchone()
+        row = db_conn.execute("SELECT sender, recipient, body FROM messages WHERE sender='alice'").fetchone()
         assert row is not None
         assert row["sender"] == "alice"
         assert row["recipient"] == "bob"
@@ -46,9 +39,7 @@ class TestSendMessage:
         )
         db_conn.commit()
 
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0").fetchone()[0]
         assert count == 1
 
     def test_send_to_all_delivers_to_everyone_except_sender(self, db_conn):
@@ -61,9 +52,7 @@ class TestSendMessage:
         msg_id = cur.lastrowid
 
         # Deliver to all except alice
-        sessions = db_conn.execute(
-            "SELECT name FROM sessions WHERE name != 'alice'"
-        ).fetchall()
+        sessions = db_conn.execute("SELECT name FROM sessions WHERE name != 'alice'").fetchall()
         for s in sessions:
             db_conn.execute(
                 "INSERT INTO inbox(session, message_id) VALUES (?, ?)",
@@ -80,9 +69,7 @@ class TestSendMessage:
             assert count == 1, f"{name} should have 1 unread message"
 
         # Alice should NOT have the message
-        alice_count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='alice' AND read=0"
-        ).fetchone()[0]
+        alice_count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='alice' AND read=0").fetchone()[0]
         assert alice_count == 0, "Sender should not receive their own broadcast"
 
     def test_send_with_empty_body_requires_content(self, db_conn):
@@ -95,9 +82,7 @@ class TestSendMessage:
             (now, "alice", "bob", ""),
         )
         db_conn.commit()
-        row = db_conn.execute(
-            "SELECT body FROM messages WHERE sender='alice'"
-        ).fetchone()
+        row = db_conn.execute("SELECT body FROM messages WHERE sender='alice'").fetchone()
         assert row["body"] == ""
 
     def test_multiple_messages_ordered_by_id(self, db_conn):
@@ -110,9 +95,7 @@ class TestSendMessage:
             )
         db_conn.commit()
 
-        rows = db_conn.execute(
-            "SELECT body FROM messages ORDER BY id ASC"
-        ).fetchall()
+        rows = db_conn.execute("SELECT body FROM messages ORDER BY id ASC").fetchall()
         assert len(rows) == 5
         for i, row in enumerate(rows):
             assert row["body"] == f"msg {i}"
@@ -141,16 +124,12 @@ class TestInbox:
         self._send_msg(db_conn, "alice", "bob", "message 1")
         self._send_msg(db_conn, "charlie", "bob", "message 2")
 
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0").fetchone()[0]
         assert count == 2
 
     def test_inbox_empty_when_no_messages(self, db_conn):
         """Empty inbox returns zero unread."""
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0").fetchone()[0]
         assert count == 0
 
     def test_inbox_shows_message_details(self, db_conn):
@@ -190,26 +169,18 @@ class TestAck:
         self._send_msg(db_conn, "charlie", "bob", "msg 2")
 
         # Ack
-        db_conn.execute(
-            "UPDATE inbox SET read=1 WHERE session='bob' AND read=0"
-        )
+        db_conn.execute("UPDATE inbox SET read=1 WHERE session='bob' AND read=0")
         db_conn.commit()
 
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0").fetchone()[0]
         assert count == 0
 
     def test_ack_idempotent(self, db_conn):
         """Acking an already-empty inbox does not error."""
         # No messages sent to bob
-        db_conn.execute(
-            "UPDATE inbox SET read=1 WHERE session='bob' AND read=0"
-        )
+        db_conn.execute("UPDATE inbox SET read=1 WHERE session='bob' AND read=0")
         db_conn.commit()
-        count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0"
-        ).fetchone()[0]
+        count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0").fetchone()[0]
         assert count == 0
 
     def test_ack_only_affects_target_session(self, db_conn):
@@ -218,17 +189,11 @@ class TestAck:
         self._send_msg(db_conn, "charlie", "alice", "for alice")
 
         # Ack only bob
-        db_conn.execute(
-            "UPDATE inbox SET read=1 WHERE session='bob' AND read=0"
-        )
+        db_conn.execute("UPDATE inbox SET read=1 WHERE session='bob' AND read=0")
         db_conn.commit()
 
-        bob_count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0"
-        ).fetchone()[0]
-        alice_count = db_conn.execute(
-            "SELECT COUNT(*) FROM inbox WHERE session='alice' AND read=0"
-        ).fetchone()[0]
+        bob_count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='bob' AND read=0").fetchone()[0]
+        alice_count = db_conn.execute("SELECT COUNT(*) FROM inbox WHERE session='alice' AND read=0").fetchone()[0]
         assert bob_count == 0
         assert alice_count == 1
 
@@ -249,9 +214,7 @@ class TestMessageLog:
         for i in range(5):
             self._send_msg(db_conn, "alice", "bob", f"msg {i}")
 
-        rows = db_conn.execute(
-            "SELECT body FROM messages ORDER BY id DESC LIMIT 20"
-        ).fetchall()
+        rows = db_conn.execute("SELECT body FROM messages ORDER BY id DESC LIMIT 20").fetchall()
         assert len(rows) == 5
 
     def test_log_mine_filter(self, db_conn):
@@ -273,9 +236,7 @@ class TestMessageLog:
         for i in range(30):
             self._send_msg(db_conn, "alice", "bob", f"msg {i}")
 
-        rows = db_conn.execute(
-            "SELECT body FROM messages ORDER BY id DESC LIMIT 10"
-        ).fetchall()
+        rows = db_conn.execute("SELECT body FROM messages ORDER BY id DESC LIMIT 10").fetchall()
         assert len(rows) == 10
 
 
@@ -285,15 +246,12 @@ class TestMessageAttachment:
     def test_file_record_created(self, db_conn):
         """Inserting a file record into the files table works."""
         db_conn.execute(
-            "INSERT INTO files(hash, original_name, extension, sender, stored_path) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO files(hash, original_name, extension, sender, stored_path) VALUES (?, ?, ?, ?, ?)",
             ("abc123def456", "report.pdf", "pdf", "alice", "files/abc123def456.pdf"),
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT original_name, sender FROM files WHERE hash='abc123def456'"
-        ).fetchone()
+        row = db_conn.execute("SELECT original_name, sender FROM files WHERE hash='abc123def456'").fetchone()
         assert row is not None
         assert row["original_name"] == "report.pdf"
         assert row["sender"] == "alice"
@@ -301,24 +259,20 @@ class TestMessageAttachment:
     def test_file_hash_is_primary_key(self, db_conn):
         """Duplicate file hash is rejected (INSERT OR IGNORE)."""
         db_conn.execute(
-            "INSERT INTO files(hash, original_name, extension, sender, stored_path) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO files(hash, original_name, extension, sender, stored_path) VALUES (?, ?, ?, ?, ?)",
             ("abc123def456", "report.pdf", "pdf", "alice", "files/abc123def456.pdf"),
         )
         db_conn.commit()
 
         # Insert again with IGNORE
         db_conn.execute(
-            "INSERT OR IGNORE INTO files(hash, original_name, extension, sender, stored_path) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO files(hash, original_name, extension, sender, stored_path) VALUES (?, ?, ?, ?, ?)",
             ("abc123def456", "different.pdf", "pdf", "bob", "files/abc123def456.pdf"),
         )
         db_conn.commit()
 
         # Original record should be unchanged
-        row = db_conn.execute(
-            "SELECT original_name, sender FROM files WHERE hash='abc123def456'"
-        ).fetchone()
+        row = db_conn.execute("SELECT original_name, sender FROM files WHERE hash='abc123def456'").fetchone()
         assert row["original_name"] == "report.pdf"
         assert row["sender"] == "alice"
 
@@ -326,19 +280,15 @@ class TestMessageAttachment:
         """Messages can reference an attachment hash."""
         now = ts()
         db_conn.execute(
-            "INSERT INTO files(hash, original_name, extension, sender, stored_path) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO files(hash, original_name, extension, sender, stored_path) VALUES (?, ?, ?, ?, ?)",
             ("abc123def456", "data.csv", "csv", "alice", "files/abc123def456.csv"),
         )
         db_conn.execute(
-            "INSERT INTO messages(ts, sender, recipient, body, attachment) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO messages(ts, sender, recipient, body, attachment) VALUES (?, ?, ?, ?, ?)",
             (now, "alice", "bob", "Here is the data", "abc123def456"),
         )
         db_conn.commit()
 
-        row = db_conn.execute(
-            "SELECT body, attachment FROM messages WHERE attachment IS NOT NULL"
-        ).fetchone()
+        row = db_conn.execute("SELECT body, attachment FROM messages WHERE attachment IS NOT NULL").fetchone()
         assert row is not None
         assert row["attachment"] == "abc123def456"

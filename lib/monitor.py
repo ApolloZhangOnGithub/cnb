@@ -16,15 +16,16 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Callable, Optional
 
 # Try to import common; fall back gracefully for standalone use
 try:
-    from lib.common import ClaudesEnv, DB
+    from lib.board_db import BoardDB
+    from lib.common import ClaudesEnv
 except ImportError:
     _here = Path(__file__).resolve().parent.parent
     sys.path.insert(0, str(_here))
-    from lib.common import ClaudesEnv, DB
+    from lib.board_db import BoardDB
+    from lib.common import ClaudesEnv
 
 
 def log(msg: str) -> None:
@@ -39,12 +40,14 @@ def has_kqueue() -> bool:
 
 def has_inotifywait() -> bool:
     import shutil
+
     return shutil.which("inotifywait") is not None
 
 
 # ---------------------------------------------------------------------------
 # Kqueue watcher (macOS)
 # ---------------------------------------------------------------------------
+
 
 class KqueueWatcher:
     """Watch a directory and its .md files for changes using kqueue."""
@@ -124,6 +127,7 @@ class KqueueWatcher:
 # Inotify watcher (Linux)
 # ---------------------------------------------------------------------------
 
+
 class InotifyWatcher:
     """Watch via inotifywait subprocess."""
 
@@ -137,6 +141,7 @@ class InotifyWatcher:
 
     def poll(self, timeout: float = 5.0) -> set:
         import selectors
+
         sel = selectors.DefaultSelector()
         sel.register(self.proc.stdout, selectors.EVENT_READ)
         changed = set()
@@ -157,6 +162,7 @@ class InotifyWatcher:
 # ---------------------------------------------------------------------------
 # Polling watcher (fallback)
 # ---------------------------------------------------------------------------
+
 
 class PollWatcher:
     """Fall back to 1s stat polling."""
@@ -195,6 +201,7 @@ class PollWatcher:
 # Unified watcher factory
 # ---------------------------------------------------------------------------
 
+
 def create_watcher(watch_dir: str):
     """Return the best available watcher for the platform."""
     if has_kqueue():
@@ -209,6 +216,7 @@ def create_watcher(watch_dir: str):
 # Event handler
 # ---------------------------------------------------------------------------
 
+
 def handle_change(file_path: str, env: ClaudesEnv) -> None:
     """Check for unread inbox and nudge the session."""
     name = os.path.basename(file_path).replace(".md", "")
@@ -216,21 +224,23 @@ def handle_change(file_path: str, env: ClaudesEnv) -> None:
     unread = 0
     if env.board_db.exists():
         try:
-            db = DB(env.board_db)
+            db = BoardDB(env.board_db)
             unread = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,)) or 0
-        except Exception:
+        except (sqlite3.Error, OSError):
             pass
 
     if unread > 0:
         sess = f"{env.prefix}-{name}"
         try:
             r = subprocess.run(
-                ["tmux", "has-session", "-t", sess], capture_output=True, timeout=5,
+                ["tmux", "has-session", "-t", sess],
+                capture_output=True,
+                timeout=5,
             )
             if r.returncode == 0:
                 log(f"EVENT: {name} has {unread} unread -- nudging")
                 subprocess.run(
-                    ["tmux", "send-keys", "-t", sess, "-l", f"./board.sh --as {name} inbox"],
+                    ["tmux", "send-keys", "-t", sess, "-l", f"./board --as {name} inbox"],
                     timeout=5,
                 )
                 subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=5)
@@ -244,14 +254,17 @@ def handle_change(file_path: str, env: ClaudesEnv) -> None:
 # CLI modes
 # ---------------------------------------------------------------------------
 
+
 def do_watch(env: ClaudesEnv) -> None:
     watcher = create_watcher(str(env.sessions_dir))
     log(f"Starting {type(watcher).__name__} on {env.sessions_dir}/")
 
     running = True
+
     def _stop(*_):
         nonlocal running
         running = False
+
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
@@ -269,7 +282,7 @@ def do_test(env: ClaudesEnv) -> None:
     log("Sending test message and measuring detection time...")
 
     test_target = env.sessions[0] if env.sessions else "test"
-    board_sh = env.project_root / "board.sh"
+    board_sh = env.project_root / "board"
 
     # Start watcher
     watcher = create_watcher(str(env.sessions_dir))
@@ -277,19 +290,24 @@ def do_test(env: ClaudesEnv) -> None:
     start_ms = int(time.time() * 1000)
     try:
         subprocess.run(
-            [str(board_sh), "--as", "dispatcher", "send", test_target,
-             f"[monitor-poc] latency test {int(time.time())}"],
-            capture_output=True, timeout=10,
+            [
+                str(board_sh),
+                "--as",
+                "dispatcher",
+                "send",
+                test_target,
+                f"[monitor-poc] latency test {int(time.time())}",
+            ],
+            capture_output=True,
+            timeout=10,
         )
     except Exception:
         pass
 
     # Wait for detection (max 5s)
-    detected = False
     for _ in range(50):
         changed = watcher.poll(0.1)
         if changed:
-            detected = True
             break
 
     end_ms = int(time.time() * 1000)
@@ -305,7 +323,8 @@ def do_test(env: ClaudesEnv) -> None:
     try:
         subprocess.run(
             [str(board_sh), "--as", test_target, "ack"],
-            capture_output=True, timeout=10,
+            capture_output=True,
+            timeout=10,
         )
     except Exception:
         pass
