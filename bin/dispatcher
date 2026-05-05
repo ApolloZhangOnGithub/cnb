@@ -8,11 +8,15 @@ set -uo pipefail
 # 3. Periodic health check via Coral
 # 4. Detect team-wide idle → write to Orca inbox
 
+_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
+source "$CLAUDES_HOME/lib/discover.sh"
+
 PREFIX="cc"
 DISPATCHER_SESSION="${DISPATCHER_SESSION:-dispatcher}"; CORAL_SESS="${PREFIX}-${DISPATCHER_SESSION}"
 BOARD_SH="${PROJECT_ROOT}/board.sh"
 SAY_SH="${PROJECT_ROOT}/say.sh"
 LOG_DIR="${PROJECT_ROOT}/.swarm-logs"
+OKR_DIR="${CLAUDES_DIR}/okr"
 mkdir -p "$LOG_DIR"
 
 # Fail fast if paths are wrong
@@ -53,8 +57,31 @@ health_interval=$HEALTH_INTERVAL
 
 log() { echo "[dispatcher] $(date '+%H:%M:%S') $*"; }
 
+is_claude_running() {
+    local sess="$1"
+    tmux has-session -t "$sess" 2>/dev/null || return 1
+    local cmd
+    cmd=$(tmux list-panes -t "$sess" -F '#{pane_current_command}' 2>/dev/null | head -1)
+    case "$cmd" in
+        zsh|bash|sh|-zsh|-bash) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+is_suspended() { grep -qx "$1" "${CLAUDES_DIR}/suspended.list" 2>/dev/null; }
+
+_date_to_epoch() {
+    local ts="$1" fmt="${2:-%Y-%m-%d %H:%M}"
+    if date -j -f "$fmt" "$ts" +%s 2>/dev/null; then return; fi
+    date -d "$ts" +%s 2>/dev/null || echo 0
+}
+
+check_okr_throughput() {
+    : # TODO: implement OKR throughput checking
+}
+
 # --- Resource monitoring (via resource-monitor.sh) ---
-RESOURCE_MONITOR="${TOOLS_SWARM}/resource-monitor.sh"
+RESOURCE_MONITOR="${CLAUDES_HOME}/lib/resources.sh"
 CPU_HIGH_THRESHOLD=80
 CPU_LOW_THRESHOLD=60
 THROTTLE_MULTIPLIER=1  # 1 = normal, 2/4 = throttled
@@ -165,7 +192,6 @@ except: print('?|100|?|?|?|0')
 SUSPENDED_FILE="$BOARD_DIR/suspended.list"
 
 # --- Mentor-Intern mapping (bash 3 compatible) ---
-}
 MENTOR_NOTIFY_DIR="${LOG_DIR}/mentor-notify"
 mkdir -p "$MENTOR_NOTIFY_DIR"
 MENTOR_CHECK_INTERVAL=300  # 5 min
@@ -403,7 +429,7 @@ nudge_if_unread() {
 
 WATCH_FIFO="/tmp/dispatcher-watch-$$"
 WATCH_PID=""
-WATCH_PID_FILE="/tmp/dispatcher-watcher.pid"
+WATCH_PID_FILE="${CLAUDES_DIR}/dispatcher-watcher.pid"
 
 # Kill orphan Python watchers left behind by previous dispatcher instances.
 # This handles the case where dispatcher crashes (SIGKILL) or restarts without
@@ -556,7 +582,7 @@ check_idle_sessions() {
         fi
         if [ -n "$last_update" ]; then
             local update_epoch
-            update_epoch=$(date -j -f "%Y-%m-%d %H:%M" "$last_update" +%s 2>/dev/null || echo 0)
+            update_epoch=$(_date_to_epoch "$last_update")
             local age=$((now - update_epoch))
             if [ "$age" -gt "$IDLE_THRESHOLD" ]; then
                 idle_list="${idle_list} ${name}(${age}s)"
