@@ -1,27 +1,26 @@
-"""Shared utilities for claudes-code Python scripts."""
+#!/usr/bin/env python3
+"""Shared utilities for claudes-code Python modules."""
 
 import os
+import sqlite3
 from pathlib import Path
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Optional
 
 
 def find_claudes_dir() -> Path:
-    """Walk up from cwd to find .claudes/ directory."""
+    """Walk up from cwd to find the .claudes/ directory."""
     d = Path.cwd()
     while d != d.parent:
         if (d / ".claudes").is_dir():
             return d / ".claudes"
         d = d.parent
-    raise FileNotFoundError(
-        "ERROR: .claudes/ not found. Run: claudes-code init <session-names>"
-    )
+    raise FileNotFoundError(".claudes/ not found")
 
 
 @dataclass
 class ClaudesEnv:
-    """Resolved environment for a claudes-code project."""
-
     claudes_dir: Path
     project_root: Path
     board_db: Path
@@ -30,9 +29,6 @@ class ClaudesEnv:
     prefix: str
     sessions: List[str]
     suspended_file: Path
-    log_dir: Path
-    attendance_log: Path
-    claudes_home: str = ""
 
     @classmethod
     def load(cls) -> "ClaudesEnv":
@@ -42,17 +38,13 @@ class ClaudesEnv:
         cf = cd / "config.sh"
         if cf.exists():
             for line in cf.read_text().splitlines():
-                line = line.strip()
                 if "=" in line and not line.startswith("#"):
                     k, _, v = line.partition("=")
+                    v = v.strip('"').strip("'")
                     k = k.strip()
-                    v = v.strip().strip('"').strip("'")
                     if k == "SESSIONS":
-                        # Parse bash array: (a b c)
-                        v = v.strip("()")
-                        config[k] = v.split()
-                    else:
-                        config[k] = v
+                        v = v.strip("()").split()
+                    config[k] = v
         return cls(
             claudes_dir=cd,
             project_root=pr,
@@ -62,14 +54,50 @@ class ClaudesEnv:
             prefix=config.get("PREFIX", "cc"),
             sessions=config.get("SESSIONS", []),
             suspended_file=cd / "suspended.list",
-            log_dir=cd / "logs",
-            attendance_log=cd / "attendance.log",
-            claudes_home=config.get("CLAUDES_HOME", ""),
         )
 
 
-def is_suspended(name: str, suspended_file: Path) -> bool:
-    """Check if a session name is in the suspended list."""
-    if not suspended_file.exists():
-        return False
-    return name in suspended_file.read_text().splitlines()
+class DB:
+    """Thin wrapper around sqlite3 for the board database."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = str(path)
+
+    def _conn(self) -> sqlite3.Connection:
+        c = sqlite3.connect(self.path)
+        c.row_factory = sqlite3.Row
+        return c
+
+    def execute(self, q: str, p: tuple = ()) -> sqlite3.Cursor:
+        with self._conn() as c:
+            cur = c.execute(q, p)
+            c.commit()
+            return cur
+
+    def query(self, q: str, p: tuple = ()) -> list:
+        with self._conn() as c:
+            return c.execute(q, p).fetchall()
+
+    def scalar(self, q: str, p: tuple = ()):
+        r = self.query(q, p)
+        return r[0][0] if r else None
+
+
+def ts() -> str:
+    """Current timestamp as 'YYYY-MM-DD HH:MM'."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def is_suspended(name: str, sf: Path) -> bool:
+    """Check if a session name appears in the suspended.list file."""
+    return sf.exists() and name in sf.read_text().splitlines()
+
+
+def date_to_epoch(s: str) -> int:
+    """Parse a date string into a Unix epoch, trying multiple formats."""
+    for f in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return int(datetime.strptime(s, f).timestamp())
+        except ValueError:
+            pass
+    return 0
