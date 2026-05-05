@@ -1,0 +1,608 @@
+#!/usr/bin/env bash
+set -euo pipefail
+_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
+source "$CLAUDES_HOME/lib/discover.sh"
+
+
+# swarm.sh — Launch multi-agent sessions in screen or tmux
+#
+# Auto-detects: prefers tmux (truecolor support), falls back to screen.
+# Override with SWARM_MODE=tmux|screen or SWARM_AGENT=claude|trae|qwen.
+
+
+PREFIX="cc"
+SUSPENDED_FILE="${CLAUDES_DIR}/suspended.list"
+LOG_DIR="${CLAUDES_DIR}/logs"
+
+# Agent configuration: SWARM_AGENT=claude|trae|qwen (default: claude)
+#
+# Quality notes from real-world testing (2026-05-04):
+#   claude — production quality, recommended
+#   trae   — usable as fallback when Claude quota is exhausted
+#   qwen   — NOT RECOMMENDED. 5 hours of Qwen-driven sessions produced mass
+#             low-quality commits, broke core scripts, injected phantom sessions,
+#             and required a full rollback. Use only for basic smoke testing.
+SWARM_AGENT="${SWARM_AGENT:-claude}"
+
+# Ensure log directory exists
+mkdir -p "$LOG_DIR"
+
+is_suspended() { grep -qx "$1" "$SUSPENDED_FILE" 2>/dev/null; }
+
+detect_mode() {
+    if [ -n "${SWARM_MODE:-}" ]; then echo "$SWARM_MODE"; return; fi
+    if command -v tmux &>/dev/null; then echo "tmux"
+    elif command -v screen &>/dev/null; then echo "screen"
+    else echo "none"; fi
+}
+
+MODE=$(detect_mode)
+
+# --- Attendance (打卡) ---
+ATTENDANCE_LOG="${CLAUDES_DIR}/attendance.log"
+
+clock_in() {
+    local name="$1"
+    local ts
+    ts=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "$ts | $name | clock-in" >> "$ATTENDANCE_LOG"
+}
+
+clock_out() {
+    local name="$1"
+    local ts
+    ts=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "$ts | $name | clock-out" >> "$ATTENDANCE_LOG"
+}
+
+do_attendance() {
+    if [ ! -f "$ATTENDANCE_LOG" ]; then
+        echo "No attendance records yet."
+        return
+    fi
+    local today
+    today=$(date '+%Y-%m-%d')
+    echo "=== 出勤记录 (今日: $today) ==="
+    echo ""
+    for name in "${SESSIONS[@]}"; do
+        local ins outs hours
+        ins=$(grep "| $name | clock-in" "$ATTENDANCE_LOG" | grep "^$today" | wc -l | tr -d ' ')
+        outs=$(grep "| $name | clock-out" "$ATTENDANCE_LOG" | grep "^$today" | wc -l | tr -d ' ')
+        local last_in last_out
+        last_in=$(grep "| $name | clock-in" "$ATTENDANCE_LOG" | grep "^$today" | tail -1 | cut -d'|' -f1 | tr -d ' ')
+        last_out=$(grep "| $name | clock-out" "$ATTENDANCE_LOG" | grep "^$today" | tail -1 | cut -d'|' -f1 | tr -d ' ')
+        if [ -n "$last_in" ] && [ -z "$last_out" ]; then
+            echo "  $name: 在岗 (上班 $last_in)"
+        elif [ -n "$last_out" ]; then
+            echo "  $name: 已下班 (最后 $last_out)"
+        else
+            echo "  $name: 今日未上班"
+        fi
+    done
+    echo ""
+    echo "历史记录: $ATTENDANCE_LOG"
+}
+
+# Log startup
+log_startup() {
+    local name="$1"
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] Starting $name with agent: $SWARM_AGENT" >> "$LOG_DIR/swarm.log"
+    echo "[$timestamp] Starting $name with agent: $SWARM_AGENT" >> "$LOG_DIR/$name.log"
+}
+
+# --- agent command builder ---
+DEEPSEEK_SESSIONS=""  # disabled — all sessions use Claude
+
+is_deepseek_session() {
+    local name="$1"
+    for s in $DEEPSEEK_SESSIONS; do
+        [ "$s" = "$name" ] && return 0
+    done
+    return 1
+}
+
+build_agent_cmd() {
+    local name="$1"
+    local env_prefix=""
+    if is_deepseek_session "$name"; then
+        env_prefix="ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_API_KEY=\$DEEPSEEK_API_KEY "
+    fi
+    case "$SWARM_AGENT" in
+        claude)
+            if is_deepseek_session "$name"; then
+                echo "${env_prefix}claude --model deepseek-v4-pro[1m] --name '${name}' --append-system-prompt '你是 ${name}。按 CLAUDE.md 的启动流程执行。你正在使用 DeepSeek V4 引擎。'"
+            else
+                echo "claude --name '${name}' --append-system-prompt '你是 ${name}。按 CLAUDE.md 的启动流程执行。你正在使用 Claude Code 引擎。'"
+            fi
+            ;;
+        trae)
+            echo "trae-cli"
+            ;;
+        qwen)
+            echo "qwen"
+            ;;
+        *)
+            echo "Unknown agent: $SWARM_AGENT" >&2
+            return 1
+            ;;
+    esac
+}
+
+# Non-Claude agents need prompt injection after launch
+needs_prompt_injection() {
+    [ "$SWARM_AGENT" = "trae" ] || [ "$SWARM_AGENT" = "qwen" ]
+}
+
+get_initial_prompt() {
+    local name="$1"
+    local engine_label
+    case "$SWARM_AGENT" in
+        trae)  engine_label="Trae CLI" ;;
+        qwen)  engine_label="Qwen Code" ;;
+        *)     engine_label="$SWARM_AGENT" ;;
+    esac
+    echo "你是 ${name}。你正在使用 ${engine_label} 引擎。按 CLAUDE.md 的启动流程执行：1. 读取 ${SESSIONS_DIR}/${name}.md，2. 读取 ${CV_DIR}/${name}.md（如果存在），3. 用 ./board.sh --as ${name} inbox 检查未读消息，4. 根据 session 文件中的下一步继续工作，如果没有明确任务，读 ROADMAP.md 自主找活干。"
+}
+
+# --- tmux backend ---
+
+tmux_is_running() { tmux has-session -t "${PREFIX}-${1}" 2>/dev/null; }
+
+# Wait for Claude Code prompt to appear, then inject startup message
+_inject_initial_prompt() {
+    local name="$1" sess="$2"
+    local initial_prompt
+    initial_prompt=$(get_initial_prompt "$name")
+    # Poll until the prompt indicator appears (max 60s)
+    local waited=0
+    while [ $waited -lt 60 ]; do
+        local pane_text
+        pane_text=$(tmux capture-pane -t "$sess" -p 2>/dev/null || true)
+        if echo "$pane_text" | grep -q '❯'; then
+            sleep 1  # small buffer after prompt appears
+            tmux send-keys -t "$sess" -l "$initial_prompt"
+            tmux send-keys -t "$sess" Enter
+            return 0
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+    echo "[WARN] $name: prompt not detected after 60s, skipping injection" >> "$LOG_DIR/$name.log"
+}
+
+tmux_start_one() {
+    local name="$1"
+    local sess="${PREFIX}-${name}"
+    if tmux_is_running "$name"; then echo "  $name: already running"; return; fi
+    
+    log_startup "$name"
+    
+    tmux new-session -d -s "$sess" -x 200 -y 50
+    tmux send-keys -t "$sess" "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null" Enter
+    sleep 0.5
+    tmux send-keys -t "$sess" "cd '${PROJECT_ROOT}'" Enter
+    sleep 0.5
+    if is_deepseek_session "$name"; then
+        tmux send-keys -t "$sess" "claude /logout 2>/dev/null; true" Enter
+        sleep 1
+    fi
+    local agent_cmd
+    agent_cmd=$(build_agent_cmd "$name")
+    tmux send-keys -t "$sess" "$agent_cmd" Enter
+
+    # Queue initial prompt injection in background (waits for Claude to be ready)
+    _inject_initial_prompt "$name" "$sess" &
+
+    echo "  $name: started (tmux: $sess, agent: $SWARM_AGENT)"
+}
+
+tmux_stop_one() {
+    local name="$1"
+    local sess="${PREFIX}-${name}"
+    if ! tmux_is_running "$name"; then echo "  $name: not running"; return; fi
+
+    # Ask session to save state before exiting
+    local save_cmd="git add -A && git commit -m '[WIP][${name}] auto-save before shutdown' --allow-empty-message 2>/dev/null; ./board.sh --as ${name} status 'shutdown: state saved'"
+    tmux send-keys -t "$sess" C-c
+    sleep 1
+    tmux send-keys -t "$sess" "! ${save_cmd}" Enter
+    sleep 3
+
+    tmux send-keys -t "$sess" "/exit" Enter
+
+    # Wait up to 15s for graceful exit
+    local waited=0
+    while tmux_is_running "$name" && [ $waited -lt 15 ]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if tmux_is_running "$name"; then
+        tmux kill-session -t "$sess"
+        echo "  $name: force killed (after ${waited}s)"
+    else
+        echo "  $name: exited gracefully"
+    fi
+}
+
+tmux_status() {
+    for name in "${SESSIONS[@]}"; do
+        if is_suspended "$name"; then
+            echo "  $name: SUSPENDED"
+        elif tmux_is_running "$name"; then
+            echo "  $name: running (tmux, agent: $SWARM_AGENT)"
+        else
+            echo "  $name: stopped"
+        fi
+    done
+}
+
+tmux_attach() { tmux attach-session -t "${PREFIX}-${1}"; }
+
+tmux_inject() {
+    local name="$1" message="$2"
+    local sess="${PREFIX}-${name}"
+    if ! tmux_is_running "$name"; then echo "  $name: not running"; return 1; fi
+    local oneline; oneline=$(echo "$message" | tr '\n' ' ')
+    tmux send-keys -t "$sess" -l "$oneline"
+    tmux send-keys -t "$sess" Enter
+    echo "  $name: injected"
+}
+
+# --- screen backend ---
+
+screen_is_running() { (screen -list 2>/dev/null || true) | grep -q "\.${PREFIX}-${1}[[:space:]]"; }
+
+screen_start_one() {
+    local name="$1"
+    local sess="${PREFIX}-${name}"
+    if screen_is_running "$name"; then echo "  $name: already running"; return; fi
+    
+    log_startup "$name"
+    
+    screen -dmS "$sess"
+    sleep 1
+    screen -S "$sess" -p 0 -X stuff "cd '${PROJECT_ROOT}'"
+    screen -S "$sess" -p 0 -X stuff "$(printf '\015')"
+    sleep 0.5
+    local agent_cmd
+    agent_cmd=$(build_agent_cmd "$name")
+    screen -S "$sess" -p 0 -X stuff "$agent_cmd"
+    screen -S "$sess" -p 0 -X stuff "$(printf '\015')"
+    
+    if needs_prompt_injection; then
+        sleep 3
+        local initial_prompt
+        initial_prompt=$(get_initial_prompt "$name")
+        screen -S "$sess" -p 0 -X stuff "$initial_prompt"
+        sleep 0.3
+        screen -S "$sess" -p 0 -X stuff "$(printf '\015')"
+    fi
+
+    echo "  $name: started (screen: $sess, agent: $SWARM_AGENT)"
+}
+
+screen_stop_one() {
+    local name="$1"
+    local sess="${PREFIX}-${name}"
+    if ! screen_is_running "$name"; then echo "  $name: not running"; return; fi
+
+    # Ask session to save state before exiting
+    local save_cmd="git add -A && git commit -m '[WIP][${name}] auto-save before shutdown' --allow-empty-message 2>/dev/null; ./board.sh --as ${name} status 'shutdown: state saved'"
+    screen -S "$sess" -p 0 -X stuff "$(printf '\003')"
+    sleep 1
+    screen -S "$sess" -p 0 -X stuff "! ${save_cmd}$(printf '\015')"
+    sleep 3
+
+    screen -S "$sess" -p 0 -X stuff "/exit$(printf '\015')"
+
+    # Wait up to 15s for graceful exit
+    local waited=0
+    while screen_is_running "$name" && [ $waited -lt 15 ]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if screen_is_running "$name"; then
+        screen -S "$sess" -X quit
+        echo "  $name: force killed (after ${waited}s)"
+    else
+        echo "  $name: exited gracefully"
+    fi
+}
+
+screen_status() {
+    for name in "${SESSIONS[@]}"; do
+        if is_suspended "$name"; then
+            echo "  $name: SUSPENDED"
+        elif screen_is_running "$name"; then
+            local state
+            state=$((screen -list 2>/dev/null || true) | grep "\.${PREFIX}-${name}[[:space:]]" | awk '{print $NF}')
+            echo "  $name: running (screen, agent: $SWARM_AGENT) $state"
+        else
+            echo "  $name: stopped"
+        fi
+    done
+}
+
+screen_attach() { screen -r "${PREFIX}-${1}"; }
+
+screen_inject() {
+    local name="$1" message="$2"
+    local sess="${PREFIX}-${name}"
+    if ! screen_is_running "$name"; then echo "  $name: not running"; return 1; fi
+    local oneline; oneline=$(echo "$message" | tr '\n' ' ')
+    screen -S "$sess" -p 0 -X stuff "$oneline"
+    sleep 0.3
+    screen -S "$sess" -p 0 -X stuff "$(printf '\015')"
+    echo "  $name: injected"
+}
+
+# --- dispatch ---
+
+do_start() {
+    local targets=() role_filter="" exclude_filter=""
+    local args=()
+    for arg in "$@"; do
+        case "$arg" in
+            --role=*)    role_filter="${arg#--role=}" ;;
+            --exclude=*) exclude_filter="${arg#--exclude=}" ;;
+            *)           args+=("$arg") ;;
+        esac
+    done
+    if [ ${#args[@]} -eq 0 ]; then
+        if [ -n "$role_filter" ] || [ -n "$exclude_filter" ]; then
+            read -ra targets <<< "$(filter_by_role "$role_filter" "$exclude_filter")"
+        else
+            targets=("${SESSIONS[@]}")
+        fi
+    else
+        targets=("${args[@]}")
+    fi
+    if [ "$MODE" = "tmux" ]; then
+        tmux set -g mouse on 2>/dev/null
+    fi
+    local started=0
+    for name in "${targets[@]}"; do
+        if is_suspended "$name"; then
+            echo "  $name: SUSPENDED (use './swarm.sh resume $name' to reactivate)"
+            continue
+        fi
+        ${MODE}_start_one "$name"
+        clock_in "$name"
+        ((started++)) || true
+    done
+    echo ""
+    echo "Mode: $MODE | Agent: $SWARM_AGENT | Started: $started"
+    echo "Logs: $LOG_DIR"
+    if [ "$MODE" = "tmux" ]; then
+        echo "  tmux attach -t ${PREFIX}-<name>   # attach (Ctrl-B D to detach)"
+    else
+        echo "  screen -r ${PREFIX}-<name>        # attach (Ctrl-A D to detach)"
+    fi
+    echo "  ./swarm.sh status                 # who's running"
+}
+
+do_status() {
+    echo "=== Swarm Status (mode: $MODE, agent: $SWARM_AGENT) ==="
+    ${MODE}_status
+}
+
+do_stop() {
+    local targets=()
+    if [ $# -eq 0 ]; then
+        targets=("${SESSIONS[@]}")
+    else
+        targets=("$@")
+    fi
+    for name in "${targets[@]}"; do
+        ${MODE}_stop_one "$name"
+        clock_out "$name"
+    done
+    # If stopping all sessions, also kill dispatcher
+    if [ $# -eq 0 ]; then
+        pkill -f 'dispatcher\.sh' 2>/dev/null || true
+        pkill -f 'dispatcher-watchdog\.sh' 2>/dev/null || true
+    fi
+}
+
+do_attach() {
+    local name="${1:?Usage: ./swarm.sh attach <name>}"
+    ${MODE}_attach "$name"
+}
+
+is_valid_session() {
+    local name="$1"
+    for s in "${SESSIONS[@]}"; do
+        [ "$s" = "$name" ] && return 0
+    done
+    return 1
+}
+
+ROSTER_FILE="${CLAUDES_DIR}/ROSTER.md"
+
+get_role() {
+    local name="$1"
+    if [ ! -f "$ROSTER_FILE" ]; then echo "unknown"; return; fi
+    local line
+    line=$(grep -i "| \*\*${name}\*\*" "$ROSTER_FILE" 2>/dev/null || true)
+    if [ -z "$line" ]; then echo "unknown"; return; fi
+    if echo "$line" | grep -qi "实习生"; then echo "intern"
+    elif echo "$line" | grep -qi "调度员"; then echo "dispatcher"
+    elif echo "$line" | grep -qi "Lead"; then echo "lead"
+    else echo "dev"; fi
+}
+
+filter_by_role() {
+    local role_filter="$1" exclude_filter="$2"
+    local result=()
+    for name in "${SESSIONS[@]}"; do
+        local role
+        role=$(get_role "$name")
+        if [ -n "$exclude_filter" ] && [ "$role" = "$exclude_filter" ]; then
+            continue
+        fi
+        if [ -n "$role_filter" ] && [ "$role" != "$role_filter" ]; then
+            continue
+        fi
+        result+=("$name")
+    done
+    echo "${result[@]}"
+}
+
+do_suspend() {
+    if [ $# -eq 0 ]; then
+        echo "Usage: ./swarm.sh suspend <name> [names...]" >&2
+        exit 1
+    fi
+    for name in "$@"; do
+        if ! is_valid_session "$name"; then
+            echo "  $name: unknown session (valid: ${SESSIONS[*]})" >&2
+            continue
+        fi
+        if is_suspended "$name"; then
+            echo "  $name: already suspended"
+            continue
+        fi
+        echo "$name" >> "$SUSPENDED_FILE"
+        if ${MODE}_is_running "$name" 2>/dev/null; then
+            ${MODE}_stop_one "$name"
+            clock_out "$name"
+        fi
+        echo "  $name: suspended"
+    done
+}
+
+do_resume() {
+    if [ $# -eq 0 ]; then
+        echo "Usage: ./swarm.sh resume <name> [names...]" >&2
+        exit 1
+    fi
+    for name in "$@"; do
+        if ! is_valid_session "$name"; then
+            echo "  $name: unknown session (valid: ${SESSIONS[*]})" >&2
+            continue
+        fi
+        if ! is_suspended "$name"; then
+            echo "  $name: not suspended"
+            continue
+        fi
+        sed -i '' "/^${name}$/d" "$SUSPENDED_FILE"
+        ${MODE}_start_one "$name"
+        sleep 1
+        if ${MODE}_is_running "$name"; then
+            clock_in "$name"
+            echo "  $name: resumed + started"
+        else
+            echo "  $name: resumed but FAILED to start (check tmux/claude availability)" >&2
+        fi
+    done
+}
+
+do_restart() {
+    local targets=()
+    if [ $# -eq 0 ]; then
+        for name in "${SESSIONS[@]}"; do
+            is_suspended "$name" || targets+=("$name")
+        done
+    else
+        targets=("$@")
+    fi
+    echo "=== Restarting ${#targets[@]} session(s) ==="
+    for name in "${targets[@]}"; do
+        if is_suspended "$name"; then
+            echo "  $name: SUSPENDED (use './swarm.sh resume $name' to reactivate)"
+            continue
+        fi
+        ${MODE}_stop_one "$name"
+        sleep 1
+        ${MODE}_start_one "$name"
+        echo "  $name: restarted"
+    done
+}
+
+do_morning() {
+    echo "=== Morning startup (all non-intern, non-dispatcher) ==="
+    local targets=()
+    for name in "${SESSIONS[@]}"; do
+        local role
+        role=$(get_role "$name")
+        if [ "$role" = "intern" ] || [ "$role" = "dispatcher" ]; then
+            continue
+        fi
+        targets+=("$name")
+    done
+    local resumed=0 started=0 failed=0
+    for name in "${targets[@]}"; do
+        if is_suspended "$name"; then
+            sed -i '' "/^${name}$/d" "$SUSPENDED_FILE"
+            resumed=$((resumed + 1))
+        fi
+        ${MODE}_start_one "$name"
+        clock_in "$name"
+        if ${MODE}_is_running "$name" 2>/dev/null; then
+            started=$((started + 1))
+        else
+            failed=$((failed + 1))
+            echo "  WARNING: $name failed to start"
+        fi
+    done
+    echo ""
+    echo "Results: $started started, $resumed resumed from suspend, $failed failed"
+    echo "Skipped roles: intern, dispatcher"
+    echo ""
+    echo "To also start interns: ./swarm.sh start --role=intern"
+    echo "To start dispatcher:   ./swarm.sh start <dispatcher>"
+}
+
+cmd_help() {
+    cat <<EOF
+swarm.sh — manage multi-agent session swarm
+
+Mode: $MODE (override with SWARM_MODE=tmux|screen)
+Agent: $SWARM_AGENT (override with SWARM_AGENT=claude|trae|qwen)
+
+  start [names...]    Launch sessions (default: all non-suspended)
+  start --role=dev    Launch only sessions with matching role
+  start --exclude=intern  Launch all except matching role
+  status              Who's running
+  stop [names...]     Gracefully stop sessions (default: all)
+  restart [names...]  Stop + start (default: all non-suspended)
+  suspend <names...>  Suspend sessions (stop + skip on future starts)
+  resume <names...>   Resume suspended sessions (remove from list + start)
+  morning             Resume + start all dev sessions (excludes intern/dispatcher)
+  attach <name>       Attach to session
+  help                This message
+
+Roles (from ROSTER.md): lead, dev, intern, dispatcher
+
+Examples:
+  ./swarm.sh start                           # launch all with Claude (default)
+  SWARM_AGENT=trae ./swarm.sh start          # launch all with Trae
+  SWARM_AGENT=qwen ./swarm.sh start          # launch all with Qwen
+  SWARM_AGENT=qwen ./swarm.sh start alice bob  # launch specific sessions with Qwen
+  ./swarm.sh start alice bob                 # launch two with default agent
+  ./swarm.sh attach alice                     # interactive access
+  ./swarm.sh stop bob                       # stop one
+  SWARM_MODE=screen ./swarm.sh start         # force screen mode
+EOF
+}
+
+if [ "$MODE" = "none" ]; then
+    echo "ERROR: neither tmux nor screen found. Install one: brew install tmux" >&2
+    exit 1
+fi
+
+case "${1:-help}" in
+    start)      shift; do_start "$@" ;;
+    status)     do_status ;;
+    stop)       shift; do_stop "$@" ;;
+    restart)    shift; do_restart "$@" ;;
+    suspend)    shift; do_suspend "$@" ;;
+    resume)     shift; do_resume "$@" ;;
+    morning)    do_morning ;;
+    attach)     shift; do_attach "$@" ;;
+    attendance) do_attendance ;;
+    help|-h|--help) cmd_help ;;
+    *) echo "Unknown: $1 (try ./swarm.sh help)" >&2; exit 1 ;;
+esac

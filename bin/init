@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CLAUDES_HOME="$(cd "$(dirname "$0")/.." && pwd)"
+if [ $# -eq 0 ]; then echo "Usage: claudes-code init <session-name> [session-name...]"; exit 1; fi
+DIR="$(pwd)/.claudes"
+if [ -f "$DIR/board.db" ]; then echo "Already initialized: $DIR"; exit 0; fi
+mkdir -p "$DIR/sessions" "$DIR/files" "$DIR/okr" "$DIR/cv" "$DIR/logs"
+
+SESSIONS=("$@")
+cat > "$DIR/config.sh" << EOF
+CLAUDES_HOME="$CLAUDES_HOME"
+SESSIONS=(${SESSIONS[*]})
+PREFIX="cc"
+EOF
+
+sqlite3 "$DIR/board.db" < "$CLAUDES_HOME/schema.sql"
+for name in "${SESSIONS[@]}"; do
+    n=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+    sqlite3 "$DIR/board.db" "INSERT OR IGNORE INTO sessions(name) VALUES ('$n');"
+    printf "# %s\n\n## Current task\n(none)\n\n## @inbox\n" "$n" > "$DIR/sessions/${n}.md"
+done
+
+# Symlink bin/ into project so commands work as ./board, ./swarm
+ln -sf "$CLAUDES_HOME/bin/board" "$(pwd)/board" 2>/dev/null || true
+ln -sf "$CLAUDES_HOME/bin/swarm" "$(pwd)/swarm" 2>/dev/null || true
+ln -sf "$CLAUDES_HOME/bin/dispatcher" "$(pwd)/dispatcher" 2>/dev/null || true
+
+# Generate CLAUDE.md
+cat > "$(pwd)/CLAUDE.md" << 'CLAUDE'
+# Multi-Agent Coordination
+
+This project uses claudes-code for multi-session coordination.
+
+## Session Startup
+
+You are a session. Your name is passed via `--name` when Claude Code starts.
+On startup:
+```bash
+./board --as <your-name> inbox
+```
+
+## Commands
+
+```bash
+./board --as <name> send <to> "<msg>"    # message (person or "all")
+./board --as <name> inbox                # check unread
+./board --as <name> ack                  # clear inbox
+./board --as <name> status "<desc>"      # update current task
+./board --as <name> task add "<desc>"    # add task
+./board --as <name> task done            # finish current task
+./board --as <name> view                 # board overview
+./board --as <name> bug report P1 "desc" # report bug
+./board --as <name> send all "msg"       # broadcast
+```
+
+## Rules
+
+- Check inbox at startup and after completing each task.
+- Update status when you start or finish work.
+- Commit immediately after each logical change.
+- Message others via `send`, not by editing their files.
+CLAUDE
+
+# Append session list to CLAUDE.md
+echo "" >> "$(pwd)/CLAUDE.md"
+echo "## Sessions" >> "$(pwd)/CLAUDE.md"
+echo "" >> "$(pwd)/CLAUDE.md"
+for s in "${SESSIONS[@]}"; do
+    echo "- **$s**" >> "$(pwd)/CLAUDE.md"
+done
+
+# Generate .claude/settings.json with hooks
+mkdir -p "$(pwd)/.claude"
+cat > "$(pwd)/.claude/settings.json" << 'HOOKS'
+{
+  "hooks": {
+    "PostToolBatch": [
+      {
+        "type": "command",
+        "command": "if [ -n \"$CLAUDE_SESSION_NAME\" ] && [ -x ./board ]; then unread=$(./board --as $CLAUDE_SESSION_NAME inbox 2>/dev/null | grep -oE '[0-9]+ 条未读' | head -1); [ -n \"$unread\" ] && echo \"[inbox] $unread\" || true; fi"
+      }
+    ]
+  }
+}
+HOOKS
+
+# .gitignore for generated stuff
+cat > "$(pwd)/.claudes/.gitignore" << 'GI'
+board.db
+board.db-shm
+board.db-wal
+logs/
+GI
+
+echo "Initialized claudes-code (sessions: ${SESSIONS[*]})"
+echo ""
+echo "  ./board --as ${SESSIONS[0]} send all \"hello\""
+echo "  ./swarm start"

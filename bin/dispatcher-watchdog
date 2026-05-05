@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# dispatcher-watchdog.sh — Keeps dispatcher.sh running, restarts on crash
+#
+# Usage: nohup ./tools/dispatcher-watchdog.sh > /tmp/dispatcher.log 2>&1 &
+
+DISPATCHER="${TOOLS_SWARM}/dispatcher.sh"
+MAX_RESTARTS=50
+COOLDOWN=5
+CRASH_WINDOW=60
+LOG_TAG="[watchdog]"
+
+restart_count=0
+last_crash=0
+
+log() { echo "$LOG_TAG $(date '+%H:%M:%S') $*"; }
+
+log "Starting watchdog for dispatcher.sh (max restarts: $MAX_RESTARTS)"
+
+while true; do
+    log "Launching dispatcher.sh (restart #${restart_count})"
+    bash "$DISPATCHER"
+    exit_code=$?
+    now=$(date +%s)
+
+    log "dispatcher.sh exited with code $exit_code"
+
+    if [ $((now - last_crash)) -lt "$CRASH_WINDOW" ]; then
+        restart_count=$((restart_count + 1))
+        if [ "$restart_count" -ge "$MAX_RESTARTS" ]; then
+            log "FATAL: $MAX_RESTARTS rapid restarts within ${CRASH_WINDOW}s window. Giving up."
+            exit 1
+        fi
+        log "Rapid restart detected (#${restart_count}/${MAX_RESTARTS}), cooling down ${COOLDOWN}s..."
+        sleep "$COOLDOWN"
+    else
+        restart_count=0
+    fi
+    last_crash=$now
+done
