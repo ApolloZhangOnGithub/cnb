@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # panel.sh — clean team status panel, auto-refreshes
 
-PREFIX="cc"
+_self="$0"; [ -L "$_self" ] && _self="$(readlink "$_self")"; CLAUDES_HOME="$(cd "$(dirname "$_self")/.." && pwd)"
+source "$CLAUDES_HOME/lib/discover.sh"
+
+PREFIX="${PREFIX:-cc}"
 INTERVAL="${1:-8}"
 
 status_icon() {
@@ -16,7 +19,7 @@ status_icon() {
     output=$(tmux capture-pane -t "${PREFIX}-${name}" -p 2>/dev/null | tail -8)
     if echo "$output" | grep -q "bypass permissions"; then
         echo ".."
-    elif echo "$output" | grep -q "Running\|Thinking\|Reasoning\|Symbioting\|Seasoning\|Twisting\|Churning\|Sautéing\|Crunching\|Cooking"; then
+    elif echo "$output" | grep -qE '^\s*(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|●)'; then
         echo ">>"
     else
         echo "~~"
