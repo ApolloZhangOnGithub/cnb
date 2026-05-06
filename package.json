@@ -8,6 +8,8 @@
   "files": [
     "bin/",
     "lib/",
+    "!lib/**/__pycache__/",
+    "!lib/**/*.pyc",
     "migrations/",
     "registry/",
     "schema.sql",
