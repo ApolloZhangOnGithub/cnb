@@ -5,6 +5,7 @@
   "role": "lead",
   "description": "统筹协调，社区维护",
   "created": "2026-05-06",
-  "prev": "GENESIS",
-  "chain": "82a167d"
+  "prev": "9b0f017ebc29a808",
+  "chain": "82a167d",
+  "content_hash": "c3865a0bcfcbe097"
 }

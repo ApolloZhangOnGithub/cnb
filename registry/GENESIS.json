@@ -4,5 +4,6 @@
   "type": "project",
   "created": "2026-05-06",
   "description": "Genesis block. The beginning of claudes-code.",
-  "chain": null
+  "chain": null,
+  "content_hash": "9b0f017ebc29a808"
 }
