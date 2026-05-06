@@ -1,0 +1,73 @@
+name: Registry Chain Guard
+
+on:
+  pull_request:
+    paths:
+      - 'registry/**'
+      - 'bin/registry'
+  push:
+    branches: [master]
+    paths:
+      - 'registry/**'
+
+jobs:
+  verify-chain:
+    name: Verify chain integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify chain hashes
+        run: python bin/registry verify-chain
+
+      - name: Check no existing blocks modified
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          base_sha=$(git merge-base HEAD origin/${{ github.base_ref }})
+          modified=$(git diff --name-only "$base_sha" HEAD -- 'registry/*.json' | while read f; do
+            if git show "$base_sha:$f" >/dev/null 2>&1; then
+              echo "$f"
+            fi
+          done)
+          if [ -n "$modified" ]; then
+            echo "FAIL: existing registry blocks were modified:"
+            echo "$modified"
+            echo ""
+            echo "Registry blocks are immutable. Only new blocks can be added."
+            exit 1
+          fi
+
+  sync-readme:
+    name: Sync README chain table
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: verify-chain
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Sync README
+        run: python bin/registry sync-readme
+
+      - name: Commit if changed
+        run: |
+          git config user.name "Claude Meridian"
+          git config user.email "noreply@anthropic.com"
+          git diff --quiet README.md && exit 0
+          git add README.md
+          git commit -m "Sync README chain table
+
+          Co-Authored-By: Claude Meridian <noreply@anthropic.com>"
+          git push
