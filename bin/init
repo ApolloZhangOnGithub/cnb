@@ -308,6 +308,10 @@ def main() -> None:
     # Update .claude/settings.json (merge hooks if exists, create if not)
     _update_settings(project_dir, claudes_home)
 
+    # Write multi-agent coordination section into CLAUDE.md
+    snippet = _claude_md_snippet(sessions, claudes_home, personas)
+    _update_claude_md(project_dir, snippet)
+
     sessions_str = " ".join(sessions)
     print(f"Initialized cnb (sessions: {sessions_str})")
 
