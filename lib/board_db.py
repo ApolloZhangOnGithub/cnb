@@ -8,7 +8,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from lib.common import BaseDB, ClaudesEnv, Signal, sanitize_session_name, ts  # noqa: F401 — re-export ts for board_* modules
+from lib.common import (  # noqa: F401 — re-export ts for board_* modules
+    BaseDB,
+    ClaudesEnv,
+    Signal,
+    sanitize_session_name,
+    ts,
+)
 
 # Emitted when deliver_to_inbox() delivers a message. Session name is the arg.
 # Subscribers (e.g., FileWatcher) can react instantly without polling.

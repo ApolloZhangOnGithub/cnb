@@ -20,23 +20,33 @@ def _git(project_root: Path, *args: str) -> str:
 
 
 def _tmux_has_session(name: str) -> bool:
-    r = subprocess.run(["tmux", "has-session", "-t", name], capture_output=True)
-    return r.returncode == 0
+    try:
+        r = subprocess.run(["tmux", "has-session", "-t", name], capture_output=True, timeout=3)
+        return r.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
 
 
 def _tmux_pane_command(name: str) -> str:
-    r = subprocess.run(
-        ["tmux", "list-panes", "-t", name, "-F", "#{pane_current_command}"],
-        capture_output=True,
-        text=True,
-    )
-    return r.stdout.strip().split("\n")[0]
+    try:
+        r = subprocess.run(
+            ["tmux", "list-panes", "-t", name, "-F", "#{pane_current_command}"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return r.stdout.strip().split("\n")[0]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
 
 
 def _pgrep(pattern: str) -> str | None:
-    r = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True)
-    if r.returncode == 0:
-        return r.stdout.strip().split("\n")[0]
+    try:
+        r = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True, timeout=3)
+        if r.returncode == 0:
+            return r.stdout.strip().split("\n")[0]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
     return None
 
 

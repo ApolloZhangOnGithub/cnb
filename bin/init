@@ -17,7 +17,7 @@ if str(CLAUDES_HOME) not in sys.path:
 # ── Session name validation ──
 
 VALID_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
-RESERVED_NAMES: frozenset[str] = frozenset({"all", "dispatcher", "lead", "system"})
+RESERVED_NAMES: frozenset[str] = frozenset({"all", "dispatcher", "system"})
 MAX_NAME_LEN = 64
 
 
@@ -43,7 +43,7 @@ MARKER_START = "<!-- claudes-code:start -->"
 MARKER_END = "<!-- claudes-code:end -->"
 
 
-def _claude_md_snippet(sessions: list[str], claudes_home: Path) -> str:
+def _claude_md_snippet(sessions: list[str], claudes_home: Path, personas: dict[str, str] | None = None) -> str:
     board = f"{claudes_home}/bin/board"
     lines = [
         MARKER_START,
@@ -84,7 +84,11 @@ def _claude_md_snippet(sessions: list[str], claudes_home: Path) -> str:
         "",
     ]
     for s in sessions:
-        lines.append(f"- **{s}**")
+        p = (personas or {}).get(s, "")
+        if p:
+            lines.append(f"- **{s}** — {p.splitlines()[0]}")
+        else:
+            lines.append(f"- **{s}**")
     lines.append(MARKER_END)
     return "\n".join(lines) + "\n"
 
@@ -124,7 +128,10 @@ def _update_settings(project_dir: Path, claudes_home: Path) -> None:
     settings_dir.mkdir(exist_ok=True)
     settings_path = settings_dir / "settings.json"
 
-    hook_entry = {"type": "command", "command": _hook_command(claudes_home)}
+    hook_entry = {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": _hook_command(claudes_home)}],
+    }
 
     if settings_path.exists():
         try:
@@ -138,8 +145,12 @@ def _update_settings(project_dir: Path, claudes_home: Path) -> None:
     post_batch = hooks.setdefault("PostToolBatch", [])
 
     already = any(
-        (isinstance(h, dict) and "claudes-code" in h.get("command", ""))
-        or (isinstance(h, dict) and "board" in h.get("command", "") and "inbox" in h.get("command", ""))
+        isinstance(h, dict)
+        and any(
+            "board" in sub.get("command", "") and "inbox" in sub.get("command", "")
+            for sub in h.get("hooks", [])
+            if isinstance(sub, dict)
+        )
         for h in post_batch
     )
     if not already:
@@ -148,13 +159,83 @@ def _update_settings(project_dir: Path, claudes_home: Path) -> None:
     settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
 
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        print("Usage: claudes-code init <session-name> [session-name...]")
-        sys.exit(1)
+def _create_slash_commands(project_dir: Path, claudes_home: Path) -> None:
+    cmd_dir = project_dir / ".claude" / "commands"
+    cmd_dir.mkdir(parents=True, exist_ok=True)
 
+    board = f"{claudes_home}/bin/board"
+    swarm = f"{claudes_home}/bin/swarm"
+
+    commands = {
+        "cs-team": f"运行 `{swarm} status` 和 `{board} --as lead view`，用简洁的表格告诉我每个同学的状态。",
+        "cs-inbox": f"运行 `{board} --as lead inbox`，把收到的消息汇总给我。",
+        "cs-broadcast": f"把以下消息广播给所有同学：\n`{board} --as lead send all \"$ARGUMENTS\"`",
+        "cs-assign": f"把任务分配给指定同学。参数格式：<名字> <任务描述>\n解析 $ARGUMENTS，运行 `{board} --as lead send <名字> \"<任务描述>\"`",
+        "cs-kick": f"让指定同学下线。解析 $ARGUMENTS 拿到名字，运行 `{swarm} stop $ARGUMENTS`",
+        "cs-add": f"拉新同学上线。解析 $ARGUMENTS 拿到名字，运行 `{swarm} start $ARGUMENTS`",
+        "cs-log": f"查看指定同学最近的工作日志。解析 $ARGUMENTS 拿到名字，运行 `{board} --as lead view` 并重点关注该同学的状态和最近消息。",
+        "cs-stop": f"停掉所有后台同学。运行 `{swarm} stop`，告诉用户已全部下线。",
+        "cs-bugs": f"运行 `{board} --as lead bug list`，汇总当前所有 bug。",
+        "cs-help": "列出所有 /cs-* 命令及用途：\n"
+            "- /cs-team — 看同学状态\n"
+            "- /cs-inbox — 查收消息\n"
+            "- /cs-broadcast <消息> — 广播\n"
+            "- /cs-assign <名字> <任务> — 派任务\n"
+            "- /cs-add <名字> — 拉同学上线\n"
+            "- /cs-kick <名字> — 让同学下线\n"
+            "- /cs-log <名字> — 看同学工作日志\n"
+            "- /cs-stop — 全部下线\n"
+            "- /cs-bugs — 看 bug 列表\n"
+            "- /cs-help — 本帮助",
+    }
+
+    for name, content in commands.items():
+        (cmd_dir / f"{name}.md").write_text(content + "\n")
+
+
+DEFAULT_SESSIONS = ["s1", "s2", "s3"]
+
+
+def _load_team_toml(path: Path) -> tuple[list[str], dict[str, str]]:
+    """Load a team definition TOML file. Returns (session_names, {name: persona})."""
+    import tomllib
+
+    data = tomllib.loads(path.read_text())
+    personas: dict[str, str] = {}
+    sessions: list[str] = []
+    for name, info in data.get("session", {}).items():
+        clean = _validate_name(name)
+        sessions.append(clean)
+        if isinstance(info, dict) and info.get("persona"):
+            personas[clean] = info["persona"]
+    return sessions, personas
+
+
+def main() -> None:
     raw_sessions: list[str] = sys.argv[1:]
-    sessions = [_validate_name(s) for s in raw_sessions]
+
+    team_file: Path | None = None
+    personas: dict[str, str] = {}
+
+    # Check for --team flag
+    if "--team" in raw_sessions:
+        idx = raw_sessions.index("--team")
+        if idx + 1 < len(raw_sessions):
+            team_file = Path(raw_sessions[idx + 1])
+            if not team_file.exists():
+                print(f"ERROR: team file not found: {team_file}")
+                raise SystemExit(1)
+            raw_sessions = raw_sessions[:idx] + raw_sessions[idx + 2 :]
+        else:
+            print("ERROR: --team requires a path")
+            raise SystemExit(1)
+
+    if team_file:
+        sessions, personas = _load_team_toml(team_file)
+    elif raw_sessions:
+        sessions = [_validate_name(s) for s in raw_sessions]
+    else:
+        sessions = list(DEFAULT_SESSIONS)
     project_dir = Path.cwd()
     claudes_dir = project_dir / ".claudes"
     claudes_home = CLAUDES_HOME
@@ -173,8 +254,18 @@ def main() -> None:
 
     # Generate config.toml
     sessions_toml = ", ".join(f'"{s}"' for s in sessions)
-    toml_content = f'claudes_home = "{claudes_home}"\nsessions = [{sessions_toml}]\nprefix = "{prefix}"\n'
-    (claudes_dir / "config.toml").write_text(toml_content)
+    toml_lines = [
+        f'claudes_home = "{claudes_home}"',
+        f"sessions = [{sessions_toml}]",
+        f'prefix = "{prefix}"',
+        "",
+    ]
+    for s in sessions:
+        toml_lines.append(f"[session.{s}]")
+        p = personas.get(s, "")
+        toml_lines.append(f'persona = """{p}"""' if "\n" in p else f'persona = "{p}"')
+        toml_lines.append("")
+    (claudes_dir / "config.toml").write_text("\n".join(toml_lines) + "\n")
 
     # Initialize SQLite database from schema.sql
     schema_file = claudes_home / "schema.sql"
@@ -187,12 +278,14 @@ def main() -> None:
     conn.execute("INSERT OR IGNORE INTO sessions(name, status) VALUES ('all', 'system')")
     for name in sessions:
         n = name.lower()
-        conn.execute("INSERT OR IGNORE INTO sessions(name) VALUES (?)", (n,))
-        md_content = f"# {n}\n\n## Current task\n(none)\n\n## @inbox\n"
+        persona = personas.get(n, "")
+        conn.execute("INSERT OR IGNORE INTO sessions(name, persona) VALUES (?, ?)", (n, persona))
+        persona_section = f"\n## Persona\n{persona}\n" if persona else ""
+        md_content = f"# {n}\n{persona_section}\n## Current task\n(none)\n\n## @inbox\n"
         (claudes_dir / "sessions" / f"{n}.md").write_text(md_content)
     conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('dispatcher_session', 'dispatcher')")
     # Record schema version so migration runner knows where we are
-    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1')")
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '2')")
     conn.commit()
     conn.close()
 
@@ -207,18 +300,11 @@ def main() -> None:
     gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\n"
     (claudes_dir / ".gitignore").write_text(gitignore_content)
 
-    # Update CLAUDE.md (append if exists, create if not)
-    snippet = _claude_md_snippet(sessions, claudes_home)
-    _update_claude_md(project_dir, snippet)
-
     # Update .claude/settings.json (merge hooks if exists, create if not)
     _update_settings(project_dir, claudes_home)
 
     sessions_str = " ".join(sessions)
     print(f"Initialized claudes-code (sessions: {sessions_str})")
-    print()
-    print(f'  claudes-code board --as {sessions[0]} send all "hello"')
-    print("  claudes-code swarm start")
 
 
 if __name__ == "__main__":

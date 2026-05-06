@@ -1,13 +1,10 @@
 """board_maintenance — data maintenance: prune, backup, restore."""
 
 import shutil
-import sys
 import time
 from pathlib import Path
 
-from lib.board_db import BoardDB, ts
-from lib.common import ClaudesEnv
-
+from lib.board_db import BoardDB
 
 # ---------------------------------------------------------------------------
 # prune
@@ -70,7 +67,7 @@ def cmd_prune(db: BoardDB, args: list[str]) -> None:
     ) or 0
 
     if dry_run:
-        print(f"=== DRY RUN: would delete ===")
+        print("=== DRY RUN: would delete ===")
         print(f"  {old_messages} messages older than {before_days} days")
         print(f"  {old_inbox} inbox entries referencing old messages")
         print(f"  {old_read_inbox} already-read inbox entries")
@@ -220,9 +217,9 @@ def cmd_restore(db: BoardDB, args: list[str]) -> None:
         raise SystemExit(1)
 
     if not force:
-        print(f"About to restore board.db from:")
+        print("About to restore board.db from:")
         print(f"  {source}")
-        print(f"This will OVERWRITE the current database.")
+        print("This will OVERWRITE the current database.")
         try:
             answer = input("Continue? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):

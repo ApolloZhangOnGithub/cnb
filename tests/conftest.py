@@ -58,6 +58,8 @@ def tmp_project(tmp_path):
     # Insert test sessions
     for name in DEFAULT_SESSIONS:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (name,))
+    # Mark schema as fully up-to-date so auto-migrate won't re-apply
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '2')")
     conn.commit()
     conn.close()
 
@@ -88,11 +90,30 @@ def db_conn(db_path):
 
 
 @pytest.fixture
-def db(db_path):
-    """Return a BoardDB instance for the temp project."""
-    from lib.board_db import BoardDB
+def db(tmp_project):
+    """Return a BoardDB instance backed by a full ClaudesEnv (not bare path).
 
-    return BoardDB(db_path)
+    This ensures db.env is populated, so commands that access the filesystem
+    (attachments, .md sync) work correctly in tests.
+    """
+    from lib.board_db import BoardDB
+    from lib.common import ClaudesEnv
+
+    cd = tmp_project / ".claudes"
+    env = ClaudesEnv(
+        claudes_dir=cd,
+        project_root=tmp_project,
+        install_home=Path(__file__).parent.parent,
+        board_db=cd / "board.db",
+        sessions_dir=cd / "sessions",
+        cv_dir=cd / "cv",
+        log_dir=cd / "logs",
+        prefix="cc-test",
+        sessions=DEFAULT_SESSIONS,
+        suspended_file=cd / "suspended",
+        attendance_log=cd / "logs" / "attendance.log",
+    )
+    return BoardDB(env)
 
 
 @pytest.fixture

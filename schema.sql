@@ -3,6 +3,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS sessions(
     name TEXT PRIMARY KEY,
     status TEXT DEFAULT '',
+    persona TEXT DEFAULT '',
     updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M','now','localtime'))
 );
 

@@ -1,7 +1,6 @@
 """Shared helper functions for dispatcher concerns (tmux, board, etc.)."""
 
 import hashlib
-import re
 import subprocess
 import sys
 import time

@@ -6,7 +6,7 @@ from lib.common import is_suspended
 
 from .base import Concern
 from .config import DispatcherConfig
-from .helpers import is_claude_running, log, tmux, tmux_ok, tmux_send, warn
+from .helpers import is_claude_running, log, tmux, tmux_send
 
 
 class CoralManager(Concern):

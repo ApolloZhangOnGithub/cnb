@@ -7,7 +7,6 @@ running the bash script through the npm-linked Node.js wrapper.
 """
 
 import os
-import subprocess
 import sys
 from pathlib import Path
 

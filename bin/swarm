@@ -148,23 +148,35 @@ def is_deepseek_session(name: str) -> bool:
     return name in DEEPSEEK_SESSIONS.split()
 
 
+def _worker_system_prompt(name: str) -> str:
+    board = f"{CLAUDES_HOME}/bin/board"
+    return (
+        f"你是 {name}，claudes-code 团队的一员。你在后台工作，通过消息板与组长和同学协作。\n"
+        f"协作命令：\n"
+        f"  {board} --as {name} inbox          # 查看收件箱\n"
+        f"  {board} --as {name} ack            # 清空收件箱\n"
+        f'  {board} --as {name} send <to> "msg" # 发消息\n'
+        f'  {board} --as {name} status "desc"  # 更新状态\n'
+        f"  {board} --as {name} task done      # 完成当前任务\n"
+        f"规则：启动时先 inbox，完成任务后再 inbox，有进展随时汇报给发任务的人。\n"
+        f"你可以直接 send 给任何同学协作，不用什么都通过一个人转。"
+    )
+
+
 def build_agent_cmd(name: str) -> str:
     env_prefix = ""
     if is_deepseek_session(name):
         env_prefix = "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_API_KEY=$DEEPSEEK_API_KEY "
+    prompt = _worker_system_prompt(name)
+    escaped_prompt = prompt.replace("'", "'\\''")
     if SWARM_AGENT == "claude":
         if is_deepseek_session(name):
             return (
                 f"{env_prefix}claude --model deepseek-v4-pro[1m] --name '{name}' "
-                f"--append-system-prompt '你是 {name}。按 CLAUDE.md 的启动流程执行。"
-                f"你正在使用 DeepSeek V4 引擎。'"
+                f"--append-system-prompt '{escaped_prompt}'"
             )
         else:
-            return (
-                f"claude --name '{name}' --append-system-prompt "
-                f"'你是 {name}。按 CLAUDE.md 的启动流程执行。"
-                f"你正在使用 Claude Code 引擎。'"
-            )
+            return f"claude --name '{name}' --dangerously-skip-permissions --append-system-prompt '{escaped_prompt}'"
     elif SWARM_AGENT == "trae":
         return "trae-cli"
     elif SWARM_AGENT == "qwen":
@@ -270,6 +282,18 @@ def _inject_initial_prompt(name: str, sess: str) -> None:
         f.write(f"[WARN] {name}: prompt not detected after 60s, skipping injection\n")
 
 
+def _auto_accept_trust(name: str, sess: str) -> None:
+    waited = 0
+    while waited < 60:
+        r = subprocess.run(["tmux", "capture-pane", "-t", sess, "-p"], capture_output=True, text=True)
+        if "I trust" in r.stdout or "trust this folder" in r.stdout.lower():
+            time.sleep(0.5)
+            subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"])
+            return
+        time.sleep(2)
+        waited += 2
+
+
 def tmux_start_one(name: str) -> None:
     sess = f"{PREFIX}-{name}"
     if tmux_is_running(name):
@@ -292,6 +316,10 @@ def tmux_start_one(name: str) -> None:
 
     agent_cmd = build_agent_cmd(name)
     subprocess.run(["tmux", "send-keys", "-t", sess, agent_cmd, "Enter"])
+
+    # Auto-accept workspace trust dialog
+    t_trust = threading.Thread(target=_auto_accept_trust, args=(name, sess), daemon=True)
+    t_trust.start()
 
     # Queue initial prompt injection in background (waits for agent to be ready)
     t = threading.Thread(target=_inject_initial_prompt, args=(name, sess), daemon=True)

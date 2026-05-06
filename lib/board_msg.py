@@ -2,10 +2,28 @@
 
 import hashlib
 import shutil
+import subprocess
 from pathlib import Path
 
 from lib.board_db import BoardDB, ts
 from lib.common import parse_flags
+
+
+def _nudge_session(db: BoardDB, recipient: str) -> None:
+    """Inject a prompt into the recipient's tmux session to check inbox."""
+    if recipient == "all":
+        sessions = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all'")]
+    else:
+        sessions = [recipient]
+    prefix = db.env.prefix
+    board = db.env.install_home / "bin" / "board"
+    for name in sessions:
+        sess = f"{prefix}-{name}"
+        r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True)
+        if r.returncode == 0:
+            prompt = f"你有新消息，请运行 `{board} --as {name} inbox` 查看并处理。"
+            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", prompt], capture_output=True)
+            subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], capture_output=True)
 
 
 def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -18,7 +36,16 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
         raise SystemExit(1)
 
     to = send_args[0].lower()
+
+    if to != "all" and not db.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (to,)):
+        print(f"ERROR: 收件人 '{to}' 不存在")
+        raise SystemExit(1)
+
     msg = " ".join(send_args[1:]) if len(send_args) > 1 else ""
+
+    if not msg and not attach_file:
+        print("ERROR: 消息不能为空")
+        raise SystemExit(1)
 
     attach_ref = ""
     stored_path = ""
@@ -65,6 +92,8 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     if attach_ref:
         print(f"  附件已存储: {stored_path}")
 
+    _nudge_session(db, to)
+
 
 def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
     name = identity.lower()
@@ -84,6 +113,9 @@ def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
 
 def cmd_inbox(db: BoardDB, identity: str) -> None:
     name = identity.lower()
+    if not db.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (name,)):
+        print(f"ERROR: 会话 '{name}' 未注册")
+        raise SystemExit(1)
     count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
     if not count:
         print("收件箱为空")
@@ -97,7 +129,7 @@ def cmd_inbox(db: BoardDB, identity: str) -> None:
         )
         for (line,) in rows:
             print(line)
-        print(f"\n(处理完后运行 ./board --as {identity} ack)")
+        print(f"\n(运行 ack 清除: board --as {identity} ack)")
 
     _task_print_queue_short(db, name)
 
