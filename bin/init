@@ -160,44 +160,6 @@ def _update_settings(project_dir: Path, claudes_home: Path) -> None:
     settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
 
 
-def _create_slash_commands(project_dir: Path, claudes_home: Path) -> None:
-    cmd_dir = project_dir / ".claude" / "commands"
-    cmd_dir.mkdir(parents=True, exist_ok=True)
-
-    board = f"{claudes_home}/bin/board"
-    swarm = f"{claudes_home}/bin/swarm"
-
-    commands = {
-        "cs-team": f"运行 `{swarm} status` 和 `{board} --as lead view`，用简洁的表格告诉我每个同学的状态。",
-        "cs-inbox": f"运行 `{board} --as lead inbox`，把收到的消息汇总给我。",
-        "cs-broadcast": f'把以下消息广播给所有同学：\n`{board} --as lead send all "$ARGUMENTS"`',
-        "cs-assign": f'把任务分配给指定同学。参数格式：<名字> <任务描述>\n解析 $ARGUMENTS，运行 `{board} --as lead send <名字> "<任务描述>"`',
-        "cs-kick": f"让指定同学下线。解析 $ARGUMENTS 拿到名字，运行 `{swarm} stop $ARGUMENTS`",
-        "cs-add": f"拉新同学上线。解析 $ARGUMENTS 拿到名字，运行 `{swarm} start $ARGUMENTS`",
-        "cs-log": f"查看指定同学最近的工作日志。解析 $ARGUMENTS 拿到名字，运行 `{board} --as lead view` 并重点关注该同学的状态和最近消息。",
-        "cs-stop": f"停掉所有后台同学。运行 `{swarm} stop`，告诉用户已全部下线。",
-        "cs-bugs": f"运行 `{board} --as lead bug list`，汇总当前所有 bug。",
-        "cs-history": f"运行 `{board} --as lead log 50`，把完整的消息历史展示给我。",
-        "cs-update": "运行 `pip install --upgrade cnb`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 cnb 以生效。",
-        "cs-help": "列出所有 /cs-* 命令及用途：\n"
-        "- /cs-team — 看同学状态\n"
-        "- /cs-inbox — 查收消息\n"
-        "- /cs-broadcast <消息> — 广播\n"
-        "- /cs-assign <名字> <任务> — 派任务\n"
-        "- /cs-add <名字> — 拉同学上线\n"
-        "- /cs-kick <名字> — 让同学下线\n"
-        "- /cs-log <名字> — 看同学工作日志\n"
-        "- /cs-stop — 全部下线\n"
-        "- /cs-bugs — 看 bug 列表\n"
-        "- /cs-history — 查看完整消息历史\n"
-        "- /cs-update — 更新到最新版\n"
-        "- /cs-help — 本帮助",
-    }
-
-    for name, content in commands.items():
-        (cmd_dir / f"{name}.md").write_text(content + "\n")
-
-
 DEFAULT_SESSIONS = ["s1", "s2", "s3"]
 
 
