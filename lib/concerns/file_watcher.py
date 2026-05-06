@@ -8,7 +8,7 @@ from lib.common import is_suspended
 from .base import Concern
 from .config import DispatcherConfig
 from .helpers import log
-from .inbox_nudger import InboxNudger
+from .notifications import InboxNudger
 
 
 class FileWatcher(Concern):
