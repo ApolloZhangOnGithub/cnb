@@ -104,11 +104,19 @@ EOF
 cat > "$CMD_DIR/cs-progress.md"  <<EOF
 运行 \`${BOARD} --as ${ME} inbox\` 和 \`${BOARD} --as ${ME} view\`，汇总最近的进展：谁完成了什么、有什么新消息、当前整体进度如何。用简洁的话告诉用户。
 EOF
+cat > "$CMD_DIR/cs-history.md"   <<EOF
+运行 \`${BOARD} --as ${ME} log 50\`，把完整的消息历史展示给我。
+EOF
+cat > "$CMD_DIR/cs-update.md"    <<EOF
+运行 \`pip install --upgrade claudes-code\`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 claudes-code 以生效。
+EOF
 cat > "$CMD_DIR/cs-help.md"      <<EOF
 列出所有 /cs-* 命令：
 - /cs-overview — 团队总览：谁在干什么、谁卡了
 - /cs-watch <名字> — 看某个同学在干什么
 - /cs-progress — 最近进展汇总
+- /cs-history — 查看完整消息历史
+- /cs-update — 更新 claudes-code 到最新版
 EOF
 
 # ---- Require interactive terminal ----

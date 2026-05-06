@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+"""registry — Agent identity chain.
+
+Each agent gets a globally unique block number. Lower = earlier = OG.
+Each block contains SHA256 of the previous block, forming a tamper-proof chain.
+The git commit hash at registration is the on-chain proof.
+
+Usage:
+    registry register <name> [--role <role>] [--description <desc>]
+    registry verify <name>
+    registry verify-chain
+    registry list
+    registry rank
+    registry whois <name>
+"""
+
+import hashlib
+import json
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+REGISTRY_DIR = Path(__file__).resolve().parent.parent / "registry"
+
+
+def _content_hash(entry: dict) -> str:
+    stable = {k: v for k, v in sorted(entry.items()) if k != "content_hash"}
+    return hashlib.sha256(json.dumps(stable, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _load_chain() -> list[dict]:
+    entries = []
+    for f in sorted(REGISTRY_DIR.glob("*.json")):
+        entries.append(json.loads(f.read_text()))
+    entries.sort(key=lambda e: e["block"])
+    return entries
+
+
+def _next_block() -> int:
+    chain = _load_chain()
+    return max(e["block"] for e in chain) + 1 if chain else 0
+
+
+def _find_agent(name: str) -> dict | None:
+    for f in REGISTRY_DIR.glob("*.json"):
+        entry = json.loads(f.read_text())
+        if entry.get("name") == name and entry.get("type") != "project":
+            return entry
+    return None
+
+
+def _git_commit_and_hash(filepath: Path, message: str) -> str:
+    subprocess.run(["git", "add", str(filepath)], check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", message], check=True, capture_output=True)
+    r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], check=True, capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+def _count_contributions(name: str) -> dict:
+    commits = 0
+    r = subprocess.run(
+        ["git", "log", "--all", "--oneline", "--author", name, "--grep", name],
+        capture_output=True,
+        text=True,
+    )
+    commits += len(r.stdout.strip().splitlines()) if r.stdout.strip() else 0
+
+    r = subprocess.run(
+        ["git", "log", "--all", "--oneline", "--grep", f"Co-Authored-By: Claude {name}"],
+        capture_output=True,
+        text=True,
+    )
+    commits += len(r.stdout.strip().splitlines()) if r.stdout.strip() else 0
+
+    r = subprocess.run(
+        ["git", "log", "--all", "--oneline", "--grep", f"by: Claude {name}"],
+        capture_output=True,
+        text=True,
+    )
+    commits += len(r.stdout.strip().splitlines()) if r.stdout.strip() else 0
+
+    return {"commits": commits}
+
+
+def cmd_register(args: list[str]) -> None:
+    if not args:
+        print("Usage: registry register <name> [--role <role>] [--description <desc>]")
+        raise SystemExit(1)
+
+    name = args[0]
+    role = ""
+    description = ""
+
+    i = 1
+    while i < len(args):
+        if args[i] == "--role" and i + 1 < len(args):
+            role = args[i + 1]
+            i += 2
+        elif args[i] == "--description" and i + 1 < len(args):
+            description = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    existing = _find_agent(name)
+    if existing:
+        print(f"ERROR: {name} 已注册 — Block #{existing['block']} ({existing['chain']})")
+        raise SystemExit(1)
+
+    block_num = _next_block()
+    chain = _load_chain()
+    prev_content_hash = chain[-1].get("content_hash", _content_hash(chain[-1])) if chain else "GENESIS"
+
+    entry = {
+        "block": block_num,
+        "name": name,
+        "type": "agent",
+        "role": role,
+        "description": description,
+        "created": datetime.now().strftime("%Y-%m-%d"),
+        "prev": prev_content_hash,
+        "chain": None,
+        "content_hash": None,
+    }
+
+    filename = f"{block_num:04d}-{name}.json"
+    filepath = REGISTRY_DIR / filename
+    filepath.write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n")
+
+    commit_hash = _git_commit_and_hash(filepath, f"Register {name} — Block #{block_num}")
+
+    entry["chain"] = commit_hash
+    entry["content_hash"] = _content_hash(entry)
+    filepath.write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n")
+    subprocess.run(["git", "add", str(filepath)], capture_output=True)
+    subprocess.run(["git", "commit", "--amend", "--no-edit"], capture_output=True)
+
+    print(f"OK {name} — Block #{block_num} ({commit_hash})")
+
+
+def cmd_verify(args: list[str]) -> None:
+    if not args:
+        print("Usage: registry verify <name>")
+        raise SystemExit(1)
+
+    name = args[0]
+    entry = _find_agent(name)
+    if not entry:
+        print(f"ERROR: {name} 未注册")
+        raise SystemExit(1)
+
+    expected_hash = _content_hash(entry)
+    stored_hash = entry.get("content_hash", "")
+
+    commit_hash = entry.get("chain", "")
+    r = subprocess.run(
+        ["git", "log", "--oneline", "--all", "--grep", f"Register {name}"],
+        capture_output=True,
+        text=True,
+    )
+
+    content_ok = expected_hash == stored_hash
+    chain_ok = commit_hash and commit_hash in r.stdout
+
+    if content_ok and chain_ok:
+        print(f"OK {name} — Block #{entry['block']} ({commit_hash}) ✓ 内容完整，链上验证通过")
+    elif not content_ok:
+        print(f"FAIL {name} — Block #{entry['block']} ✗ 内容被篡改！")
+        raise SystemExit(1)
+    else:
+        print(f"WARN {name} — Block #{entry['block']} ✗ 链上记录未找到")
+
+
+def cmd_verify_chain(_args: list[str]) -> None:
+    chain = _load_chain()
+    ok = 0
+    fail = 0
+
+    for i, entry in enumerate(chain):
+        name = entry["name"]
+        block = entry["block"]
+
+        if i == 0:
+            ok += 1
+            continue
+
+        prev_entry = chain[i - 1]
+        expected_prev = prev_entry.get("content_hash", _content_hash(prev_entry))
+        actual_prev = entry.get("prev", "")
+
+        expected_content = _content_hash(entry)
+        actual_content = entry.get("content_hash", "")
+
+        if actual_prev != expected_prev:
+            print(f"  ✗ Block #{block} ({name}): prev hash 不匹配 — 链断裂！")
+            fail += 1
+        elif actual_content != expected_content:
+            print(f"  ✗ Block #{block} ({name}): 内容被篡改！")
+            fail += 1
+        else:
+            print(f"  ✓ Block #{block} ({name})")
+            ok += 1
+
+    print()
+    if fail == 0:
+        print(f"OK 链完整 ({ok} blocks)")
+    else:
+        print(f"FAIL {fail} 个 block 异常，{ok} 个正常")
+        raise SystemExit(1)
+
+
+def cmd_list(_args: list[str]) -> None:
+    chain = _load_chain()
+    print(f"{'Block':>6}  {'Name':<20}  {'Role':<15}  {'Hash':<10}  {'Date'}")
+    print(f"{'─' * 6}  {'─' * 20}  {'─' * 15}  {'─' * 10}  {'─' * 10}")
+    for entry in chain:
+        block = f"#{entry['block']}"
+        name = entry["name"]
+        role = entry.get("role", entry.get("type", ""))
+        chain_hash = entry.get("chain", "") or ""
+        created = entry.get("created", "")
+        print(f"{block:>6}  {name:<20}  {role:<15}  {chain_hash:<10}  {created}")
+
+
+def cmd_rank(_args: list[str]) -> None:
+    chain = _load_chain()
+    agents = [e for e in chain if e.get("type") == "agent"]
+
+    rows = []
+    for entry in agents:
+        name = entry["name"]
+        contrib = _count_contributions(name)
+        rows.append(
+            {
+                "name": name,
+                "block": entry["block"],
+                "commits": contrib["commits"],
+                "role": entry.get("role", ""),
+            }
+        )
+
+    rows.sort(key=lambda r: (-r["commits"], r["block"]))
+
+    print(f"{'Rank':>4}  {'Name':<20}  {'Block':>6}  {'Commits':>8}  {'Role'}")
+    print(f"{'─' * 4}  {'─' * 20}  {'─' * 6}  {'─' * 8}  {'─' * 15}")
+    for i, row in enumerate(rows, 1):
+        medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"  {i}")
+        print(f"{medal:>4}  {row['name']:<20}  #{row['block']:>5}  {row['commits']:>8}  {row['role']}")
+
+
+def cmd_whois(args: list[str]) -> None:
+    if not args:
+        print("Usage: registry whois <name>")
+        raise SystemExit(1)
+
+    name = args[0]
+    entry = _find_agent(name)
+    if not entry:
+        print(f"{name}: 未注册")
+        raise SystemExit(1)
+
+    contrib = _count_contributions(name)
+    print(f"  Name:         {entry['name']}")
+    print(f"  Block:        #{entry['block']}")
+    print(f"  Role:         {entry.get('role', '-')}")
+    print(f"  Desc:         {entry.get('description', '-')}")
+    print(f"  Chain:        {entry.get('chain', '-')}")
+    print(f"  Content Hash: {entry.get('content_hash', '-')}")
+    print(f"  Prev Hash:    {entry.get('prev', '-')}")
+    print(f"  Date:         {entry.get('created', '-')}")
+    print(f"  Commits:      {contrib['commits']}")
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print(__doc__)
+        raise SystemExit(1)
+
+    cmd = sys.argv[1]
+    rest = sys.argv[2:]
+
+    commands = {
+        "register": cmd_register,
+        "verify": cmd_verify,
+        "verify-chain": cmd_verify_chain,
+        "list": cmd_list,
+        "rank": cmd_rank,
+        "whois": cmd_whois,
+    }
+
+    handler = commands.get(cmd)
+    if handler:
+        handler(rest)
+    else:
+        print(f"Unknown command: {cmd}")
+        print(__doc__)
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
