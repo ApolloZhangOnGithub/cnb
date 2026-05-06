@@ -13,6 +13,11 @@ def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
         raise SystemExit(1)
     target = args[0].lower()
 
+    session_exists = db.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (target,))
+    if not session_exists:
+        print(f"ERROR: 会话 '{target}' 不存在")
+        raise SystemExit(1)
+
     already = db.scalar("SELECT COUNT(*) FROM suspended WHERE name=?", (target,))
     if already:
         print(f"{target} 已在停工名单中")
@@ -56,8 +61,8 @@ def cmd_resume(db: BoardDB, identity: str, args: list[str]) -> None:
 
     exists = db.scalar("SELECT COUNT(*) FROM suspended WHERE name=?", (target,))
     if not exists:
-        print(f"{target} 不在停工名单中")
-        return
+        print(f"ERROR: {target} 不在停工名单中")
+        raise SystemExit(1)
 
     db.execute("DELETE FROM suspended WHERE name=?", (target,))
 
