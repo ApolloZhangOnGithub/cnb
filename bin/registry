@@ -112,9 +112,12 @@ def cmd_register(args: list[str]) -> None:
     chain = _load_chain()
     prev_content_hash = chain[-1].get("content_hash", _content_hash(chain[-1])) if chain else "GENESIS"
 
+    display_name = f"Claude {name.capitalize()}"
+
     entry = {
         "block": block_num,
         "name": name,
+        "display_name": display_name,
         "type": "agent",
         "role": role,
         "description": description,
@@ -136,7 +139,7 @@ def cmd_register(args: list[str]) -> None:
     subprocess.run(["git", "add", str(filepath)], capture_output=True)
     subprocess.run(["git", "commit", "--amend", "--no-edit"], capture_output=True)
 
-    print(f"OK {name} — Block #{block_num} ({commit_hash})")
+    print(f"OK {display_name} — Block #{block_num} ({commit_hash})")
 
 
 def cmd_verify(args: list[str]) -> None:
@@ -212,15 +215,15 @@ def cmd_verify_chain(_args: list[str]) -> None:
 
 def cmd_list(_args: list[str]) -> None:
     chain = _load_chain()
-    print(f"{'Block':>6}  {'Name':<20}  {'Role':<15}  {'Hash':<10}  {'Date'}")
-    print(f"{'─' * 6}  {'─' * 20}  {'─' * 15}  {'─' * 10}  {'─' * 10}")
+    print(f"{'Block':>6}  {'Name':<25}  {'Role':<15}  {'Hash':<10}  {'Date'}")
+    print(f"{'─' * 6}  {'─' * 25}  {'─' * 15}  {'─' * 10}  {'─' * 10}")
     for entry in chain:
         block = f"#{entry['block']}"
-        name = entry["name"]
+        name = entry.get("display_name", entry["name"])
         role = entry.get("role", entry.get("type", ""))
         chain_hash = entry.get("chain", "") or ""
         created = entry.get("created", "")
-        print(f"{block:>6}  {name:<20}  {role:<15}  {chain_hash:<10}  {created}")
+        print(f"{block:>6}  {name:<25}  {role:<15}  {chain_hash:<10}  {created}")
 
 
 def cmd_rank(_args: list[str]) -> None:
@@ -234,6 +237,7 @@ def cmd_rank(_args: list[str]) -> None:
         rows.append(
             {
                 "name": name,
+                "display_name": entry.get("display_name", f"Claude {name.capitalize()}"),
                 "block": entry["block"],
                 "commits": contrib["commits"],
                 "role": entry.get("role", ""),
@@ -242,11 +246,11 @@ def cmd_rank(_args: list[str]) -> None:
 
     rows.sort(key=lambda r: (-r["commits"], r["block"]))
 
-    print(f"{'Rank':>4}  {'Name':<20}  {'Block':>6}  {'Commits':>8}  {'Role'}")
-    print(f"{'─' * 4}  {'─' * 20}  {'─' * 6}  {'─' * 8}  {'─' * 15}")
+    print(f"{'Rank':>4}  {'Name':<25}  {'Block':>6}  {'Commits':>8}  {'Role'}")
+    print(f"{'─' * 4}  {'─' * 25}  {'─' * 6}  {'─' * 8}  {'─' * 15}")
     for i, row in enumerate(rows, 1):
         medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"  {i}")
-        print(f"{medal:>4}  {row['name']:<20}  #{row['block']:>5}  {row['commits']:>8}  {row['role']}")
+        print(f"{medal:>4}  {row['display_name']:<25}  #{row['block']:>5}  {row['commits']:>8}  {row['role']}")
 
 
 def cmd_whois(args: list[str]) -> None:
@@ -261,7 +265,9 @@ def cmd_whois(args: list[str]) -> None:
         raise SystemExit(1)
 
     contrib = _count_contributions(name)
-    print(f"  Name:         {entry['name']}")
+    display = entry.get("display_name", f"Claude {name.capitalize()}")
+    print(f"  Name:         {display}")
+    print(f"  ID:           {entry['name']}")
     print(f"  Block:        #{entry['block']}")
     print(f"  Role:         {entry.get('role', '-')}")
     print(f"  Desc:         {entry.get('description', '-')}")
