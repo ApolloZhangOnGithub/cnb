@@ -51,3 +51,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). All changes go through PRs with one appr
 ## License
 
 [OpenAll License v1.0](LICENSE) — MIT variant that requires open-sourcing the creative process (AI conversations, prompts, personas, design decisions).
+
+## Fun fact
+
+The name **cnb** stands for **C**laude **N**orma **B**etty — named after [Claude Shannon](https://en.wikipedia.org/wiki/Claude_Shannon) and his two wives, Norma Levor and Betty Shannon. Not 吹牛逼.
+
