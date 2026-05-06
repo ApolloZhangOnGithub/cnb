@@ -39,6 +39,33 @@ if [ $# -gt 0 ]; then
             fi
             _target="$1"; shift
             exec "$CLAUDES_HOME/bin/board" send "$_target" "$*" ;;
+        compose)
+            shift
+            _TEAM_FILE="${1:-cnb.toml}"
+            if [ ! -f "$_TEAM_FILE" ]; then
+                echo "错误: 找不到团队配置文件 '$_TEAM_FILE'" >&2
+                echo "用法: cnb compose [team-file.toml]" >&2
+                echo "" >&2
+                echo "示例 cnb.toml:" >&2
+                echo '  [session.alice]' >&2
+                echo '  persona = "Backend engineer"' >&2
+                echo '  [session.bob]' >&2
+                echo '  persona = "Frontend specialist"' >&2
+                exit 1
+            fi
+            "$CLAUDES_HOME/bin/init" --team "$_TEAM_FILE"
+            _NAMES=$(python3 -c "
+import tomllib, sys
+data = tomllib.loads(open('$_TEAM_FILE').read())
+names = list(data.get('session', {}).keys())
+print(' '.join(names))
+")
+            if [ -n "$_NAMES" ]; then
+                "$CLAUDES_HOME/bin/swarm" start $_NAMES >/dev/null 2>&1 || true
+                echo "OK 团队已启动: $_NAMES"
+            fi
+            exit 0 ;;
+        ui)         shift; exec "$CLAUDES_HOME/bin/board" tui ;;
         version|--version|-v) echo "cnb v${VERSION}"; exit 0 ;;
         help|--help|-h)
             printf "${B}${G}◆ cnb${N} ${D}v${VERSION}${N}\n"
@@ -46,8 +73,10 @@ if [ $# -gt 0 ]; then
             printf "  cnb                   开始（默认2位同学，AI大佬主题）\n"
             printf "  cnb 5                 5位同学\n"
             printf "  cnb pokemon           宝可梦主题\n"
-            printf "  cnb 5 pokemon         5位同学 + 宝可梦主题\n\n"
+            printf "  cnb 5 pokemon         5位同学 + 宝可梦主题\n"
+            printf "  cnb compose [file]    从配置文件启动团队\n\n"
             printf "  主题: ai animal food lang music myth pokemon space\n\n"
+            printf "  cnb ui                交互式团队面板\n"
             printf "  cnb ps                列出 agent 状态\n"
             printf "  cnb logs <name>       查看某个 agent 的消息历史\n"
             printf "  cnb exec <name> \"msg\" 给某个 agent 发指令\n"
@@ -59,55 +88,63 @@ if [ $# -gt 0 ]; then
     esac
 fi
 
-# ---- Start session: parse [number] [theme] in any order ----
-_NUM=2
-_THEME_IDX=6  # default: AI 大佬
-
-_THEME_MAP="ai:6 animal:0 food:2 lang:1 music:5 myth:4 pokemon:7 space:3"
-
-for arg in "$@"; do
-    if [[ "$arg" =~ ^[0-9]+$ ]]; then
-        _NUM="$arg"
-    else
-        _idx=$(echo "$_THEME_MAP" | tr ' ' '\n' | grep "^${arg}:" | cut -d: -f2 || true)
-        if [ -n "$_idx" ]; then
-            _THEME_IDX="$_idx"
-        else
-            printf "${Y}未知参数: ${arg}${N}\n" >&2
-            echo "用法: cnb [数量] [主题]" >&2
-            echo "主题: ai animal food lang music myth pokemon space" >&2
-            exit 1
-        fi
+# ---- Compose mode: reuse existing team from config.toml ----
+if [ -f .claudes/config.toml ] && [ -f .claudes/board.db ]; then
+    _EXISTING=$(grep '^sessions' .claudes/config.toml | sed 's/sessions = \[//;s/\]//;s/"//g;s/,/ /g;s/  */ /g' | xargs)
+    if [ -n "$_EXISTING" ]; then
+        ME=$(echo "$_EXISTING" | cut -d' ' -f1)
+        WORKERS=$(echo "$_EXISTING" | cut -d' ' -f2-)
+        LABEL=$(grep '^prefix' .claudes/config.toml | cut -d'"' -f2)
+        "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 || true
     fi
-done
+else
+    # ---- Fresh start: parse [number] [theme] in any order ----
+    _NUM=2
+    _THEME_IDX=6  # default: AI 大佬
 
-# ---- Theme data ----
-_THEMES=(
-    "panda otter fox raccoon bunny koala sloth penguin hamster hedgehog duck seal capybara alpaca corgi shiba husky kitten ferret quokka"
-    "python ruby rust go swift kotlin scala perl haskell erlang elixir clojure julia ocaml zig lua dart cobol lisp fortran"
-    "mochi waffle taco ramen sushi bagel pretzel dumpling cookie brownie churro crepe noodle tofu falafel burrito pancake donut nacho boba"
-    "nebula pulsar quasar comet aurora meteor nova orbit cosmos galaxy venus mars saturn pluto titan europa io ceres vega sirius"
-    "dragon phoenix griffin hydra kraken sphinx unicorn pixie goblin imp djinn yeti nymph chimera basilisk manticore cerberus minotaur golem banshee"
-    "jazz blues funk reggae disco punk grunge techno dubstep waltz tango salsa bossa swing opera gospel motown bebop ska hiphop"
-    "altman dario ilya lecun karpathy hassabis sutskever hinton bengio fei-fei ng zuck bezos nadella pichai musk huang lisa-su amodei jack-clark"
-    "pikachu charmander snorlax eevee jigglypuff mewtwo gengar squirtle bulbasaur vulpix psyduck togepi mudkip lucario gardevoir rayquaza mimikyu ditto zorua umbreon"
-)
-_LABELS=("小动物" "编程语言" "美食" "太空" "神话生物" "音乐风格" "AI 大佬" "宝可梦")
+    _THEME_MAP="ai:6 animal:0 food:2 lang:1 music:5 myth:4 pokemon:7 space:3"
 
-[ "$_NUM" -lt 1 ] && _NUM=1
-[ "$_NUM" -gt 20 ] && _NUM=20
+    for arg in "$@"; do
+        if [[ "$arg" =~ ^[0-9]+$ ]]; then
+            _NUM="$arg"
+        else
+            _idx=$(echo "$_THEME_MAP" | tr ' ' '\n' | grep "^${arg}:" | cut -d: -f2 || true)
+            if [ -n "$_idx" ]; then
+                _THEME_IDX="$_idx"
+            else
+                printf "${Y}未知参数: ${arg}${N}\n" >&2
+                echo "用法: cnb [数量] [主题]" >&2
+                echo "主题: ai animal food lang music myth pokemon space" >&2
+                exit 1
+            fi
+        fi
+    done
 
-LABEL="${_LABELS[$_THEME_IDX]}"
-ALL_NAMES=$(echo "${_THEMES[$_THEME_IDX]}" | tr ' ' '\n' | sort -R | head -n $((_NUM + 1)) | tr '\n' ' ' | sed 's/ $//')
-ME=$(echo "$ALL_NAMES" | cut -d' ' -f1)
-WORKERS=$(echo "$ALL_NAMES" | cut -d' ' -f2-)
+    # ---- Theme data ----
+    _THEMES=(
+        "panda otter fox raccoon bunny koala sloth penguin hamster hedgehog duck seal capybara alpaca corgi shiba husky kitten ferret quokka"
+        "python ruby rust go swift kotlin scala perl haskell erlang elixir clojure julia ocaml zig lua dart cobol lisp fortran"
+        "mochi waffle taco ramen sushi bagel pretzel dumpling cookie brownie churro crepe noodle tofu falafel burrito pancake donut nacho boba"
+        "nebula pulsar quasar comet aurora meteor nova orbit cosmos galaxy venus mars saturn pluto titan europa io ceres vega sirius"
+        "dragon phoenix griffin hydra kraken sphinx unicorn pixie goblin imp djinn yeti nymph chimera basilisk manticore cerberus minotaur golem banshee"
+        "jazz blues funk reggae disco punk grunge techno dubstep waltz tango salsa bossa swing opera gospel motown bebop ska hiphop"
+        "altman dario ilya lecun karpathy hassabis sutskever hinton bengio fei-fei ng zuck bezos nadella pichai musk huang lisa-su amodei jack-clark"
+        "pikachu charmander snorlax eevee jigglypuff mewtwo gengar squirtle bulbasaur vulpix psyduck togepi mudkip lucario gardevoir rayquaza mimikyu ditto zorua umbreon"
+    )
+    _LABELS=("小动物" "编程语言" "美食" "太空" "神话生物" "音乐风格" "AI 大佬" "宝可梦")
 
-# ---- Init + start ----
-if [ ! -f .claudes/board.db ]; then
+    [ "$_NUM" -lt 1 ] && _NUM=1
+    [ "$_NUM" -gt 20 ] && _NUM=20
+
+    LABEL="${_LABELS[$_THEME_IDX]}"
+    ALL_NAMES=$(echo "${_THEMES[$_THEME_IDX]}" | tr ' ' '\n' | sort -R | head -n $((_NUM + 1)) | tr '\n' ' ' | sed 's/ $//')
+    ME=$(echo "$ALL_NAMES" | cut -d' ' -f1)
+    WORKERS=$(echo "$ALL_NAMES" | cut -d' ' -f2-)
+
     printf "${D}初始化 .claudes/ ...${N}\n"
     "$CLAUDES_HOME/bin/init" $ALL_NAMES >/dev/null 2>&1
+    "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 || true
 fi
-"$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 || true
 
 # ---- Slash commands (runtime, gitignored) ----
 CMD_DIR=".claude/commands"
