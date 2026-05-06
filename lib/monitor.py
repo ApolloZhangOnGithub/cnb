@@ -231,24 +231,7 @@ def handle_change(file_path: str, env: ClaudesEnv) -> None:
             pass
 
     if unread > 0:
-        sess = f"{env.prefix}-{name}"
-        try:
-            r = subprocess.run(
-                ["tmux", "has-session", "-t", sess],
-                capture_output=True,
-                timeout=5,
-            )
-            if r.returncode == 0:
-                log(f"EVENT: {name} has {unread} unread -- nudging")
-                subprocess.run(
-                    ["tmux", "send-keys", "-t", sess, "-l", f"./board --as {name} inbox"],
-                    timeout=5,
-                )
-                subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=5)
-            else:
-                log(f"EVENT: {name} has {unread} unread -- session not running")
-        except Exception:
-            pass
+        log(f"EVENT: {name} has {unread} unread")
 
 
 # ---------------------------------------------------------------------------

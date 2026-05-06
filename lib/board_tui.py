@@ -61,20 +61,25 @@ def cmd_tui(db: BoardDB) -> None:
         if i < len(win_indices):
             _tmux("rename-window", "-t", f"{UI_SESSION}:{win_indices[i]}", name)
 
-    # Mouse + visual config
-    _tmux("set-option", "-t", UI_SESSION, "mouse", "on")
-    _tmux("set-option", "-t", UI_SESSION, "status", "on")
-    _tmux("set-option", "-t", UI_SESSION, "status-position", "top")
-    _tmux("set-option", "-t", UI_SESSION, "status-style", "bg=#1a1a2e,fg=#e0e0e0")
-    _tmux("set-option", "-t", UI_SESSION, "status-left", " ◆ cnb  ")
-    _tmux("set-option", "-t", UI_SESSION, "status-left-style", "fg=#00d4aa,bold")
-    _tmux("set-option", "-t", UI_SESSION, "status-left-length", "10")
-    _tmux("set-option", "-t", UI_SESSION, "status-right", f" {len(online)} workers ")
-    _tmux("set-option", "-t", UI_SESSION, "status-right-style", "fg=#888888")
-    _tmux("set-option", "-t", UI_SESSION, "window-status-format", " #W ")
-    _tmux("set-option", "-t", UI_SESSION, "window-status-current-format", " #W ")
-    _tmux("set-option", "-t", UI_SESSION, "window-status-style", "fg=#888888")
-    _tmux("set-option", "-t", UI_SESSION, "window-status-current-style", "fg=#ffffff,bg=#4a4a6a,bold")
+    # Mouse + clean visual config
+    opts = {
+        "mouse": "on",
+        "status": "on",
+        "status-position": "top",
+        "status-style": "bg=default,fg=white",
+        "status-left": " cnb ",
+        "status-left-style": "bold",
+        "status-left-length": "6",
+        "status-right": f" {len(online)} online ",
+        "status-right-style": "dim",
+        "window-status-format": " #W ",
+        "window-status-current-format": " #W ",
+        "window-status-style": "dim",
+        "window-status-current-style": "bold,underscore",
+        "window-status-separator": "",
+    }
+    for k, v in opts.items():
+        _tmux("set-option", "-t", UI_SESSION, k, v)
 
     # Open in new terminal window
     _open_terminal()

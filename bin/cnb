@@ -95,6 +95,7 @@ if [ -f .claudes/config.toml ] && [ -f .claudes/board.db ]; then
         ME=$(echo "$_EXISTING" | cut -d' ' -f1)
         WORKERS=$(echo "$_EXISTING" | cut -d' ' -f2-)
         LABEL=$(grep '^prefix' .claudes/config.toml | cut -d'"' -f2)
+        _NUM=$(echo "$WORKERS" | wc -w | tr -d ' ')
         "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 || true
     fi
 else

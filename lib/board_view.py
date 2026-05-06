@@ -41,16 +41,6 @@ def _tmux_pane_command(name: str) -> str:
         return ""
 
 
-def _pgrep(pattern: str) -> str | None:
-    try:
-        r = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True, timeout=3)
-        if r.returncode == 0:
-            return r.stdout.strip().split("\n")[0]
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return None
-
-
 def cmd_overview(db: BoardDB) -> None:
     """Default view when running cnb with no args."""
     prefix = db.env.prefix
@@ -95,10 +85,10 @@ def cmd_overview(db: BoardDB) -> None:
         print(f"Open proposals: {len(proposals)}")
 
     # ── dispatcher ──
-    pid = _pgrep("dispatcher")
+    dispatcher_sess = f"{prefix}-dispatcher"
     print()
-    if pid:
-        print(f"  dispatcher: running (pid {pid})")
+    if _tmux_has_session(dispatcher_sess):
+        print(f"  dispatcher: running ({dispatcher_sess})")
     else:
         running = any(
             _tmux_has_session(f"{prefix}-{n}") for (n,) in db.query("SELECT name FROM sessions WHERE name != 'all'")
@@ -256,9 +246,9 @@ def cmd_dashboard(db: BoardDB) -> None:
         print(f"  {name:<7s} {status:<8s}{inbox_str}")
         print(f"         {task}")
     print()
-    pid = _pgrep("dispatcher")
-    if pid:
-        print(f"  dispatcher: running (PID {pid})")
+    dispatcher_sess = f"{prefix}-dispatcher"
+    if _tmux_has_session(dispatcher_sess):
+        print(f"  dispatcher: running ({dispatcher_sess})")
     else:
         print("  dispatcher: NOT RUNNING")
 

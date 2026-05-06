@@ -2,7 +2,6 @@
 
 import hashlib
 import shutil
-import subprocess
 from pathlib import Path
 
 from lib.board_db import BoardDB, ts
@@ -12,29 +11,6 @@ from lib.common import parse_flags
 def _ack_marker_path(db: BoardDB, name: str) -> Path:
     """Path to file recording max message_id seen by last inbox call."""
     return db.env.sessions_dir / f".{name}.ack_max_id"
-
-
-def _nudge_session(db: BoardDB, recipient: str) -> None:
-    """Inject a fixed prompt into the recipient's tmux session to check inbox.
-
-    Only sends a hardcoded command — never user-controlled content — to avoid
-    shell metacharacter injection via tmux send-keys.
-    """
-    if recipient == "all":
-        sessions = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all'")]
-    else:
-        sessions = [recipient]
-    prefix = db.env.prefix
-    board = db.env.install_home / "bin" / "board"
-    for name in sessions:
-        if not name.isalnum():
-            continue
-        sess = f"{prefix}-{name}"
-        r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True)
-        if r.returncode == 0:
-            cmd = f"{board} --as {name} inbox"
-            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", cmd], capture_output=True)
-            subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], capture_output=True)
 
 
 def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -100,10 +76,6 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
         db.deliver_to_inbox(name, to, msg_id, c=c)
 
     print("OK sent")
-    if attach_ref:
-        print(f"  附件已存储: {stored_path}")
-
-    _nudge_session(db, to)
 
 
 def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -118,7 +90,7 @@ def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
         "UPDATE sessions SET status=?, updated_at=? WHERE name=?",
         (full_status, now, name),
     )
-    print("OK status updated")
+    print("OK")
 
 
 def cmd_inbox(db: BoardDB, identity: str) -> None:
@@ -128,25 +100,21 @@ def cmd_inbox(db: BoardDB, identity: str) -> None:
         raise SystemExit(1)
     count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
     if not count:
-        print("收件箱为空")
-    else:
-        print(f"你有 {count} 条未读:")
-        rows = db.query(
-            "SELECT i.message_id, m.ts, m.sender, m.body "
-            "FROM inbox i JOIN messages m ON i.message_id=m.id "
-            "WHERE i.session=? AND i.read=0 ORDER BY m.ts",
-            (name,),
-        )
-        max_id = 0
-        for msg_id, msg_ts, sender, body in rows:
-            print(f'<message from="{sender}" ts="{msg_ts}">\n{body}\n</message>')
-            if msg_id > max_id:
-                max_id = msg_id
-        if max_id > 0:
-            _ack_marker_path(db, name).write_text(str(max_id))
-        print(f"\n(运行 ack 清除: board --as {identity} ack)")
-
-    _task_print_queue_short(db, name)
+        print("(empty)")
+        return
+    rows = db.query(
+        "SELECT i.message_id, m.ts, m.sender, m.body "
+        "FROM inbox i JOIN messages m ON i.message_id=m.id "
+        "WHERE i.session=? AND i.read=0 ORDER BY m.ts",
+        (name,),
+    )
+    max_id = 0
+    for msg_id, msg_ts, sender, body in rows:
+        print(f'<message from="{sender}" ts="{msg_ts}">\n{body}\n</message>')
+        if msg_id > max_id:
+            max_id = msg_id
+    if max_id > 0:
+        _ack_marker_path(db, name).write_text(str(max_id))
 
 
 def cmd_ack(db: BoardDB, identity: str) -> None:
@@ -168,7 +136,7 @@ def cmd_ack(db: BoardDB, identity: str) -> None:
         count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
 
     if count == 0:
-        print("收件箱已经是空的")
+        print("OK")
         marker.unlink(missing_ok=True)
         return
 
@@ -180,7 +148,7 @@ def cmd_ack(db: BoardDB, identity: str) -> None:
     else:
         db.execute("UPDATE inbox SET read=1 WHERE session=? AND read=0", (name,))
 
-    print(f"OK {count} 条已清空（完整记录在 messages.log）")
+    print(f"OK {count}")
     marker.unlink(missing_ok=True)
 
 
@@ -209,19 +177,3 @@ def cmd_log(db: BoardDB, identity: str, args: list[str]) -> None:
         )
     for (line,) in reversed(rows):
         print(line)
-
-
-def _task_print_queue_short(db: BoardDB, target: str) -> None:
-    rows = db.query(
-        "SELECT id, status, priority, description FROM tasks "
-        "WHERE session=? AND status != 'done' "
-        "ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, priority DESC, id ASC",
-        (target,),
-    )
-    print("\n任务队列:")
-    if not rows:
-        print("  (无待办任务)")
-        return
-    for tid, status, priority, desc in rows:
-        marker = "*" if status == "active" else " "
-        print(f"  {marker} #{tid} [{status} p{priority}] {desc}")
