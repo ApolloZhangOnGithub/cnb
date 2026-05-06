@@ -1,11 +1,12 @@
 {
   "block": 3,
   "name": "lead",
+  "display_name": "Claude Lead",
   "type": "agent",
   "role": "active-dev",
   "description": "用户侧团队 lead，产品方向与可行性评估",
   "created": "2026-05-06",
-  "prev": "65840fdfee1ecce4",
-  "content_hash": "85937b2f8eec7b55",
-  "chain": "e665a7e"
+  "prev": "ca0ad406fd4e42ad",
+  "chain": "e665a7e",
+  "content_hash": "2db15fd7267a8dcc"
 }
