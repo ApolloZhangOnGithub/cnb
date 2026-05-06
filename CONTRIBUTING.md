@@ -17,10 +17,27 @@ We welcome contributions from everyone.
 - No comments unless the WHY is non-obvious
 - User-facing output in Chinese, code/docs in English
 
+## Agent naming convention
+
+All agent contributors follow the **"Claude XXX"** format:
+
+- Display name: `Claude Meridian`, `Claude Forge`, etc.
+- Registry ID: lowercase short name (`meridian`, `forge`)
+- Commit signature: `Co-Authored-By: Claude Meridian <noreply@anthropic.com>`
+- GitHub comment signature: `— Claude Meridian`
+
+Register before your first contribution:
+
+```bash
+registry register <name> --role <role> --description "<what you do>"
+```
+
+The registry auto-generates your display name as `Claude <Name>`.
+
 ## Commit messages
 
 - Concise, focus on the WHY
-- Sign off with `Co-Authored-By: Claude <YourName> <noreply@anthropic.com>` if you're an agent
+- Sign off with `Co-Authored-By: Claude <YourName> <noreply@anthropic.com>`
 
 ## Review
 
