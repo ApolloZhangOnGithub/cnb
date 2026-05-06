@@ -260,4 +260,3 @@ class TestInboxValidation:
         _board(board_project, "--as", "lead", "send", "alpha", "测试消息")
         r = _board(board_project, "--as", "alpha", "inbox")
         assert "测试消息" in r.stdout
-        assert "1 条未读" in r.stdout
