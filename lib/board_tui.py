@@ -84,10 +84,8 @@ def _apply_style(n_online: int) -> None:
 
 
 def _open_terminal() -> None:
-    """Open a new terminal with an independent grouped session."""
-    # Use ';' (single-quoted) so the shell passes a literal semicolon to tmux
-    # as its command separator — avoids backslash escaping issues in AppleScript.
-    attach_cmd = f"tmux new-session -t {UI_SESSION} ';' set-option destroy-unattached on"
+    """Open a new terminal attached to cnb-ui."""
+    attach_cmd = f"tmux attach -t {UI_SESSION} ';' set-option destroy-unattached on"
 
     if sys.platform == "darwin":
         if os.path.isdir("/Applications/iTerm.app"):
