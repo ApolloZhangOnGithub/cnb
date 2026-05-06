@@ -1,12 +1,6 @@
 列出所有 /cs-* 命令：
-- /cs-team — 看同学状态
-- /cs-inbox — 查收消息
-- /cs-broadcast <消息> — 广播
-- /cs-assign <名字> <任务> — 派任务
-- /cs-add <名字> — 拉同学上线
-- /cs-kick <名字> — 让同学下线
-- /cs-stop — 全部下线
-- /cs-bugs — 看 bug 列表
-- /cs-watch <名字> — 看同学在干啥
+- /cs-overview — 团队总览：谁在干什么、谁卡了
+- /cs-watch <名字> — 看某个同学在干什么
+- /cs-progress — 最近进展汇总
 - /cs-history — 查看完整消息历史
-- /cs-update — 拉取最新代码
+- /cs-update — 更新 cnb 到最新版
