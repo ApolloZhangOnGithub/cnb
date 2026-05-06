@@ -50,6 +50,7 @@ Connection rules:
 
 ```
 bin/          CLI entry points (shebang scripts, no .py extension)
+  bin/swarm   ⚠️ 896-line bash — next rewrite target → Python
 lib/          Python modules
   common.py   ClaudesEnv, DB wrapper, shared utils
   board_*.py  Board subcommands (decomposed from monolith)
