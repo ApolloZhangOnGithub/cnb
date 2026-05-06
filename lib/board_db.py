@@ -50,7 +50,7 @@ class BoardDB(BaseDB):
             from lib.migrate import run_migrations
 
             install_home = self.env.install_home if self.env else Path(__file__).resolve().parent.parent
-            applied = run_migrations(self.db_path, install_home)
+            run_migrations(self.db_path, install_home)
         except SystemExit:
             raise
         except Exception as e:
@@ -130,25 +130,28 @@ class BoardDB(BaseDB):
 
         If *replacement* is None, the section is removed.  Returns the new
         text, or None if the section was not found and no append is needed.
+
+        Heading detection: a line is a section boundary if it starts with "## "
+        (after stripping leading whitespace). Target headings are matched
+        case-insensitively against the normalized prefix.
         """
         lines = text.split("\n")
         out: list[str] = []
         in_section = False
         found = False
 
+        normalized_headings = tuple(h.strip().lower() for h in headings)
+
         for line in lines:
-            stripped = line.strip()
-            if any(stripped == h or stripped.startswith(h + " ") for h in headings):
+            stripped = line.strip().lower()
+            if any(stripped == h or stripped.startswith(h + " ") for h in normalized_headings):
                 found = True
                 in_section = True
                 if replacement is not None:
                     out.append(line)
                     out.append(replacement)
                 continue
-            if in_section and (line.startswith("#") and not line.startswith("# ")):
-                # sub-headings inside section are fine; only break on peer ##
-                pass
-            elif in_section and line.startswith("## "):
+            if in_section and stripped.startswith("## "):
                 in_section = False
                 out.append("")
                 out.append(line)
@@ -172,9 +175,7 @@ class BoardDB(BaseDB):
 
     # ── inbox sync ──
 
-    def sync_inbox_to_file(
-        self, target: str, *, c: sqlite3.Connection | None = None
-    ) -> None:
+    def sync_inbox_to_file(self, target: str, *, c: sqlite3.Connection | None = None) -> None:
         """Sync unread inbox messages to {target}.md file.
 
         Accepts an optional *c* to use the caller's connection (so that
@@ -240,14 +241,20 @@ class BoardDB(BaseDB):
         self, sender: str, recipient: str, msg_id: int, *, c: sqlite3.Connection | None = None
     ) -> None:
         if recipient == "all":
-            sessions = self.query("SELECT name FROM sessions WHERE name != ?", (sender,), c=c)
-            for (target,) in sessions:
-                self.execute(
-                    "INSERT INTO inbox(session, message_id) VALUES (?, ?)",
-                    (target, msg_id),
-                    c=c,
+
+            def _do(conn: sqlite3.Connection) -> list[str]:
+                conn.execute(
+                    "INSERT INTO inbox(session, message_id) SELECT name, ? FROM sessions WHERE name != ?",
+                    (msg_id, sender),
                 )
-            for (target,) in sessions:
+                return [r[0] for r in conn.execute("SELECT name FROM sessions WHERE name != ?", (sender,)).fetchall()]
+
+            if c is not None:
+                targets = _do(c)
+            else:
+                with self.conn() as conn:
+                    targets = _do(conn)
+            for target in targets:
                 self.sync_inbox_to_file(target, c=c)
                 inbox_delivered.emit(target)
         else:

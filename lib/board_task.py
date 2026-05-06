@@ -5,15 +5,17 @@ from lib.common import is_privileged, is_terminal_task_status, parse_flags
 
 
 def _promote_next(db: BoardDB, target: str) -> None:
-    active = db.scalar("SELECT COUNT(*) FROM tasks WHERE session=? AND status='active'", (target,))
-    if active:
-        return
-    next_id = db.scalar(
-        "SELECT id FROM tasks WHERE session=? AND status='pending' ORDER BY priority DESC, id ASC LIMIT 1",
-        (target,),
-    )
-    if next_id:
-        db.execute("UPDATE tasks SET status='active' WHERE id=?", (next_id,))
+    with db.conn() as c:
+        active = db.scalar("SELECT COUNT(*) FROM tasks WHERE session=? AND status='active'", (target,), c=c)
+        if active:
+            return
+        next_id = db.scalar(
+            "SELECT id FROM tasks WHERE session=? AND status='pending' ORDER BY priority DESC, id ASC LIMIT 1",
+            (target,),
+            c=c,
+        )
+        if next_id:
+            db.execute("UPDATE tasks SET status='active' WHERE id=?", (next_id,), c=c)
 
 
 def _print_queue(db: BoardDB, target: str, include_done: bool = False) -> None:
@@ -77,26 +79,29 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
 
     desc = " ".join(desc_parts)
 
-    db.ensure_session(target)
+    with db.conn() as c:
+        db.ensure_session(target, c=c)
 
-    active = db.scalar("SELECT COUNT(*) FROM tasks WHERE session=? AND status='active'", (target,))
-    status = "active" if not active else "pending"
+        active = db.scalar("SELECT COUNT(*) FROM tasks WHERE session=? AND status='active'", (target,), c=c)
+        status = "active" if not active else "pending"
 
-    task_id = db.execute(
-        "INSERT INTO tasks(session, description, status, priority) VALUES (?, ?, ?, ?)",
-        (target, desc, status, priority),
-    )
-    print(f"OK task #{task_id} added to {target} ({status})")
-
-    if target != name:
-        now = ts()
-        msg_id = db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, ?, ?)",
-            (now, name, target, f"[TASK #{task_id}] {desc}"),
+        task_id = db.execute(
+            "INSERT INTO tasks(session, description, status, priority) VALUES (?, ?, ?, ?)",
+            (target, desc, status, priority),
+            c=c,
         )
-        db.execute("INSERT INTO inbox(session, message_id) VALUES (?, ?)", (target, msg_id))
-        db.sync_inbox_to_file(target)
-        print(f"OK notified {target}")
+        print(f"OK task #{task_id} added to {target} ({status})")
+
+        if target != name:
+            now = ts()
+            msg_id = db.execute(
+                "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, ?, ?)",
+                (now, name, target, f"[TASK #{task_id}] {desc}"),
+                c=c,
+            )
+            db.execute("INSERT INTO inbox(session, message_id) VALUES (?, ?)", (target, msg_id), c=c)
+            db.sync_inbox_to_file(target, c=c)
+            print(f"OK notified {target}")
     _print_queue(db, target)
 
 
