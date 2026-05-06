@@ -172,6 +172,16 @@ COMMANDS: list[Command] = [
         needs_identity=False,
         takes_rest=False,
     ),
+    # ── tui ──
+    Command(
+        "tui",
+        "lib.board_tui",
+        "cmd_tui",
+        "interactive team UI",
+        "tui",
+        needs_identity=False,
+        takes_rest=False,
+    ),
     # ── maintenance ──
     Command(
         "prune",
