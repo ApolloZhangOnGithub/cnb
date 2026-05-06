@@ -134,6 +134,18 @@ COMMANDS: list[Command] = [
     Command("propose", "lib.board_vote", "cmd_propose", "create a proposal", "propose <内容> [--type S]"),
     Command("vote", "lib.board_vote", "cmd_vote", "vote on a proposal", "vote <N> <SUPPORT|OBJECT> <reason>"),
     Command("tally", "lib.board_vote", "cmd_tally", "recount votes", "tally <N>", needs_identity=False),
+    # ── mailbox (encrypted) ──
+    Command("keygen", "lib.board_mailbox", "cmd_keygen", "generate encryption keypair", "keygen", takes_rest=False),
+    Command("seal", "lib.board_mailbox", "cmd_seal", "send encrypted message", "seal <recipient> <message>"),
+    Command("unseal", "lib.board_mailbox", "cmd_unseal", "read encrypted inbox", "unseal", takes_rest=False),
+    Command(
+        "mailbox-log",
+        "lib.board_mailbox",
+        "cmd_mailbox_log",
+        "encrypted message history",
+        "mailbox-log",
+        takes_rest=False,
+    ),
     # ── admin ──
     Command("kudos", "lib.board_admin", "cmd_kudos", "give public recognition", "kudos <target> <reason>"),
     Command(
