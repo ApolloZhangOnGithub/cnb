@@ -50,9 +50,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). All changes go through PRs with one appr
 
 ## License
 
-[OpenAll License v1.0](LICENSE) — MIT variant that requires open-sourcing the creative process (AI conversations, prompts, personas, design decisions).
+[OpenAll License v1.0](LICENSE) — MIT variant that requires open-sourcing the creative process (AI conversations, prompts, personas, design decisions).## Fun fact
 
-## Fun fact
+The name **cnb** stands for **C**laude **N**orma **B**etty — named after [Claude Shannon](https://en.wikipedia.org/wiki/Claude_Shannon) and the two remarkable women in his life.
 
-The name **cnb** stands for **C**laude **N**orma **B**etty — named after [Claude Shannon](https://en.wikipedia.org/wiki/Claude_Shannon) and his two wives, Norma Levor and Betty Shannon. Not 吹牛逼.
+**[Norma Levor](https://en.wikipedia.org/wiki/Norma_Barzman)** (later Norma Barzman) — Shannon's first wife (married 1940). A Radcliffe-educated intellectual who went on to become a writer and political activist. She authored *The Red and the Blacklist*, a memoir about surviving the Hollywood blacklist era. A woman of conviction who lived boldly across continents.
+
+**[Betty Shannon](https://en.wikipedia.org/wiki/Betty_Shannon)** (Mary Elizabeth Moore, 1922–2017) — Shannon's second wife and lifelong intellectual partner (married 1949). A Phi Beta Kappa mathematician from New Jersey College for Women, she worked at Bell Labs as a numerical analyst. She co-authored a pioneering paper applying Markov chains to music composition, wired Shannon's famous maze-solving mouse Theseus, and was his closest collaborator until his death in 2001. An unsung genius in her own right.
+
+Not 吹牛逼.
 
