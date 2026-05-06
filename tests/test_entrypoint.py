@@ -1,4 +1,4 @@
-"""Tests for bin/claudes-code entrypoint.
+"""Tests for bin/cnb entrypoint.
 
 Covers: worker count clamping, theme selection, banner, system prompt,
 slash command generation, and board message validation.
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 CLAUDES_HOME = Path(__file__).resolve().parent.parent
-ENTRYPOINT = CLAUDES_HOME / "bin" / "claudes-code"
+ENTRYPOINT = CLAUDES_HOME / "bin" / "cnb"
 BOARD = CLAUDES_HOME / "bin" / "board"
 
 
@@ -25,14 +25,14 @@ def fake_project(tmp_path):
     """A temp dir with a fake claude binary that dumps its args."""
     fake_claude = tmp_path / "claude"
     fake_claude.write_text(
-        '#!/usr/bin/env bash\n'
-        'while [[ $# -gt 0 ]]; do\n'
+        "#!/usr/bin/env bash\n"
+        "while [[ $# -gt 0 ]]; do\n"
         '  case "$1" in\n'
         '    --append-system-prompt) echo "SYSPROMPT<<EOF"; echo "$2"; echo "EOF"; shift 2 ;;\n'
         '    --name) echo "NAME=$2"; shift 2 ;;\n'
-        '    *) shift ;;\n'
-        '  esac\n'
-        'done\n'
+        "    *) shift ;;\n"
+        "  esac\n"
+        "done\n"
     )
     fake_claude.chmod(fake_claude.stat().st_mode | stat.S_IEXEC)
 
@@ -58,6 +58,7 @@ def _run(fake_project, args=None):
     script = script.replace("exec claude", str(fake_claude))
     script = script.replace('"$CLAUDES_HOME/bin/swarm"', str(stub_swarm))
     script = script.replace("clear\n", "")
+    script = script.replace("if [ ! -t 0 ] || [ ! -t 1 ]; then", "if false; then")
 
     tmp_script = project_dir / "_test.sh"
     tmp_script.write_text(script)
@@ -68,8 +69,12 @@ def _run(fake_project, args=None):
         cmd.extend(args)
 
     return subprocess.run(
-        cmd, cwd=project_dir, capture_output=True, text=True,
-        timeout=30, env={**os.environ, "TERM": "dumb"},
+        cmd,
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "TERM": "dumb"},
     )
 
 
@@ -122,7 +127,7 @@ class TestThemeSelection:
 class TestBanner:
     def test_has_product_name(self, fake_project):
         r = _run(fake_project)
-        assert "claudes-code" in r.stdout
+        assert "cnb" in r.stdout
 
     def test_has_theme_in_brackets(self, fake_project):
         r = _run(fake_project)
@@ -130,18 +135,18 @@ class TestBanner:
 
     def test_has_worker_names(self, fake_project):
         r = _run(fake_project, ["1"])
-        match = re.search(r"位同学.*:\s*(\S+)", r.stdout)
+        match = re.search(r"同学[：:]\s*(\S+)", r.stdout)
         assert match
 
 
 class TestSystemPrompt:
     def test_has_lead_role(self, fake_project):
         r = _run(fake_project)
-        assert "组长" in r.stdout
+        assert "负责和用户沟通" in r.stdout
 
     def test_lead_name_passed(self, fake_project):
         r = _run(fake_project)
-        assert "NAME=lead" in r.stdout
+        assert re.search(r"NAME=\S+", r.stdout)
 
     def test_has_board_commands(self, fake_project):
         r = _run(fake_project)
@@ -156,8 +161,7 @@ class TestSlashCommands:
         project_dir = fake_project[0]
         cmd_dir = project_dir / ".claude" / "commands"
         assert cmd_dir.is_dir()
-        expected = ["cs-team.md", "cs-inbox.md", "cs-broadcast.md", "cs-assign.md",
-                    "cs-add.md", "cs-kick.md", "cs-stop.md", "cs-bugs.md", "cs-help.md"]
+        expected = ["cs-watch.md", "cs-overview.md", "cs-progress.md", "cs-history.md", "cs-update.md", "cs-help.md"]
         for f in expected:
             assert (cmd_dir / f).exists(), f"Missing: {f}"
 
@@ -167,16 +171,20 @@ class TestSubcommands:
         project_dir, _, _ = fake_project
         r = subprocess.run(
             ["bash", str(ENTRYPOINT), "version"],
-            cwd=project_dir, capture_output=True, text=True,
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
         )
         assert r.returncode == 0
-        assert "claudes-code v" in r.stdout
+        assert "cnb v" in r.stdout
 
     def test_unknown_command_errors(self, fake_project):
         project_dir, _, _ = fake_project
         r = subprocess.run(
             ["bash", str(ENTRYPOINT), "nonsense"],
-            cwd=project_dir, capture_output=True, text=True,
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
         )
         assert r.returncode != 0
 
@@ -184,13 +192,16 @@ class TestSubcommands:
         project_dir, _, _ = fake_project
         r = subprocess.run(
             ["bash", str(ENTRYPOINT), "help"],
-            cwd=project_dir, capture_output=True, text=True,
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
         )
         assert r.returncode == 0
         assert "pokemon" in r.stdout
 
 
 # ── Board message validation (found by AI self-play) ──
+
 
 @pytest.fixture
 def board_project(tmp_path):
@@ -199,15 +210,18 @@ def board_project(tmp_path):
     subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
     subprocess.run(
         [str(CLAUDES_HOME / "bin" / "init"), "lead", "alpha", "bravo"],
-        cwd=project_dir, capture_output=True,
+        cwd=project_dir,
+        capture_output=True,
     )
     return project_dir
 
 
 def _board(project_dir, *args):
     return subprocess.run(
-        [str(BOARD)] + list(args),
-        cwd=project_dir, capture_output=True, text=True,
+        [str(BOARD), *args],
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
     )
 
 

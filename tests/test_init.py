@@ -257,60 +257,71 @@ def _validate(name: str) -> str:
 class TestSessionNameValidation:
     """Session name validation rejects dangerous or reserved names."""
 
-    @pytest.mark.parametrize("name", [
-        "alice",
-        "bob",
-        "charlie",
-        "a",            # single char
-        "zz",           # two chars
-        "my-agent",     # hyphen
-        "agent_42",     # underscore + digits
-        "a-b-c_d",      # mixed
-        "x" * 64,        # max length
-    ])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "alice",
+            "bob",
+            "charlie",
+            "a",  # single char
+            "zz",  # two chars
+            "my-agent",  # hyphen
+            "agent_42",  # underscore + digits
+            "a-b-c_d",  # mixed
+            "x" * 64,  # max length
+        ],
+    )
     def test_valid_names_pass(self, name):
         """Valid session names are accepted."""
         result = _validate(name)
         assert result == name.lower()
 
-    @pytest.mark.parametrize("name", [
-        "",             # empty
-        "   ",          # whitespace only
-    ])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",  # empty
+            "   ",  # whitespace only
+        ],
+    )
     def test_empty_name_rejected(self, name):
         """Empty or whitespace-only names raise an error."""
         with pytest.raises(ValueError):
             _validate(name)
 
-    @pytest.mark.parametrize("name", [
-        "all",
-        "dispatcher",
-        "lead",
-        "system",
-        "ALL",          # case-insensitive
-        "Dispatcher",
-    ])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "all",
+            "dispatcher",
+            "lead",
+            "system",
+            "ALL",  # case-insensitive
+            "Dispatcher",
+        ],
+    )
     def test_reserved_names_rejected(self, name):
         """Reserved names are rejected."""
         with pytest.raises(ValueError):
             _validate(name)
 
-    @pytest.mark.parametrize("name", [
-        "<dicksuck>",
-        "a/b",
-        "hello world",
-        "../evil",
-        "name;rm",
-        "a|b",
-        "user@host",
-        "name!yes",
-        "a..b",
-        "-leading",     # starts with hyphen
-        "trailing-",    # ends with hyphen
-        "_leading",     # starts with underscore
-        "trailing_",    # ends with underscore
-
-    ])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "<dicksuck>",
+            "a/b",
+            "hello world",
+            "../evil",
+            "name;rm",
+            "a|b",
+            "user@host",
+            "name!yes",
+            "a..b",
+            "-leading",  # starts with hyphen
+            "trailing-",  # ends with hyphen
+            "_leading",  # starts with underscore
+            "trailing_",  # ends with underscore
+        ],
+    )
     def test_invalid_chars_rejected(self, name):
         """Names with dangerous characters are rejected."""
         with pytest.raises(ValueError):
