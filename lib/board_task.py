@@ -100,7 +100,6 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
                 c=c,
             )
             db.execute("INSERT INTO inbox(session, message_id) VALUES (?, ?)", (target, msg_id), c=c)
-            db.sync_inbox_to_file(target, c=c)
             print(f"OK notified {target}")
     _print_queue(db, target)
 

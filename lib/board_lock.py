@@ -72,7 +72,6 @@ def cmd_git_unlock(db: BoardDB, identity: str, args: list[str]) -> None:
             (now, holder, f"[GIT-LOCK] {name} force-released your git lock"),
         )
         db.execute("INSERT INTO inbox(session, message_id) VALUES (?, ?)", (holder, msg_id))
-        db.sync_inbox_to_file(holder)
 
     db.execute("DELETE FROM git_locks WHERE id=1")
     print("OK git-lock released")

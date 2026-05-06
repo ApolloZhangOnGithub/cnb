@@ -118,7 +118,6 @@ def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
         "UPDATE sessions SET status=?, updated_at=? WHERE name=?",
         (full_status, now, name),
     )
-    db.sync_status_to_file(name, full_status)
     print("OK status updated")
 
 
@@ -170,7 +169,6 @@ def cmd_ack(db: BoardDB, identity: str) -> None:
 
     if count == 0:
         print("收件箱已经是空的")
-        db.clear_inbox_file(name)
         marker.unlink(missing_ok=True)
         return
 
@@ -183,7 +181,6 @@ def cmd_ack(db: BoardDB, identity: str) -> None:
         db.execute("UPDATE inbox SET read=1 WHERE session=? AND read=0", (name,))
 
     print(f"OK {count} 条已清空（完整记录在 messages.log）")
-    db.clear_inbox_file(name)
     marker.unlink(missing_ok=True)
 
 

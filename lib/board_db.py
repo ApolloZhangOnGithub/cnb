@@ -1,4 +1,4 @@
-"""board_db — DB connection, helpers, and .md file sync."""
+"""board_db — DB connection and helpers."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class BoardDB(BaseDB):
     """Unified SQLite wrapper — new connection per call, no pooling.
 
     Accepts either a ClaudesEnv (production) or a bare Path/str (tests, lightweight callers).
-    Adds .md file sync helpers on top of the BaseDB interface.
+    SQLite is the single source of truth; no .md file sync.
     """
 
     def __init__(self, env_or_path: ClaudesEnv | Path | str):
@@ -111,132 +111,6 @@ class BoardDB(BaseDB):
         if existing == 0:
             self.execute("INSERT INTO sessions(name) VALUES (?)", (n,), c=c)
 
-    # --- .md file sync ---
-    #
-    # All writes use temp-file + atomic rename to avoid corruption on
-    # crash mid-write.  Section detection is strict: ## heading must be
-    # followed by space or end-of-line (not e.g. "## @收件箱-extra").
-
-    INBOX_HEADINGS: tuple[str, ...] = ("## @inbox", "## @收件箱")
-    TASK_HEADINGS: tuple[str, ...] = ("## Current task", "## 当前任务")
-
-    @staticmethod
-    def _replace_section(
-        text: str,
-        headings: tuple[str, ...],
-        replacement: str | None,
-    ) -> str | None:
-        """Replace or remove the content of a named Markdown section.
-
-        If *replacement* is None, the section is removed.  Returns the new
-        text, or None if the section was not found and no append is needed.
-
-        Heading detection: a line is a section boundary if it starts with "## "
-        (after stripping leading whitespace). Target headings are matched
-        case-insensitively against the normalized prefix.
-        """
-        lines = text.split("\n")
-        out: list[str] = []
-        in_section = False
-        found = False
-
-        normalized_headings = tuple(h.strip().lower() for h in headings)
-
-        for line in lines:
-            stripped = line.strip().lower()
-            if any(stripped == h or stripped.startswith(h + " ") for h in normalized_headings):
-                found = True
-                in_section = True
-                if replacement is not None:
-                    out.append(line)
-                    out.append(replacement)
-                continue
-            if in_section and stripped.startswith("## "):
-                in_section = False
-                out.append("")
-                out.append(line)
-                continue
-            if in_section:
-                continue
-            out.append(line)
-
-        if not found:
-            return None
-        return "\n".join(out)
-
-    def _atomic_write(self, path: Path, content: str) -> None:
-        """Write *content* to *path* atomically (temp + rename)."""
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        try:
-            tmp.write_text(content)
-            tmp.replace(path)
-        except OSError:
-            pass
-
-    # ── inbox sync ──
-
-    def sync_inbox_to_file(self, target: str, *, c: sqlite3.Connection | None = None) -> None:
-        """Sync unread inbox messages to {target}.md file.
-
-        Accepts an optional *c* to use the caller's connection (so that
-        uncommitted inbox rows are visible within a transaction).
-        """
-        if not self.env:
-            return
-        sf = self.env.sessions_dir / f"{target}.md"
-        if not sf.exists():
-            return
-        rows = self.query(
-            "SELECT '- [' || m.ts || '] **' || m.sender || '**: ' || substr(m.body, 1, 60) "
-            "FROM inbox i JOIN messages m ON i.message_id=m.id "
-            "WHERE i.session=? AND i.read=0 ORDER BY m.ts",
-            (target,),
-            c=c,
-        )
-        inbox_lines = "\n".join(r[0] for r in rows) if rows else ""
-
-        try:
-            text = sf.read_text()
-        except OSError:
-            return
-
-        result = self._replace_section(text, self.INBOX_HEADINGS, inbox_lines or None)
-        if result is not None:
-            self._atomic_write(sf, result)
-        elif inbox_lines:
-            heading = self.INBOX_HEADINGS[1]  # canonical: Chinese heading
-            self._atomic_write(sf, text.rstrip("\n") + f"\n\n{heading}\n{inbox_lines}\n")
-
-    def clear_inbox_file(self, target: str) -> None:
-        if not self.env:
-            return
-        sf = self.env.sessions_dir / f"{target}.md"
-        if not sf.exists():
-            return
-        try:
-            text = sf.read_text()
-        except OSError:
-            return
-        result = self._replace_section(text, self.INBOX_HEADINGS, None)
-        if result is not None:
-            self._atomic_write(sf, result)
-
-    # ── status sync ──
-
-    def sync_status_to_file(self, target: str, status: str) -> None:
-        if not self.env:
-            return
-        sf = self.env.sessions_dir / f"{target}.md"
-        if not sf.exists():
-            return
-        try:
-            text = sf.read_text()
-        except OSError:
-            return
-        result = self._replace_section(text, self.TASK_HEADINGS, status)
-        if result is not None:
-            self._atomic_write(sf, result)
-
     def deliver_to_inbox(
         self, sender: str, recipient: str, msg_id: int, *, c: sqlite3.Connection | None = None
     ) -> None:
@@ -255,7 +129,6 @@ class BoardDB(BaseDB):
                 with self.conn() as conn:
                     targets = _do(conn)
             for target in targets:
-                self.sync_inbox_to_file(target, c=c)
                 inbox_delivered.emit(target)
         else:
             self.ensure_session(recipient, c=c)
@@ -264,5 +137,4 @@ class BoardDB(BaseDB):
                 (recipient, msg_id),
                 c=c,
             )
-            self.sync_inbox_to_file(recipient, c=c)
             inbox_delivered.emit(recipient)
