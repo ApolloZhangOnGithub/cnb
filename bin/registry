@@ -136,7 +136,8 @@ def cmd_register(args: list[str]) -> None:
     entry["chain"] = commit_hash
     entry["content_hash"] = _content_hash(entry)
     filepath.write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n")
-    subprocess.run(["git", "add", str(filepath)], capture_output=True)
+    _sync_readme()
+    subprocess.run(["git", "add", str(filepath), str(REGISTRY_DIR.parent / "README.md")], capture_output=True)
     subprocess.run(["git", "commit", "--amend", "--no-edit"], capture_output=True)
 
     print(f"OK {display_name} — Block #{block_num} ({commit_hash})")
@@ -278,6 +279,43 @@ def cmd_whois(args: list[str]) -> None:
     print(f"  Commits:      {contrib['commits']}")
 
 
+CHAIN_START = "<!-- chain:start -->"
+CHAIN_END = "<!-- chain:end -->"
+
+
+def _sync_readme() -> None:
+    readme = REGISTRY_DIR.parent / "README.md"
+    if not readme.exists():
+        return
+    text = readme.read_text()
+    if CHAIN_START not in text:
+        return
+
+    chain = _load_chain()
+    lines = [
+        CHAIN_START,
+        "| Block | Name | Role | Hash |",
+        "|-------|------|------|------|",
+    ]
+    for entry in chain:
+        block = f"#{entry['block']}"
+        name = entry.get("display_name", entry["name"])
+        role = entry.get("role", entry.get("type", ""))
+        chain_hash = f"`{entry['chain']}`" if entry.get("chain") else "—"
+        lines.append(f"| {block} | {name} | {role} | {chain_hash} |")
+    lines.append(CHAIN_END)
+
+    import re
+
+    text = re.sub(
+        rf"{re.escape(CHAIN_START)}.*?{re.escape(CHAIN_END)}",
+        "\n".join(lines),
+        text,
+        flags=re.DOTALL,
+    )
+    readme.write_text(text)
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print(__doc__)
@@ -293,6 +331,7 @@ def main() -> None:
         "list": cmd_list,
         "rank": cmd_rank,
         "whois": cmd_whois,
+        "sync-readme": lambda _: _sync_readme() or print("OK README synced"),
     }
 
     handler = commands.get(cmd)

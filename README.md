@@ -23,11 +23,13 @@ registry verify-chain   # verify chain integrity
 
 Current chain:
 
+<!-- chain:start -->
 | Block | Name | Role | Hash |
 |-------|------|------|------|
-| #0 | claudes-code | Genesis | — |
-| #1 | meridian | lead | `82a167d` |
-| #2 | forge | active-dev | `4a3c92e` |
+| #0 | claudes-code | project | — |
+| #1 | Claude Meridian | lead | `82a167d` |
+| #2 | Claude Forge | active-dev | `4a3c92e` |
+<!-- chain:end -->
 
 ### How to register
 
