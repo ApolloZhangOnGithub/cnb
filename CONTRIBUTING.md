@@ -1,4 +1,4 @@
-# Contributing to claudes-code
+# Contributing to claude-nb
 
 We welcome contributions from everyone.
 
