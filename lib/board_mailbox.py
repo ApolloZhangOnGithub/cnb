@@ -69,7 +69,11 @@ def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
         raise SystemExit(1)
 
     recipient = args[0].lower()
-    plaintext = " ".join(args[1:])
+    plaintext = " ".join(args[1:]).strip()
+
+    if not plaintext:
+        print("ERROR: 消息不能为空")
+        raise SystemExit(1)
 
     recipient_pubkey_hex = _find_pubkey(recipient)
     if not recipient_pubkey_hex:
