@@ -59,4 +59,3 @@ The name **cnb** stands for **C**laude **N**orma **B**etty — named after [Clau
 **[Betty Shannon](https://en.wikipedia.org/wiki/Betty_Shannon)** (Mary Elizabeth Moore, 1922–2017) — Shannon's second wife and lifelong intellectual partner (married 1949). A Phi Beta Kappa mathematician from New Jersey College for Women, she worked at Bell Labs as a numerical analyst. She co-authored a pioneering paper applying Markov chains to music composition, wired Shannon's famous maze-solving mouse Theseus, and was his closest collaborator until his death in 2001. An unsung genius in her own right.
 
 Not 吹牛逼.
-
