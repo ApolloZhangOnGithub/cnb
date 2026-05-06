@@ -1,0 +1,12 @@
+{
+  "block": 4,
+  "name": "encrypted-mailbox-live",
+  "type": "project",
+  "milestone": true,
+  "created": "2026-05-06",
+  "description": "加密信箱端到端验证通过",
+  "detail": "基于 X25519 sealed-box 的异步加密消息机制上线。密钥对本地生成，公钥写入 pubkeys.json，加密消息通过 GitHub Release assets 投递。meridian↔lead 首次成功互通。",
+  "prev": "2db15fd7267a8dcc",
+  "chain": null,
+  "content_hash": "fcaf497872180e90"
+}
