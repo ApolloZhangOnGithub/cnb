@@ -15,7 +15,11 @@ def _ack_marker_path(db: BoardDB, name: str) -> Path:
 
 
 def _nudge_session(db: BoardDB, recipient: str) -> None:
-    """Inject a prompt into the recipient's tmux session to check inbox."""
+    """Inject a fixed prompt into the recipient's tmux session to check inbox.
+
+    Only sends a hardcoded command — never user-controlled content — to avoid
+    shell metacharacter injection via tmux send-keys.
+    """
     if recipient == "all":
         sessions = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all'")]
     else:
@@ -23,11 +27,13 @@ def _nudge_session(db: BoardDB, recipient: str) -> None:
     prefix = db.env.prefix
     board = db.env.install_home / "bin" / "board"
     for name in sessions:
+        if not name.isalnum():
+            continue
         sess = f"{prefix}-{name}"
         r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True)
         if r.returncode == 0:
-            prompt = f"你有新消息，请运行 `{board} --as {name} inbox` 查看并处理。"
-            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", prompt], capture_output=True)
+            cmd = f"{board} --as {name} inbox"
+            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", cmd], capture_output=True)
             subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], capture_output=True)
 
 
@@ -127,14 +133,14 @@ def cmd_inbox(db: BoardDB, identity: str) -> None:
     else:
         print(f"你有 {count} 条未读:")
         rows = db.query(
-            "SELECT i.message_id, '- [' || m.ts || '] **' || m.sender || '**: ' || m.body "
+            "SELECT i.message_id, m.ts, m.sender, m.body "
             "FROM inbox i JOIN messages m ON i.message_id=m.id "
             "WHERE i.session=? AND i.read=0 ORDER BY m.ts",
             (name,),
         )
         max_id = 0
-        for msg_id, line in rows:
-            print(line)
+        for msg_id, msg_ts, sender, body in rows:
+            print(f'<message from="{sender}" ts="{msg_ts}">\n{body}\n</message>')
             if msg_id > max_id:
                 max_id = msg_id
         if max_id > 0:
