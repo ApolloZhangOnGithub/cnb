@@ -2,20 +2,15 @@
 'use strict';
 
 /**
- * claudes-code — npm entry point.
- *
- * Resolves the project root (works for both local and global npm installs),
- * then delegates to the Bash entry script `bin/claudes-code`.
+ * cnb — npm entry point.
  */
 
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// __dirname always resolves to the real file location (not symlink target),
-// so this works correctly for `npm install -g` as well as `npm link`.
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const BASH_SCRIPT = path.join(PROJECT_ROOT, 'bin', 'claudes-code');
+const BASH_SCRIPT = path.join(PROJECT_ROOT, 'bin', 'cnb');
 
 if (!fs.existsSync(BASH_SCRIPT)) {
   console.error(`FATAL: ${BASH_SCRIPT} not found`);
