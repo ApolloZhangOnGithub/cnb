@@ -58,12 +58,12 @@ def cmd_tui(db: BoardDB) -> None:
         if i < len(win_indices):
             _tmux("rename-window", "-t", f"{UI_SESSION}:{win_indices[i]}", name)
 
-    _apply_style(len(online))
+    _apply_style(len(online), win_indices)
     _open_terminal()
 
 
-def _apply_style(n_online: int) -> None:
-    opts = {
+def _apply_style(n_online: int, win_indices: list[str]) -> None:
+    session_opts = {
         "mouse": "on",
         "status": "on",
         "status-position": "top",
@@ -73,14 +73,20 @@ def _apply_style(n_online: int) -> None:
         "status-left-length": "6",
         "status-right": f" {n_online} online ",
         "status-right-style": "dim",
+    }
+    for k, v in session_opts.items():
+        _tmux("set-option", "-t", UI_SESSION, k, v)
+
+    window_opts = {
         "window-status-format": " #W ",
         "window-status-current-format": " #W ",
         "window-status-style": "dim",
         "window-status-current-style": "bold,underscore",
         "window-status-separator": "",
     }
-    for k, v in opts.items():
-        _tmux("set-option", "-t", UI_SESSION, k, v)
+    for idx in win_indices:
+        for k, v in window_opts.items():
+            _tmux("set-option", "-w", "-t", f"{UI_SESSION}:{idx}", k, v)
 
 
 def _open_terminal() -> None:
