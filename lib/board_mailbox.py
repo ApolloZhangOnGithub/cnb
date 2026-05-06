@@ -15,30 +15,26 @@ from lib.crypto import (
 )
 
 REGISTRY_DIR = Path(__file__).resolve().parent.parent / "registry"
+PUBKEYS_FILE = REGISTRY_DIR / "pubkeys.json"
 
 
 def _keys_dir(db: BoardDB) -> Path:
     return db.env.claudes_dir / "keys"
 
 
+def _load_pubkeys() -> dict[str, str]:
+    if PUBKEYS_FILE.exists():
+        return json.loads(PUBKEYS_FILE.read_text())
+    return {}
+
+
+def _save_pubkeys(data: dict[str, str]) -> None:
+    PUBKEYS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
 def _find_pubkey(name: str) -> str | None:
-    """Look up public_key from registry entry."""
-    for f in REGISTRY_DIR.glob("*.json"):
-        entry = json.loads(f.read_text())
-        if entry.get("name") == name and entry.get("type") != "project":
-            return entry.get("public_key")
-    return None
-
-
-def _update_registry_pubkey(name: str, pubkey_hex: str) -> bool:
-    """Write public_key into the agent's registry JSON."""
-    for f in REGISTRY_DIR.glob("*.json"):
-        entry = json.loads(f.read_text())
-        if entry.get("name") == name and entry.get("type") != "project":
-            entry["public_key"] = pubkey_hex
-            f.write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n")
-            return True
-    return False
+    """Look up public_key from pubkeys.json (separate from immutable chain blocks)."""
+    return _load_pubkeys().get(name)
 
 
 def cmd_keygen(db: BoardDB, identity: str) -> None:
@@ -53,18 +49,14 @@ def cmd_keygen(db: BoardDB, identity: str) -> None:
     save_keypair(kd, name, private, public)
     pubkey_hex = public_key_to_hex(public)
 
-    updated = _update_registry_pubkey(name, pubkey_hex)
-    if updated:
-        print("OK 密钥已生成")
-        print(f"  私钥: {kd / f'{name}.pem'} (勿泄露)")
-        print(f"  公钥: {pubkey_hex[:16]}...")
-        print("  已写入 registry")
-    else:
-        print("OK 密钥已生成")
-        print(f"  私钥: {kd / f'{name}.pem'}")
-        print(f"  公钥: {pubkey_hex[:16]}...")
-        print(f"  WARNING: 未在 registry 中找到 {name}，公钥未自动注册")
-        print(f"  手动注册: registry register {name} 后再运行 keygen")
+    pubkeys = _load_pubkeys()
+    pubkeys[name] = pubkey_hex
+    _save_pubkeys(pubkeys)
+
+    print("OK 密钥已生成")
+    print(f"  私钥: {kd / f'{name}.pem'} (勿泄露)")
+    print(f"  公钥: {pubkey_hex[:16]}...")
+    print(f"  已写入 {PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)}")
 
 
 def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
