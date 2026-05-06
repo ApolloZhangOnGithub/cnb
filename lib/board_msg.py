@@ -9,6 +9,11 @@ from lib.board_db import BoardDB, ts
 from lib.common import parse_flags
 
 
+def _ack_marker_path(db: BoardDB, name: str) -> Path:
+    """Path to file recording max message_id seen by last inbox call."""
+    return db.env.sessions_dir / f".{name}.ack_max_id"
+
+
 def _nudge_session(db: BoardDB, recipient: str) -> None:
     """Inject a prompt into the recipient's tmux session to check inbox."""
     if recipient == "all":
@@ -122,13 +127,18 @@ def cmd_inbox(db: BoardDB, identity: str) -> None:
     else:
         print(f"你有 {count} 条未读:")
         rows = db.query(
-            "SELECT '- [' || m.ts || '] **' || m.sender || '**: ' || m.body "
+            "SELECT i.message_id, '- [' || m.ts || '] **' || m.sender || '**: ' || m.body "
             "FROM inbox i JOIN messages m ON i.message_id=m.id "
             "WHERE i.session=? AND i.read=0 ORDER BY m.ts",
             (name,),
         )
-        for (line,) in rows:
+        max_id = 0
+        for msg_id, line in rows:
             print(line)
+            if msg_id > max_id:
+                max_id = msg_id
+        if max_id > 0:
+            _ack_marker_path(db, name).write_text(str(max_id))
         print(f"\n(运行 ack 清除: board --as {identity} ack)")
 
     _task_print_queue_short(db, name)
@@ -136,15 +146,39 @@ def cmd_inbox(db: BoardDB, identity: str) -> None:
 
 def cmd_ack(db: BoardDB, identity: str) -> None:
     name = identity.lower()
-    count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
+    marker = _ack_marker_path(db, name)
+    max_id = None
+    if marker.exists():
+        try:
+            max_id = int(marker.read_text().strip())
+        except ValueError:
+            pass
+
+    if max_id:
+        count = db.scalar(
+            "SELECT COUNT(*) FROM inbox WHERE session=? AND read=0 AND message_id<=?",
+            (name, max_id),
+        )
+    else:
+        count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
+
     if count == 0:
         print("收件箱已经是空的")
         db.clear_inbox_file(name)
+        marker.unlink(missing_ok=True)
         return
 
-    db.execute("UPDATE inbox SET read=1 WHERE session=? AND read=0", (name,))
+    if max_id:
+        db.execute(
+            "UPDATE inbox SET read=1 WHERE session=? AND read=0 AND message_id<=?",
+            (name, max_id),
+        )
+    else:
+        db.execute("UPDATE inbox SET read=1 WHERE session=? AND read=0", (name,))
+
     print(f"OK {count} 条已清空（完整记录在 messages.log）")
     db.clear_inbox_file(name)
+    marker.unlink(missing_ok=True)
 
 
 def cmd_log(db: BoardDB, identity: str, args: list[str]) -> None:

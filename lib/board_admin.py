@@ -4,16 +4,12 @@ import subprocess
 import time
 
 from lib.board_db import BoardDB, ts
-from lib.common import is_privileged
 
 
 def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
     name = identity.lower()
-    if not is_privileged(name):
-        print("ERROR: only privileged roles can suspend sessions")
-        raise SystemExit(1)
     if not args:
-        print("Usage: ./board --as <lead> suspend <session>")
+        print("Usage: ./board --as <name> suspend <session>")
         raise SystemExit(1)
     target = args[0].lower()
 
@@ -23,6 +19,13 @@ def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
         return
 
     db.execute("INSERT INTO suspended(name, suspended_by) VALUES (?, ?)", (target, name))
+
+    sf = db.env.suspended_file
+    lines = sf.read_text().splitlines() if sf.exists() else []
+    if target not in lines:
+        lines.append(target)
+        sf.write_text("\n".join(lines) + "\n")
+
     print(f"{target}: 已停工")
 
     prefix = db.env.prefix
@@ -46,11 +49,8 @@ def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
 
 def cmd_resume(db: BoardDB, identity: str, args: list[str]) -> None:
     name = identity.lower()
-    if not is_privileged(name):
-        print("ERROR: only privileged roles can resume sessions")
-        raise SystemExit(1)
     if not args:
-        print("Usage: ./board --as <lead> resume <session>")
+        print("Usage: ./board --as <name> resume <session>")
         raise SystemExit(1)
     target = args[0].lower()
 
@@ -60,6 +60,12 @@ def cmd_resume(db: BoardDB, identity: str, args: list[str]) -> None:
         return
 
     db.execute("DELETE FROM suspended WHERE name=?", (target,))
+
+    sf = db.env.suspended_file
+    if sf.exists():
+        lines = [l for l in sf.read_text().splitlines() if l != target]
+        sf.write_text("\n".join(lines) + "\n" if lines else "")
+
     print(f"{target}: 已恢复")
     now = ts()
     db.execute(

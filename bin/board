@@ -16,10 +16,10 @@ sys.path.insert(0, str(CLAUDES_HOME))
 from lib.board_db import BoardDB
 from lib.common import ClaudesEnv, parse_flags
 
-
 # ---------------------------------------------------------------------------
 # Command registry
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Command:
@@ -37,49 +37,154 @@ class Command:
 
 COMMANDS: list[Command] = [
     # ── messaging ──
-    Command("send",   "lib.board_msg",  "cmd_send",   "send a message",              "send <to> <msg> [--attach <f>]"),
-    Command("status", "lib.board_msg",  "cmd_status", "update your current task",    "status <description>"),
-    Command("inbox",  "lib.board_msg",  "cmd_inbox",  "check unread messages",       "inbox",   takes_rest=False),
-    Command("ack",    "lib.board_msg",  "cmd_ack",    "clear inbox",                 "ack",     takes_rest=False),
-    Command("log",    "lib.board_msg",  "cmd_log",    "message history",             "log [n] [--mine]"),
+    Command("send", "lib.board_msg", "cmd_send", "send a message", "send <to> <msg> [--attach <f>]"),
+    Command("status", "lib.board_msg", "cmd_status", "update your current task", "status <description>"),
+    Command("inbox", "lib.board_msg", "cmd_inbox", "check unread messages", "inbox", takes_rest=False),
+    Command("ack", "lib.board_msg", "cmd_ack", "clear inbox", "ack", takes_rest=False),
+    Command("log", "lib.board_msg", "cmd_log", "message history", "log [n] [--mine]"),
     # ── views ──
-    Command("view",       "lib.board_view", "cmd_view",       "session dashboard",         "view",      takes_rest=False),
-    Command("overview",   "lib.board_view", "cmd_overview",   "project overview (default)", "overview", needs_identity=False, takes_rest=False),
-    Command("dashboard",  "lib.board_view", "cmd_dashboard",  "live team status",          "dashboard", needs_identity=False, takes_rest=False, aliases=["dash"]),
-    Command("p0",         "lib.board_view", "cmd_p0",         "P0 lock status",            "p0",        needs_identity=False, takes_rest=False),
-    Command("pre-build",  "lib.board_view", "cmd_prebuild",   "pre-build readiness check", "pre-build", needs_identity=False, takes_rest=False),
-    Command("dirty",      "lib.board_view", "cmd_dirty",      "show uncommitted changes",  "dirty",     needs_identity=False, takes_rest=False),
-    Command("files",      "lib.board_view", "cmd_files",      "list shared files",         "files",     needs_identity=False, takes_rest=False),
-    Command("get",        "lib.board_view", "cmd_get",        "view shared file content",  "get <hash|name>", needs_identity=False),
-    Command("roster",     "lib.board_view", "cmd_roster",     "team roster",               "roster",    needs_identity=False, takes_rest=False),
-    Command("history",    "lib.board_view", "cmd_history",    "session message history",   "history <session> [limit]", needs_identity=False),
-    Command("freshness",  "lib.board_view", "cmd_freshness",  "data freshness per session","freshness", needs_identity=False, takes_rest=False),
-    Command("relations",  "lib.board_view", "cmd_relations",  "inter-session message flow","relations", needs_identity=False, takes_rest=False),
+    Command("view", "lib.board_view", "cmd_view", "session dashboard", "view", takes_rest=False),
+    Command(
+        "overview",
+        "lib.board_view",
+        "cmd_overview",
+        "project overview (default)",
+        "overview",
+        needs_identity=False,
+        takes_rest=False,
+    ),
+    Command(
+        "dashboard",
+        "lib.board_view",
+        "cmd_dashboard",
+        "live team status",
+        "dashboard",
+        needs_identity=False,
+        takes_rest=False,
+        aliases=["dash"],
+    ),
+    Command("p0", "lib.board_view", "cmd_p0", "P0 lock status", "p0", needs_identity=False, takes_rest=False),
+    Command(
+        "pre-build",
+        "lib.board_view",
+        "cmd_prebuild",
+        "pre-build readiness check",
+        "pre-build",
+        needs_identity=False,
+        takes_rest=False,
+    ),
+    Command(
+        "dirty",
+        "lib.board_view",
+        "cmd_dirty",
+        "show uncommitted changes",
+        "dirty",
+        needs_identity=False,
+        takes_rest=False,
+    ),
+    Command(
+        "files", "lib.board_view", "cmd_files", "list shared files", "files", needs_identity=False, takes_rest=False
+    ),
+    Command("get", "lib.board_view", "cmd_get", "view shared file content", "get <hash|name>", needs_identity=False),
+    Command("roster", "lib.board_view", "cmd_roster", "team roster", "roster", needs_identity=False, takes_rest=False),
+    Command(
+        "history",
+        "lib.board_view",
+        "cmd_history",
+        "session message history",
+        "history <session> [limit]",
+        needs_identity=False,
+    ),
+    Command(
+        "freshness",
+        "lib.board_view",
+        "cmd_freshness",
+        "data freshness per session",
+        "freshness",
+        needs_identity=False,
+        takes_rest=False,
+    ),
+    Command(
+        "relations",
+        "lib.board_view",
+        "cmd_relations",
+        "inter-session message flow",
+        "relations",
+        needs_identity=False,
+        takes_rest=False,
+    ),
     # ── BBS ──
-    Command("post",     "lib.board_bbs",  "cmd_post",     "BBS: create new thread",  "post <标题> <内容>"),
-    Command("reply",    "lib.board_bbs",  "cmd_reply",    "BBS: reply to thread",    "reply <帖子ID> <内容>"),
-    Command("thread",   "lib.board_bbs",  "cmd_thread",   "BBS: view thread",        "thread <帖子ID>", needs_identity=False),
-    Command("threads",  "lib.board_bbs",  "cmd_threads",  "BBS: list all threads",   "threads", needs_identity=False, takes_rest=False),
+    Command("post", "lib.board_bbs", "cmd_post", "BBS: create new thread", "post <标题> <内容>"),
+    Command("reply", "lib.board_bbs", "cmd_reply", "BBS: reply to thread", "reply <帖子ID> <内容>"),
+    Command("thread", "lib.board_bbs", "cmd_thread", "BBS: view thread", "thread <帖子ID>", needs_identity=False),
+    Command(
+        "threads",
+        "lib.board_bbs",
+        "cmd_threads",
+        "BBS: list all threads",
+        "threads",
+        needs_identity=False,
+        takes_rest=False,
+    ),
     # ── bug ──
-    Command("bug",      "lib.board_bug",  "cmd_bug",      "bug tracker",             "bug {report|assign|fix|list|overdue}"),
+    Command("bug", "lib.board_bug", "cmd_bug", "bug tracker", "bug {report|assign|fix|list|overdue}"),
     # ── task ──
-    Command("task",     "lib.board_task", "cmd_task",     "task queue management",   "task {add|done|list|next}"),
+    Command("task", "lib.board_task", "cmd_task", "task queue management", "task {add|done|list|next}"),
     # ── voting ──
-    Command("vote",     "lib.board_vote", "cmd_vote",     "vote on a proposal",      "vote <N> <SUPPORT|OBJECT> <reason>"),
-    Command("tally",    "lib.board_vote", "cmd_tally",    "recount votes",           "tally <N>", needs_identity=False),
+    Command("propose", "lib.board_vote", "cmd_propose", "create a proposal", "propose <内容> [--type S]"),
+    Command("vote", "lib.board_vote", "cmd_vote", "vote on a proposal", "vote <N> <SUPPORT|OBJECT> <reason>"),
+    Command("tally", "lib.board_vote", "cmd_tally", "recount votes", "tally <N>", needs_identity=False),
     # ── admin ──
-    Command("kudos",       "lib.board_admin", "cmd_kudos",       "give public recognition",  "kudos <target> <reason>"),
-    Command("kudos-list",  "lib.board_admin", "cmd_kudos_list",  "kudos leaderboard",        "kudos-list", needs_identity=False, takes_rest=False, aliases=["kudos-board"]),
-    Command("suspend",     "lib.board_admin", "cmd_suspend",     "suspend a session",        "suspend <session>"),
-    Command("resume",      "lib.board_admin", "cmd_resume",      "resume a session",         "resume <session>"),
+    Command("kudos", "lib.board_admin", "cmd_kudos", "give public recognition", "kudos <target> <reason>"),
+    Command(
+        "kudos-list",
+        "lib.board_admin",
+        "cmd_kudos_list",
+        "kudos leaderboard",
+        "kudos-list",
+        needs_identity=False,
+        takes_rest=False,
+        aliases=["kudos-board"],
+    ),
+    Command("suspend", "lib.board_admin", "cmd_suspend", "suspend a session", "suspend <session>"),
+    Command("resume", "lib.board_admin", "cmd_resume", "resume a session", "resume <session>"),
     # ── git lock ──
-    Command("git-lock",        "lib.board_lock", "cmd_git_lock",        "acquire git index lock",  "git-lock [reason]"),
-    Command("git-unlock",      "lib.board_lock", "cmd_git_unlock",      "release git index lock",  "git-unlock"),
-    Command("git-lock-status", "lib.board_lock", "cmd_git_lock_status", "git lock status",         "git-lock-status", needs_identity=False, takes_rest=False),
+    Command("git-lock", "lib.board_lock", "cmd_git_lock", "acquire git index lock", "git-lock [reason]"),
+    Command("git-unlock", "lib.board_lock", "cmd_git_unlock", "release git index lock", "git-unlock"),
+    Command(
+        "git-lock-status",
+        "lib.board_lock",
+        "cmd_git_lock_status",
+        "git lock status",
+        "git-lock-status",
+        needs_identity=False,
+        takes_rest=False,
+    ),
     # ── maintenance ──
-    Command("prune",   "lib.board_maintenance", "cmd_prune",   "prune old messages",     "prune [--before DAYS] [--dry-run]", needs_identity=False),
-    Command("backup",  "lib.board_maintenance", "cmd_backup",  "backup database",        "backup [--output <path>]",    needs_identity=False),
-    Command("restore", "lib.board_maintenance", "cmd_restore", "restore from backup",    "restore <file> [--force]",    needs_identity=False),
+    Command(
+        "prune",
+        "lib.board_maintenance",
+        "cmd_prune",
+        "prune old messages",
+        "prune [--before DAYS] [--dry-run]",
+        needs_identity=False,
+    ),
+    Command(
+        "backup",
+        "lib.board_maintenance",
+        "cmd_backup",
+        "backup database",
+        "backup [--output <path>]",
+        needs_identity=False,
+    ),
+    Command(
+        "restore",
+        "lib.board_maintenance",
+        "cmd_restore",
+        "restore from backup",
+        "restore <file> [--force]",
+        needs_identity=False,
+    ),
 ]
 
 # Build lookup map (name + aliases → Command)
@@ -93,6 +198,7 @@ for c in COMMANDS:
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
+
 
 def _dispatch(cmd: Command, db: BoardDB, identity: str, rest: list[str]) -> None:
     """Lazy-import the handler module and call the registered function."""
@@ -137,6 +243,7 @@ def print_help() -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     env = ClaudesEnv.load()

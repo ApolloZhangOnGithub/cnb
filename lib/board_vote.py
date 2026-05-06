@@ -1,7 +1,7 @@
-"""board_vote — governance: vote / tally."""
+"""board_vote — governance: vote / tally / propose."""
 
 from lib.board_db import BoardDB, ts
-from lib.common import PRIVILEGED_ROLES
+from lib.common import PRIVILEGED_ROLES, parse_flags
 
 
 def cmd_vote(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -87,6 +87,38 @@ def cmd_vote(db: BoardDB, identity: str, args: list[str]) -> None:
         )
     else:
         print(f"  (待定，还需 {threshold - s} 票 SUPPORT 通过)")
+
+
+def cmd_propose(db: BoardDB, identity: str, args: list[str]) -> None:
+    name = identity.lower()
+    if len(args) < 1:
+        print("Usage: ./board --as <name> propose <内容> [--type S]")
+        raise SystemExit(1)
+
+    flags, clean_args = parse_flags(args, value_flags={"type": ["--type", "-t"]})
+    prop_type = str(flags.get("type", "A")).upper()
+    if prop_type not in ("A", "S"):
+        print("ERROR: type 只能是 A (普通) 或 S (重大)")
+        raise SystemExit(1)
+
+    content = " ".join(clean_args)
+    if not content:
+        print("ERROR: 提案内容不能为空")
+        raise SystemExit(1)
+
+    max_num = db.scalar("SELECT MAX(CAST(number AS INTEGER)) FROM proposals") or 0
+    number = f"{max_num + 1:03d}"
+    slug = content[:40].replace(" ", "-").lower()
+    now = ts()
+    db.execute(
+        "INSERT INTO proposals(number, slug, type, content, created_at) VALUES (?, ?, ?, ?, ?)",
+        (number, slug, prop_type, content, now),
+    )
+    db.execute(
+        "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
+        (now, name, f"[PROPOSAL #{number}] {content}"),
+    )
+    print(f"OK 提案 #{number} 已创建 (type={prop_type})")
 
 
 def cmd_tally(db: BoardDB, args: list[str]) -> None:

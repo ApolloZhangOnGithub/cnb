@@ -294,6 +294,54 @@ def _auto_accept_trust(name: str, sess: str) -> None:
         waited += 2
 
 
+_pending_threads: list[threading.Thread] = []
+
+
+def _wait_for_shell(sess: str, timeout: int = 15) -> bool:
+    """Poll tmux pane until a shell prompt appears."""
+    waited = 0
+    while waited < timeout:
+        r = subprocess.run(["tmux", "capture-pane", "-t", sess, "-p"], capture_output=True, text=True)
+        if r.returncode == 0 and ("$" in r.stdout or "%" in r.stdout or "❯" in r.stdout):
+            return True
+        time.sleep(1)
+        waited += 1
+    return False
+
+
+def _ensure_registered(names: list[str]) -> None:
+    """Auto-register unknown session names in DB and config.toml."""
+    import sqlite3 as _sqlite3
+
+    db_path = CLAUDES_DIR / "board.db"
+    if not db_path.exists():
+        return
+    conn = _sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode=WAL;")
+    existing = {r[0] for r in conn.execute("SELECT name FROM sessions").fetchall()}
+    new_names = [n for n in names if n not in existing]
+    if not new_names:
+        conn.close()
+        return
+    for n in new_names:
+        conn.execute("INSERT OR IGNORE INTO sessions(name, persona) VALUES (?, ?)", (n, ""))
+        md = SESSIONS_DIR / f"{n}.md"
+        if not md.exists():
+            md.write_text(f"# {n}\n\n## Current task\n(none)\n\n## @inbox\n")
+    conn.commit()
+    conn.close()
+
+    config_path = CLAUDES_DIR / "config.toml"
+    if config_path.exists():
+        text = config_path.read_text()
+        for n in new_names:
+            if f'"{n}"' not in text:
+                text = text.replace("sessions = [", f'sessions = ["{n}", ', 1)
+                text += f'\n[session.{n}]\npersona = ""\n'
+        config_path.write_text(text)
+    SESSIONS.extend(new_names)
+
+
 def tmux_start_one(name: str) -> None:
     sess = f"{PREFIX}-{name}"
     if tmux_is_running(name):
@@ -303,12 +351,20 @@ def tmux_start_one(name: str) -> None:
     log_startup(name)
 
     subprocess.run(["tmux", "new-session", "-d", "-s", sess, "-x", "200", "-y", "50"])
+
+    _wait_for_shell(sess, timeout=10)
     subprocess.run(
-        ["tmux", "send-keys", "-t", sess, "source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null", "Enter"]
+        [
+            "tmux",
+            "send-keys",
+            "-t",
+            sess,
+            f"source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; cd '{PROJECT_ROOT}'",
+            "Enter",
+        ]
     )
-    time.sleep(0.5)
-    subprocess.run(["tmux", "send-keys", "-t", sess, f"cd '{PROJECT_ROOT}'", "Enter"])
-    time.sleep(0.5)
+
+    _wait_for_shell(sess, timeout=10)
 
     if is_deepseek_session(name):
         subprocess.run(["tmux", "send-keys", "-t", sess, "claude /logout 2>/dev/null; true", "Enter"])
@@ -317,13 +373,13 @@ def tmux_start_one(name: str) -> None:
     agent_cmd = build_agent_cmd(name)
     subprocess.run(["tmux", "send-keys", "-t", sess, agent_cmd, "Enter"])
 
-    # Auto-accept workspace trust dialog
-    t_trust = threading.Thread(target=_auto_accept_trust, args=(name, sess), daemon=True)
+    t_trust = threading.Thread(target=_auto_accept_trust, args=(name, sess))
     t_trust.start()
+    _pending_threads.append(t_trust)
 
-    # Queue initial prompt injection in background (waits for agent to be ready)
-    t = threading.Thread(target=_inject_initial_prompt, args=(name, sess), daemon=True)
+    t = threading.Thread(target=_inject_initial_prompt, args=(name, sess))
     t.start()
+    _pending_threads.append(t)
 
     print(f"  {name}: started (tmux: {sess}, agent: {SWARM_AGENT})")
 
@@ -568,6 +624,8 @@ def do_start(args: list[str]) -> None:
                 print(f"  {name}: would start (mode: {MODE}, agent: {SWARM_AGENT})")
         return
 
+    _ensure_registered(targets)
+
     if MODE == "tmux":
         subprocess.run(["tmux", "set", "-g", "mouse", "on"], capture_output=True)
 
@@ -579,6 +637,10 @@ def do_start(args: list[str]) -> None:
         backend_start_one(name)
         clock_in(name)
         started += 1
+
+    for t in _pending_threads:
+        t.join(timeout=90)
+    _pending_threads.clear()
 
     print()
     print(f"Mode: {MODE} | Agent: {SWARM_AGENT} | Started: {started}")
