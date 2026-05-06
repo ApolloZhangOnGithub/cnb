@@ -14,12 +14,31 @@ fi
 if [ $# -gt 0 ]; then
     case "$1" in
         init)       shift; exec "$CLAUDES_HOME/bin/init" "$@" ;;
-        status)     exec "$CLAUDES_HOME/bin/board" overview ;;
+        status|ps)  exec "$CLAUDES_HOME/bin/board" overview ;;
         board)      shift; exec "$CLAUDES_HOME/bin/board" "$@" ;;
         swarm)      shift; exec "$CLAUDES_HOME/bin/swarm" "$@" ;;
         dispatcher) shift; exec "$CLAUDES_HOME/bin/dispatcher" "$@" ;;
         watchdog)   shift; exec "$CLAUDES_HOME/bin/dispatcher-watchdog" "$@" ;;
         doctor)     shift; exec "$CLAUDES_HOME/bin/doctor" "$@" ;;
+        logs)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "用法: cnb logs <name>" >&2; exit 1
+            fi
+            exec "$CLAUDES_HOME/bin/board" --as "$1" log 50 ;;
+        stop)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "用法: cnb stop <name>" >&2; exit 1
+            fi
+            exec "$CLAUDES_HOME/bin/swarm" stop "$@" ;;
+        exec)
+            shift
+            if [ $# -lt 2 ]; then
+                echo "用法: cnb exec <name> \"message\"" >&2; exit 1
+            fi
+            _target="$1"; shift
+            exec "$CLAUDES_HOME/bin/board" send "$_target" "$*" ;;
         version|--version|-v) echo "cnb v${VERSION}"; exit 0 ;;
         help|--help|-h)
             printf "${B}${G}◆ cnb${N} ${D}v${VERSION}${N}\n"
@@ -29,9 +48,13 @@ if [ $# -gt 0 ]; then
             printf "  cnb pokemon           宝可梦主题\n"
             printf "  cnb 5 pokemon         5位同学 + 宝可梦主题\n\n"
             printf "  主题: ai animal food lang music myth pokemon space\n\n"
-            printf "  cnb status            团队面板\n"
-            printf "  cnb swarm [...]       管理后台同学\n"
-            printf "  cnb board [...]       消息/任务\n"
+            printf "  cnb ps                列出 agent 状态\n"
+            printf "  cnb logs <name>       查看某个 agent 的消息历史\n"
+            printf "  cnb exec <name> \"msg\" 给某个 agent 发指令\n"
+            printf "  cnb stop <name>       停止某个 agent\n"
+            printf "  cnb doctor            健康检查\n\n"
+            printf "  cnb board [...]       底层消息/任务命令\n"
+            printf "  cnb swarm [...]       管理后台 agent\n"
             exit 0 ;;
     esac
 fi
@@ -46,7 +69,7 @@ for arg in "$@"; do
     if [[ "$arg" =~ ^[0-9]+$ ]]; then
         _NUM="$arg"
     else
-        _idx=$(echo "$_THEME_MAP" | tr ' ' '\n' | grep "^${arg}:" | cut -d: -f2)
+        _idx=$(echo "$_THEME_MAP" | tr ' ' '\n' | grep "^${arg}:" | cut -d: -f2 || true)
         if [ -n "$_idx" ]; then
             _THEME_IDX="$_idx"
         else
