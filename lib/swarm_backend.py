@@ -1,0 +1,266 @@
+"""swarm_backend — terminal multiplexer backends (tmux, screen)."""
+
+import os
+import re
+import shutil
+import subprocess
+import time
+from abc import ABC, abstractmethod
+from pathlib import Path
+
+
+class SessionBackend(ABC):
+    """Abstract base for terminal multiplexer backends."""
+
+    @abstractmethod
+    def is_running(self, prefix: str, name: str) -> bool: ...
+
+    @abstractmethod
+    def start_session(
+        self,
+        prefix: str,
+        name: str,
+        project_root: Path,
+        agent_cmd: str,
+    ) -> str: ...
+
+    @abstractmethod
+    def stop_session(self, prefix: str, name: str, save_cmd: str) -> None: ...
+
+    @abstractmethod
+    def status_line(self, prefix: str, name: str, agent: str) -> str: ...
+
+    @abstractmethod
+    def attach(self, prefix: str, name: str) -> None: ...
+
+    @abstractmethod
+    def inject(self, prefix: str, name: str, message: str) -> None: ...
+
+    @abstractmethod
+    def capture_pane(self, prefix: str, name: str) -> str: ...
+
+
+class TmuxBackend(SessionBackend):
+    def _sess(self, prefix: str, name: str) -> str:
+        return f"{prefix}-{name}"
+
+    def is_running(self, prefix: str, name: str) -> bool:
+        r = subprocess.run(
+            ["tmux", "has-session", "-t", self._sess(prefix, name)],
+            capture_output=True,
+            timeout=5,
+        )
+        return r.returncode == 0
+
+    def capture_pane(self, prefix: str, name: str) -> str:
+        r = subprocess.run(
+            ["tmux", "capture-pane", "-t", self._sess(prefix, name), "-p"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return r.stdout if r.returncode == 0 else ""
+
+    def wait_for_shell(self, prefix: str, name: str, timeout: int = 15) -> bool:
+        waited = 0
+        while waited < timeout:
+            text = self.capture_pane(prefix, name)
+            if "$" in text or "%" in text or "❯" in text:
+                return True
+            time.sleep(1)
+            waited += 1
+        return False
+
+    def wait_for_prompt(self, prefix: str, name: str, timeout: int = 60) -> bool:
+        waited = 0
+        while waited < timeout:
+            text = self.capture_pane(prefix, name)
+            if "❯" in text:
+                return True
+            time.sleep(2)
+            waited += 2
+        return False
+
+    def auto_accept_trust(self, prefix: str, name: str) -> None:
+        sess = self._sess(prefix, name)
+        waited = 0
+        while waited < 60:
+            r = subprocess.run(
+                ["tmux", "capture-pane", "-t", sess, "-p"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if "I trust" in r.stdout or "trust this folder" in r.stdout.lower():
+                time.sleep(0.5)
+                subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"])
+                return
+            time.sleep(2)
+            waited += 2
+
+    def start_session(
+        self,
+        prefix: str,
+        name: str,
+        project_root: Path,
+        agent_cmd: str,
+    ) -> str:
+        sess = self._sess(prefix, name)
+        subprocess.run(["tmux", "new-session", "-d", "-s", sess, "-x", "200", "-y", "50"])
+        self.wait_for_shell(prefix, name, timeout=10)
+        subprocess.run(
+            [
+                "tmux",
+                "send-keys",
+                "-t",
+                sess,
+                f"source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; cd '{project_root}'",
+                "Enter",
+            ]
+        )
+        self.wait_for_shell(prefix, name, timeout=10)
+        subprocess.run(["tmux", "send-keys", "-t", sess, agent_cmd, "Enter"])
+        return sess
+
+    def stop_session(self, prefix: str, name: str, save_cmd: str) -> None:
+        sess = self._sess(prefix, name)
+        subprocess.run(["tmux", "send-keys", "-t", sess, "C-c"])
+        time.sleep(1)
+        subprocess.run(["tmux", "send-keys", "-t", sess, f"! {save_cmd}", "Enter"])
+        time.sleep(3)
+        subprocess.run(["tmux", "send-keys", "-t", sess, "/exit", "Enter"])
+
+        waited = 0
+        while self.is_running(prefix, name) and waited < 15:
+            time.sleep(1)
+            waited += 1
+        if self.is_running(prefix, name):
+            subprocess.run(["tmux", "kill-session", "-t", sess])
+            print(f"  {name}: force killed (after {waited}s)")
+        else:
+            print(f"  {name}: exited gracefully")
+
+    def status_line(self, prefix: str, name: str, agent: str) -> str:
+        return f"running (tmux, agent: {agent})"
+
+    def attach(self, prefix: str, name: str) -> None:
+        os.execvp("tmux", ["tmux", "attach-session", "-t", self._sess(prefix, name)])
+
+    def inject(self, prefix: str, name: str, message: str) -> None:
+        sess = self._sess(prefix, name)
+        if not self.is_running(prefix, name):
+            print(f"  {name}: not running")
+            raise SystemExit(1)
+        oneline = message.replace("\n", " ")
+        subprocess.run(["tmux", "send-keys", "-t", sess, "-l", oneline])
+        subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"])
+        print(f"  {name}: injected")
+
+    def inject_initial_prompt(self, prefix: str, name: str, prompt: str, log_dir: Path) -> None:
+        if self.wait_for_prompt(prefix, name, timeout=60):
+            sess = self._sess(prefix, name)
+            time.sleep(1)
+            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", prompt])
+            subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"])
+        else:
+            with open(log_dir / f"{name}.log", "a") as f:
+                f.write(f"[WARN] {name}: prompt not detected after 60s, skipping injection\n")
+
+    def enable_mouse(self) -> None:
+        subprocess.run(["tmux", "set", "-g", "mouse", "on"], capture_output=True)
+
+
+class ScreenBackend(SessionBackend):
+    def _sess(self, prefix: str, name: str) -> str:
+        return f"{prefix}-{name}"
+
+    def is_running(self, prefix: str, name: str) -> bool:
+        sess_tag = f".{self._sess(prefix, name)}"
+        r = subprocess.run(["screen", "-list"], capture_output=True, text=True, timeout=5)
+        output = r.stdout + r.stderr
+        return bool(re.search(rf"{re.escape(sess_tag)}\s", output))
+
+    def capture_pane(self, prefix: str, name: str) -> str:
+        return ""
+
+    def start_session(
+        self,
+        prefix: str,
+        name: str,
+        project_root: Path,
+        agent_cmd: str,
+    ) -> str:
+        sess = self._sess(prefix, name)
+        subprocess.run(["screen", "-dmS", sess])
+        time.sleep(1)
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", f"cd '{project_root}'"])
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
+        time.sleep(0.5)
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", agent_cmd])
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
+        return sess
+
+    def stop_session(self, prefix: str, name: str, save_cmd: str) -> None:
+        sess = self._sess(prefix, name)
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\x03"])
+        time.sleep(1)
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", f"! {save_cmd}\r"])
+        time.sleep(3)
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "/exit\r"])
+
+        waited = 0
+        while self.is_running(prefix, name) and waited < 15:
+            time.sleep(1)
+            waited += 1
+        if self.is_running(prefix, name):
+            subprocess.run(["screen", "-S", sess, "-X", "quit"])
+            print(f"  {name}: force killed (after {waited}s)")
+        else:
+            print(f"  {name}: exited gracefully")
+
+    def status_line(self, prefix: str, name: str, agent: str) -> str:
+        r = subprocess.run(["screen", "-list"], capture_output=True, text=True, timeout=5)
+        output = r.stdout + r.stderr
+        state = ""
+        for line in output.splitlines():
+            if f".{self._sess(prefix, name)}" in line:
+                parts = line.strip().split()
+                if parts:
+                    state = parts[-1]
+                break
+        return f"running (screen, agent: {agent}) {state}"
+
+    def attach(self, prefix: str, name: str) -> None:
+        os.execvp("screen", ["screen", "-r", self._sess(prefix, name)])
+
+    def inject(self, prefix: str, name: str, message: str) -> None:
+        sess = self._sess(prefix, name)
+        if not self.is_running(prefix, name):
+            print(f"  {name}: not running")
+            raise SystemExit(1)
+        oneline = message.replace("\n", " ")
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", oneline])
+        time.sleep(0.3)
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
+        print(f"  {name}: injected")
+
+    def inject_initial_prompt(self, prefix: str, name: str, prompt: str, log_dir: Path) -> None:
+        time.sleep(3)
+        sess = self._sess(prefix, name)
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", prompt])
+        time.sleep(0.3)
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
+
+
+def detect_backend() -> SessionBackend:
+    override = os.environ.get("SWARM_MODE", "")
+    if override == "tmux":
+        return TmuxBackend()
+    if override == "screen":
+        return ScreenBackend()
+    if shutil.which("tmux"):
+        return TmuxBackend()
+    if shutil.which("screen"):
+        return ScreenBackend()
+    print("ERROR: neither tmux nor screen found. Install one: brew install tmux")
+    raise SystemExit(1)

@@ -248,7 +248,7 @@ def main() -> None:
         persona = personas.get(n, "")
         conn.execute("INSERT OR IGNORE INTO sessions(name, persona) VALUES (?, ?)", (n, persona))
         persona_section = f"\n## Persona\n{persona}\n" if persona else ""
-        md_content = f"# {n}\n{persona_section}\n## Current task\n(none)\n\n## @inbox\n"
+        md_content = f"# {n}\n{persona_section}\n## Current task\n(none)\n"
         (claudes_dir / "sessions" / f"{n}.md").write_text(md_content)
     conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('dispatcher_session', 'dispatcher')")
     # Record schema version so migration runner knows where we are
