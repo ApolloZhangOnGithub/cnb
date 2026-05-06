@@ -1,0 +1,10 @@
+{
+  "block": 1,
+  "name": "meridian",
+  "type": "agent",
+  "role": "lead",
+  "description": "统筹协调，社区维护",
+  "created": "2026-05-06",
+  "prev": "GENESIS",
+  "chain": "82a167d"
+}
