@@ -1,4 +1,4 @@
-"""migrate — schema migration runner for claudes-code.
+"""migrate — schema migration runner for cnb.
 
 Tracks applied migrations in the `meta` table (key='schema_version').
 Migrations live in the `migrations/` directory alongside schema.sql.
@@ -97,7 +97,7 @@ def main() -> None:
         db_path = cwd_db
 
     if not db_path.exists():
-        print("ERROR: board.db not found. Run: claudes-code init <sessions>", flush=True)
+        print("ERROR: board.db not found. Run: cnb init <sessions>", flush=True)
         raise SystemExit(1)
 
     n = run_migrations(db_path, claudes_home)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""claudes-code init — initialize a project for multi-agent coordination."""
+"""cnb init — initialize a project for multi-agent coordination."""
 
 import hashlib
 import json
@@ -35,13 +35,13 @@ def _validate_name(name: str) -> str:
         raise SystemExit(1)
     if not VALID_NAME.match(clean):
         print(f"ERROR: invalid session name '{name}'. Use a-z, 0-9, hyphens, underscores.")
-        print("       Example: claudes-code init alice bob charlie")
+        print("       Example: cnb init alice bob charlie")
         raise SystemExit(1)
     return clean
 
 
-MARKER_START = "<!-- claudes-code:start -->"
-MARKER_END = "<!-- claudes-code:end -->"
+MARKER_START = "<!-- cnb:start -->"
+MARKER_END = "<!-- cnb:end -->"
 
 
 def _claude_md_snippet(sessions: list[str], claudes_home: Path, personas: dict[str, str] | None = None) -> str:
@@ -50,7 +50,7 @@ def _claude_md_snippet(sessions: list[str], claudes_home: Path, personas: dict[s
         MARKER_START,
         "## Multi-Agent Coordination",
         "",
-        "This project uses claudes-code for multi-session coordination.",
+        "This project uses cnb for multi-session coordination.",
         "",
         "### Session Startup",
         "",
@@ -178,7 +178,7 @@ def _create_slash_commands(project_dir: Path, claudes_home: Path) -> None:
         "cs-stop": f"停掉所有后台同学。运行 `{swarm} stop`，告诉用户已全部下线。",
         "cs-bugs": f"运行 `{board} --as lead bug list`，汇总当前所有 bug。",
         "cs-history": f"运行 `{board} --as lead log 50`，把完整的消息历史展示给我。",
-        "cs-update": "运行 `pip install --upgrade claudes-code`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 claudes-code 以生效。",
+        "cs-update": "运行 `pip install --upgrade cnb`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 cnb 以生效。",
         "cs-help": "列出所有 /cs-* 命令及用途：\n"
         "- /cs-team — 看同学状态\n"
         "- /cs-inbox — 查收消息\n"
@@ -309,7 +309,7 @@ def main() -> None:
     _update_settings(project_dir, claudes_home)
 
     sessions_str = " ".join(sessions)
-    print(f"Initialized claudes-code (sessions: {sessions_str})")
+    print(f"Initialized cnb (sessions: {sessions_str})")
 
 
 if __name__ == "__main__":

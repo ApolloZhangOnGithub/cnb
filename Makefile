@@ -1,9 +1,9 @@
 PREFIX ?= /usr/local
 BINDIR  = $(PREFIX)/bin
-LIBDIR  = $(PREFIX)/lib/claudes-code
+LIBDIR  = $(PREFIX)/lib/cnb
 VERSION = $(shell cat VERSION)
 
-SCRIPTS = bin/claudes-code bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init
+SCRIPTS = bin/cnb bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init
 
 # All python sources (bin + lib)
 PY_SOURCES = bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init lib/ tests/
@@ -21,7 +21,7 @@ lint:
 	ruff check $(PY_SOURCES)
 	@echo ""
 	@echo "=== shellcheck ==="
-	shellcheck -s bash -S warning bin/claudes-code
+	shellcheck -s bash -S warning bin/cnb
 	@echo ""
 	@echo "OK"
 
@@ -44,10 +44,10 @@ install:
 	install -m 755 $(SCRIPTS) $(LIBDIR)/bin/
 	install -m 644 lib/*.py $(LIBDIR)/lib/
 	install -m 644 schema.sql VERSION $(LIBDIR)/
-	ln -sf $(LIBDIR)/bin/claudes-code $(BINDIR)/claudes-code
+	ln -sf $(LIBDIR)/bin/cnb $(BINDIR)/cnb
 
 uninstall:
-	rm -f $(BINDIR)/claudes-code
+	rm -f $(BINDIR)/cnb
 	rm -rf $(LIBDIR)
 
 clean:

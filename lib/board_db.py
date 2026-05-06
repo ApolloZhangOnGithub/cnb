@@ -33,7 +33,7 @@ class BoardDB(BaseDB):
             self.env: ClaudesEnv | None = env_or_path
             self.db_path = env_or_path.board_db
             if not self.db_path.exists():
-                print("ERROR: board.db not found. Run: claudes-code init <session-names>", flush=True)
+                print("ERROR: board.db not found. Run: cnb init <session-names>", flush=True)
                 raise SystemExit(1)
             # Auto-apply pending schema migrations (idempotent, fast if up-to-date)
             self._auto_migrate()

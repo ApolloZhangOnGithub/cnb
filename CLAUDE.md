@@ -1,4 +1,4 @@
-# claudes-code conventions
+# cnb conventions
 
 Multi-agent coordination framework for Claude Code sessions.
 Python 3.11+, SQLite (WAL mode), tmux-based session management.
@@ -77,10 +77,10 @@ pytest -k test_board   # subset
 - **Type checking**: `mypy` (permissive — `disallow_untyped_defs = false`).
 - Line length: 120.
 
-<!-- claudes-code:start -->
+<!-- cnb:start -->
 ## Multi-Agent Coordination
 
-This project uses claudes-code for multi-session coordination.
+This project uses cnb for multi-session coordination.
 
 ### Session Startup
 
@@ -114,4 +114,4 @@ On startup:
 ### Sessions
 
 - **alice**
-<!-- claudes-code:end -->
+<!-- cnb:end -->

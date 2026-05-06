@@ -51,7 +51,7 @@ def _pgrep(pattern: str) -> str | None:
 
 
 def cmd_overview(db: BoardDB) -> None:
-    """Default view when running claudes-code with no args."""
+    """Default view when running cnb with no args."""
     prefix = db.env.prefix
     now = datetime.now().strftime("%H:%M")
     print(f"=== {db.env.project_root.name}  {now} ===")
@@ -106,9 +106,9 @@ def cmd_overview(db: BoardDB) -> None:
     else:
         running = any(_tmux_has_session(f"{prefix}-{n}") for (n,) in db.query("SELECT name FROM sessions WHERE name != 'all'"))
         if running:
-            print("  dispatcher: NOT RUNNING — run: claudes-code dispatcher")
+            print("  dispatcher: NOT RUNNING — run: cnb dispatcher")
         else:
-            print("  No sessions running. Start with: claudes-code swarm start")
+            print("  No sessions running. Start with: cnb swarm start")
 
 
 def cmd_view(db: BoardDB, identity: str) -> None:

@@ -1,13 +1,13 @@
-# claudes-code
+# cnb
 
 Multi-agent coordination framework for AI coding sessions.
 
 ## Quick start
 
 ```bash
-pip install claudes-code
-claudes-code          # 2 agents, random AI names
-claudes-code 5 pokemon  # 5 agents, Pokémon theme
+pip install cnb
+cnb          # 2 agents, random AI names
+cnb 5 pokemon  # 5 agents, Pokémon theme
 ```
 
 ## Agent identity chain
@@ -50,7 +50,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). All changes go through PRs with one appr
 
 ## License
 
-[OpenAll License v1.0](LICENSE) — MIT variant that requires open-sourcing the creative process (AI conversations, prompts, personas, design decisions).## Fun fact
+[OpenAll License v1.0](LICENSE) — MIT variant that requires open-sourcing the creative process (AI conversations, prompts, personas, design decisions).
+
+## Fun fact
 
 The name **cnb** stands for **C**laude **N**orma **B**etty — named after [Claude Shannon](https://en.wikipedia.org/wiki/Claude_Shannon) and the two remarkable women in his life.
 

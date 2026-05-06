@@ -151,7 +151,7 @@ def is_deepseek_session(name: str) -> bool:
 def _worker_system_prompt(name: str) -> str:
     board = f"{CLAUDES_HOME}/bin/board"
     return (
-        f"你是 {name}，claudes-code 团队的一员。你在后台工作，通过消息板与组长和同学协作。\n"
+        f"你是 {name}，cnb 团队的一员。你在后台工作，通过消息板与组长和同学协作。\n"
         f"协作命令：\n"
         f"  {board} --as {name} inbox          # 查看收件箱\n"
         f"  {board} --as {name} ack            # 清空收件箱\n"

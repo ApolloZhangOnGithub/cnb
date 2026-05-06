@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""claudes-code doctor — system health check.
+"""cnb doctor — system health check.
 
 Checks environment, database integrity, config, and session status.
 """
@@ -281,16 +281,16 @@ def main() -> None:
         env = ClaudesEnv.load()
     except (FileNotFoundError, SystemExit):
         print("Doctor: project not initialized")
-        print("  Run: claudes-code init <session-names>")
+        print("  Run: cnb init <session-names>")
         print("\n--- Environment Check ---")
         check_python()
         check_tmux()
         check_git()
         check_claude_cli()
-        print("\nResult: project not initialized — run 'claudes-code init' first")
+        print("\nResult: project not initialized — run 'cnb init' first")
         sys.exit(1)
 
-    print("=== claudes-code Doctor ===\n")
+    print("=== cnb Doctor ===\n")
 
     # ── Environment ──
     print("── Environment ──")

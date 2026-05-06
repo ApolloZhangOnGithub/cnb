@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared utilities for claudes-code Python modules."""
+"""Shared utilities for cnb Python modules."""
 
 import sqlite3
 from abc import ABC, abstractmethod
@@ -16,7 +16,7 @@ from typing import Any, Generic, TypeVar
 
 
 class ClaudesError(Exception):
-    """Base error for claudes-code. All domain errors inherit from this."""
+    """Base error for cnb. All domain errors inherit from this."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
@@ -78,7 +78,7 @@ class ClaudesEnv:
         if toml_file.exists():
             config = _parse_toml(toml_file)
         else:
-            print("ERROR: config.toml not found in .claudes/. Run: claudes-code init <session-names>", flush=True)
+            print("ERROR: config.toml not found in .claudes/. Run: cnb init <session-names>", flush=True)
             raise SystemExit(1)
 
         log_dir = cd / "logs"
@@ -161,7 +161,7 @@ def date_to_epoch(s: str) -> int:
 
 
 class BaseDB(ABC):
-    """Abstract base for SQLite wrappers for the claudes-code board database.
+    """Abstract base for SQLite wrappers for the cnb board database.
 
     Guarantees: new connection per call, WAL mode, parameterized queries.
     Both DB (lightweight) and BoardDB (full-featured) implement this interface.
