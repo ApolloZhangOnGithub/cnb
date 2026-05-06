@@ -44,24 +44,25 @@ def cmd_tui(db: BoardDB) -> None:
         print("ERROR: 没有在线的 worker，先运行 cnb swarm start")
         raise SystemExit(1)
 
-    # Kill old UI session if exists
+    # Rebuild base UI session (shared window group)
     if _session_exists(UI_SESSION):
         _tmux("kill-session", "-t", UI_SESSION)
 
-    # Create session grouped with first worker
-    _tmux("new-session", "-d", "-s", UI_SESSION, "-t", f"{prefix}-{online[0]}")
+    _tmux("new-session", "-d", "-s", UI_SESSION)
+    for name in online:
+        _tmux("link-window", "-s", f"{prefix}-{name}:0", "-t", UI_SESSION, "-a")
+    _tmux("kill-window", "-t", f"{UI_SESSION}:0")
 
-    # Link remaining workers as windows
-    for name in online[1:]:
-        _tmux("link-window", "-s", f"{prefix}-{name}", "-t", UI_SESSION, "-a")
-
-    # Rename windows
     win_indices = _tmux_out("list-windows", "-t", UI_SESSION, "-F", "#{window_index}").split("\n")
     for i, name in enumerate(online):
         if i < len(win_indices):
             _tmux("rename-window", "-t", f"{UI_SESSION}:{win_indices[i]}", name)
 
-    # Mouse + clean visual config
+    _apply_style(len(online))
+    _open_terminal()
+
+
+def _apply_style(n_online: int) -> None:
     opts = {
         "mouse": "on",
         "status": "on",
@@ -70,7 +71,7 @@ def cmd_tui(db: BoardDB) -> None:
         "status-left": " cnb ",
         "status-left-style": "bold",
         "status-left-length": "6",
-        "status-right": f" {len(online)} online ",
+        "status-right": f" {n_online} online ",
         "status-right-style": "dim",
         "window-status-format": " #W ",
         "window-status-current-format": " #W ",
@@ -81,13 +82,12 @@ def cmd_tui(db: BoardDB) -> None:
     for k, v in opts.items():
         _tmux("set-option", "-t", UI_SESSION, k, v)
 
-    # Open in new terminal window
-    _open_terminal()
-
 
 def _open_terminal() -> None:
-    """Open a new terminal window attached to cnb-ui."""
-    attach_cmd = f"tmux attach -t {UI_SESSION}"
+    """Open a new terminal with an independent grouped session."""
+    # Use ';' (single-quoted) so the shell passes a literal semicolon to tmux
+    # as its command separator — avoids backslash escaping issues in AppleScript.
+    attach_cmd = f"tmux new-session -t {UI_SESSION} ';' set-option destroy-unattached on"
 
     if sys.platform == "darwin":
         if os.path.isdir("/Applications/iTerm.app"):
@@ -99,7 +99,10 @@ def _open_terminal() -> None:
             )
         else:
             script = f'tell application "Terminal"\n  do script "{attach_cmd}"\n  activate\nend tell'
-        subprocess.run(["osascript", "-e", script], capture_output=True)
+        r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"ERROR: 无法打开终端: {r.stderr.strip()}")
+            raise SystemExit(1)
         print("OK 已打开 — 点击顶部 tab 切换同学")
     else:
         import shutil
@@ -109,4 +112,5 @@ def _open_terminal() -> None:
                 subprocess.Popen([term, "--", "bash", "-c", attach_cmd])
                 print("OK 已打开 — 点击顶部 tab 切换同学")
                 return
-        print(f"运行: {attach_cmd}")
+        print(f"ERROR: 找不到终端模拟器，手动运行: {attach_cmd}")
+        raise SystemExit(1)
