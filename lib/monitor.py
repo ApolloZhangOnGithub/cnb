@@ -12,6 +12,7 @@ Usage:
 import os
 import select
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
@@ -282,7 +283,7 @@ def do_test(env: ClaudesEnv) -> None:
     log("Sending test message and measuring detection time...")
 
     test_target = env.sessions[0] if env.sessions else "test"
-    board_sh = env.project_root / "board"
+    board_sh = env.install_home / "bin" / "board"
 
     # Start watcher
     watcher = create_watcher(str(env.sessions_dir))

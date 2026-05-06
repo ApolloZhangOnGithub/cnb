@@ -8,6 +8,9 @@ version = "0.3.0"
 description = "Multi-agent coordination framework for Claude Code sessions"
 requires-python = ">=3.11"
 license = "OpenAll-1.0"
+dependencies = [
+    "cryptography>=41.0",
+]
 
 [project.scripts]
 cnb = "lib.cli:main"

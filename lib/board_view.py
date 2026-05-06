@@ -15,6 +15,7 @@ def _git(project_root: Path, *args: str) -> str:
         ["git", "-C", str(project_root), *args],
         capture_output=True,
         text=True,
+        timeout=5,
     )
     return r.stdout
 
@@ -80,10 +81,7 @@ def cmd_overview(db: BoardDB) -> None:
         print(line)
 
     # ── recent messages ──
-    rows = db.query(
-        "SELECT ts, sender, recipient, substr(body, 1, 80) "
-        "FROM messages ORDER BY id DESC LIMIT 5"
-    )
+    rows = db.query("SELECT ts, sender, recipient, substr(body, 1, 80) FROM messages ORDER BY id DESC LIMIT 5")
     if rows:
         print()
         print("Recent:")
@@ -91,9 +89,7 @@ def cmd_overview(db: BoardDB) -> None:
             print(f"  [{ts_val}] {sender} → {recipient}: {body}")
 
     # ── open proposals ──
-    proposals = db.query(
-        "SELECT number || '-' || slug FROM proposals WHERE status='OPEN'"
-    )
+    proposals = db.query("SELECT number || '-' || slug FROM proposals WHERE status='OPEN'")
     if proposals:
         print()
         print(f"Open proposals: {len(proposals)}")
@@ -104,7 +100,9 @@ def cmd_overview(db: BoardDB) -> None:
     if pid:
         print(f"  dispatcher: running (pid {pid})")
     else:
-        running = any(_tmux_has_session(f"{prefix}-{n}") for (n,) in db.query("SELECT name FROM sessions WHERE name != 'all'"))
+        running = any(
+            _tmux_has_session(f"{prefix}-{n}") for (n,) in db.query("SELECT name FROM sessions WHERE name != 'all'")
+        )
         if running:
             print("  dispatcher: NOT RUNNING — run: cnb dispatcher")
         else:

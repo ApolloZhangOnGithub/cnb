@@ -10,32 +10,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-# ---------------------------------------------------------------------------
-# Error types — inspired by Claude Code's errors.ts hierarchy
-# ---------------------------------------------------------------------------
-
-
-class ClaudesError(Exception):
-    """Base error for cnb. All domain errors inherit from this."""
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
-        self.name = type(self).__name__
-
-
-class AbortError(ClaudesError):
-    """Raised when an operation is cancelled (timeout, signal, user interrupt)."""
-
-
-def to_error(e: object) -> Exception:
-    """Normalize any thrown value into an Exception. Use at catch-site boundaries."""
-    return e if isinstance(e, Exception) else Exception(str(e))
-
-
-def error_message(e: object) -> str:
-    """Extract a human-readable message from any error-like value."""
-    return str(e) if isinstance(e, Exception) else str(e)
-
 
 def find_claudes_dir() -> Path:
     """Walk up from cwd to find the .claudes/ directory."""

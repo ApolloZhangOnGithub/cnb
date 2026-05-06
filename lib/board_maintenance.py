@@ -1,6 +1,5 @@
 """board_maintenance — data maintenance: prune, backup, restore."""
 
-import shutil
 import time
 from pathlib import Path
 
@@ -14,12 +13,11 @@ from lib.board_db import BoardDB
 def cmd_prune(db: BoardDB, args: list[str]) -> None:
     """Prune old messages and inbox entries.
 
-    Usage: board --as <name> prune [--before YYYY-MM-DD] [--keep N] [--dry-run]
+    Usage: board --as <name> prune [--before YYYY-MM-DD] [--dry-run]
     """
-    usage = "Usage: board --as <name> prune [--before YYYY-MM-DD] [--keep N] [--dry-run]"
+    usage = "Usage: board --as <name> prune [--before YYYY-MM-DD] [--dry-run]"
 
     before_days = 90  # default: keep 90 days
-    keep_count: int | None = None
     dry_run = False
     positional: list[str] = []
 
@@ -27,13 +25,6 @@ def cmd_prune(db: BoardDB, args: list[str]) -> None:
     while i < len(args):
         if args[i] == "--before" and i + 1 < len(args):
             before_days = _parse_days(args[i + 1])
-            i += 2
-        elif args[i] == "--keep" and i + 1 < len(args):
-            try:
-                keep_count = int(args[i + 1])
-            except ValueError:
-                print(f"ERROR: --keep requires a number, got '{args[i + 1]}'")
-                raise SystemExit(1)
             i += 2
         elif args[i] == "--dry-run":
             dry_run = True
@@ -49,22 +40,29 @@ def cmd_prune(db: BoardDB, args: list[str]) -> None:
     cutoff = _days_ago_ts(before_days)
 
     # Count what would be deleted
-    old_inbox = db.scalar(
-        "SELECT COUNT(*) FROM inbox WHERE message_id IN "
-        "(SELECT id FROM messages WHERE ts < ?)",
-        (cutoff,),
-    ) or 0
-    old_messages = db.scalar(
-        "SELECT COUNT(*) FROM messages WHERE ts < ?",
-        (cutoff,),
-    ) or 0
+    old_inbox = (
+        db.scalar(
+            "SELECT COUNT(*) FROM inbox WHERE message_id IN (SELECT id FROM messages WHERE ts < ?)",
+            (cutoff,),
+        )
+        or 0
+    )
+    old_messages = (
+        db.scalar(
+            "SELECT COUNT(*) FROM messages WHERE ts < ?",
+            (cutoff,),
+        )
+        or 0
+    )
 
     # Also count old read inbox entries (not just those linked to old messages)
-    old_read_inbox = db.scalar(
-        "SELECT COUNT(*) FROM inbox WHERE read=1 AND "
-        "delivered_at < ?",
-        (cutoff,),
-    ) or 0
+    old_read_inbox = (
+        db.scalar(
+            "SELECT COUNT(*) FROM inbox WHERE read=1 AND delivered_at < ?",
+            (cutoff,),
+        )
+        or 0
+    )
 
     if dry_run:
         print("=== DRY RUN: would delete ===")
@@ -205,9 +203,7 @@ def cmd_restore(db: BoardDB, args: list[str]) -> None:
     try:
         conn = sqlite3.connect(str(source))
         conn.execute("PRAGMA integrity_check")
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         conn.close()
         if not tables:
             print("ERROR: backup file contains no tables")
@@ -230,6 +226,8 @@ def cmd_restore(db: BoardDB, args: list[str]) -> None:
             return
 
     # Atomic restore: copy to temp, rename
+    import shutil
+
     tmp = db.db_path.with_suffix(".db.restore-tmp")
     shutil.copy2(source, tmp)
     tmp.replace(db.db_path)

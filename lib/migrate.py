@@ -83,6 +83,7 @@ def run_migrations(db_path: Path, claudes_home: Path) -> int:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     """Run pending migrations. Called from init and doctor."""
     # Resolve CLAUDES_HOME relative to this file

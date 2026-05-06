@@ -70,11 +70,7 @@ def get_dev_sessions(cfg: DispatcherConfig) -> list[str]:
         return []
     pfx = f"{cfg.prefix}-"
     protected = {"dispatcher", "lead"}
-    return [
-        line[len(pfx) :]
-        for line in raw.splitlines()
-        if line.startswith(pfx) and line[len(pfx) :] not in protected
-    ]
+    return [line[len(pfx) :] for line in raw.splitlines() if line.startswith(pfx) and line[len(pfx) :] not in protected]
 
 
 def pane_md5(sess: str) -> str:

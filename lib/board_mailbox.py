@@ -1,7 +1,10 @@
 """board_mailbox — encrypted async messaging between registered agents."""
 
+import base64
 import json
 from pathlib import Path
+
+from cryptography.exceptions import InvalidTag
 
 from lib.board_db import BoardDB, ts
 from lib.crypto import (
@@ -110,12 +113,13 @@ def cmd_unseal(db: BoardDB, identity: str) -> None:
             plaintext = unseal_b64(encrypted_body, private)
             print(f"  [{msg_ts}] **{sender}**: {plaintext}")
             decrypted_ids.append(msg_id)
-        except Exception:
-            print(f"  [{msg_ts}] **{sender}**: [解密失败 — 密钥不匹配或消息损坏]")
+        except (InvalidTag, ValueError, base64.binascii.Error, UnicodeDecodeError) as e:
+            print(f"  [{msg_ts}] **{sender}**: [解密失败 — {type(e).__name__}: {e}]")
 
     if decrypted_ids:
-        placeholders = ",".join("?" * len(decrypted_ids))
-        db.execute(f"UPDATE mailbox SET read=1 WHERE id IN ({placeholders})", tuple(decrypted_ids))
+        with db.conn() as c:
+            for mid in decrypted_ids:
+                db.execute("UPDATE mailbox SET read=1 WHERE id=?", (mid,), c=c)
         print(f"\n已标记 {len(decrypted_ids)} 条为已读")
 
 
@@ -141,5 +145,5 @@ def cmd_mailbox_log(db: BoardDB, identity: str) -> None:
         try:
             plaintext = unseal_b64(encrypted_body, private)
             print(f"  [{msg_ts}] {sender}: {plaintext}")
-        except Exception:
-            print(f"  [{msg_ts}] {sender}: [无法解密]")
+        except (InvalidTag, ValueError, base64.binascii.Error, UnicodeDecodeError) as e:
+            print(f"  [{msg_ts}] {sender}: [无法解密 — {type(e).__name__}: {e}]")

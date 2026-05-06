@@ -121,7 +121,11 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
         _print_queue(db, name)
         return
 
-    task_id = int(task_id)
+    try:
+        task_id = int(task_id)
+    except ValueError:
+        print(f"ERROR: 无效的任务 ID: {task_id}")
+        raise SystemExit(1)
     row = db.query_one("SELECT session, status, description FROM tasks WHERE id=?", (task_id,))
     if not row:
         print(f"ERROR: task #{task_id} not found")

@@ -51,6 +51,7 @@ class CoralManager(Concern):
     def _wait_until_ready(self) -> None:
         """Poll until the Claude process is running, or timeout after BOOT_WAIT."""
         import time as _time
+
         deadline = _time.monotonic() + self.BOOT_WAIT
         while _time.monotonic() < deadline:
             if is_claude_running(self.cfg.coral_sess):
