@@ -66,6 +66,39 @@ View the contributor leaderboard:
 cnb leaderboard
 ```
 
+## Bug tracker and accountability
+
+Use the board's built-in bug tracker for incidents, regressions, and security issues:
+
+```bash
+board --as <name> bug report <P1|P2> "description"  # report (P0 = immediate, P1 = 4h, P2 = 24h)
+board --as <name> bug assign <BUG-NNN> <session>     # assign
+board --as <name> bug fix <BUG-NNN> "evidence"        # close with evidence
+board --as <name> bug list                             # open bugs
+board --as <name> bug overdue                          # SLA violations
+```
+
+Also available: `kudos` for recognition and `kudos-list` for the leaderboard.
+
+```bash
+board --as <name> kudos <target> "reason"    # give recognition
+board --as lead kudos-list                   # kudos leaderboard
+```
+
+Security incidents must be reported as bugs, broadcast to all, and logged in the relevant GitHub issue.
+
+## Shutdown checklist
+
+Every session must complete before clocking off:
+
+1. `git add` + `git commit` + **`git push`** — all code must be on remote
+2. `board --as <name> status "progress summary"` — write what you did and where to continue
+3. Write daily report to `.claudes/dailies/{shift}/{name}.md`
+4. `board --as <name> ack` — confirm shutdown
+5. Reply ack to lead's shutdown broadcast
+
+**No unpushed commits.** If it's not on remote, it doesn't exist.
+
 ## npm publishing
 
 After a release commit:
