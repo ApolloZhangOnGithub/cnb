@@ -1,6 +1,7 @@
 """board_msg — send / inbox / ack / status / log commands."""
 
 import hashlib
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,23 +16,34 @@ def _ack_marker_path(db: BoardDB, name: str) -> Path:
 
 
 def _is_idle(sess: str) -> bool:
-    """Check if a Claude Code session is idle at its prompt (not mid-response)."""
+    """Check if a Claude Code session is idle at its prompt (not mid-response).
+
+    Claude Code's prompt layout puts the prompt marker a few lines above the bottom
+    (status bar, project name, permissions line are below it), so we
+    check the last ~8 lines rather than just the final line.
+    """
     r = subprocess.run(
-        ["tmux", "capture-pane", "-t", sess, "-p", "-S", "-5"],
+        ["tmux", "capture-pane", "-t", sess, "-p", "-S", "-10"],
         capture_output=True,
         text=True,
         timeout=3,
     )
     if r.returncode != 0:
         return False
-    lines = [l for l in r.stdout.rstrip().splitlines() if l.strip()]
-    if not lines:
+    text = r.stdout.rstrip()
+    if not text:
         return False
-    last = lines[-1]
-    busy_indicators = ("Choreographing", "Seasoning", "Churned", "Gitifying", "Running", "ctrl+b")
-    if any(ind in last for ind in busy_indicators):
-        return False
-    return "❯" in last or "Press up to edit" in last
+    busy_indicators = ("Choreographing", "Seasoning", "Churned", "Gitifying", "Running", "ctrl+b", "thinking")
+    for line in reversed(text.splitlines()):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(ind in stripped for ind in busy_indicators):
+            return False
+        if "❯" in stripped or "Press up to edit" in stripped:
+            return True
+        break
+    return "❯" in text or "Press up to edit" in text
 
 
 def _nudge_session(db: BoardDB, recipient: str) -> None:
@@ -48,7 +60,7 @@ def _nudge_session(db: BoardDB, recipient: str) -> None:
     prefix = db.env.prefix
     board = db.env.install_home / "bin" / "board"
     for name in sessions:
-        if not name.isalnum():
+        if not re.match(r"^[a-z0-9][a-z0-9_-]*$", name):
             continue
         sess = f"{prefix}-{name}"
         r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True)
