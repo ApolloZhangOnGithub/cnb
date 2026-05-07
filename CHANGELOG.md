@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.4-dev (unreleased)
+
+### Features
+
+- **Notification push system (Issue #33)** — Full notification infrastructure: TOML-based subscription config (`notifications.toml`), `NotificationPushConcern` for realtime @mention and bug activity delivery, `DigestScheduler` for daily/weekly digest scheduling, `generate_daily_digest` for activity summaries, and `bin/notify` CLI for subscription management, test delivery, and notification log viewing. Includes `notification_log` DB table for dedup.
+- **Pending actions queue** — `board pending` subcommand for tracking actions requiring user intervention (auth, approve, confirm). Supports add/list/verify/retry/resolve lifecycle with subprocess-based verification.
+
+### Bug Fixes
+
+- **BBS LIKE wildcard injection** — Thread ID prefix matching (`LIKE ?`) did not escape `%` and `_` wildcards in user input. Added `_escape_like()` helper.
+- **BBS reply atomicity** — `cmd_reply` insert and notification message were in separate transactions; wrapped in single `with db.conn()` block.
+- **board_lock pgrep timeout** — `subprocess.run(["pgrep", ...])` in `cmd_git_unlock` had no timeout. Added `timeout=5`.
+- **parse_flags silent truncation** — Value flag at end of args (missing value) silently returned partial results. Now prints error and raises `SystemExit(1)`.
+- **resources _load_prev_state crash** — `read_text()` could raise `OSError` on unreadable state file, crashing monitor loop. Added try/except.
+- **npmignore recursive pycache** — `__pycache__` pattern only matched top-level. Added `**/__pycache__/` for nested directories.
+
+### Tests
+
+- Notification config (29): load, is_subscribed, channel_for, subscribers_for, TOML parsing
+- Notification push (27): mention regex, scan mentions/bugs, dedup, delivery, config reload
+- Digest (16): daily digest generation, all sections, edge cases, truncation
+- Digest scheduler (13): timing, daily/weekly send, dedup, subscriber filtering
+- Notify CLI (28): status, subscriptions, test, digest, log, routing
+- Board pending (28): add/list/verify/retry/resolve, validation, subprocess mock
+
 ## 0.5.1 (2026-05-08)
 
 ### Features
