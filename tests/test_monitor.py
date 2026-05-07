@@ -1,9 +1,21 @@
 """Tests for lib/monitor.py — file watchers and handle_change."""
 
+import signal
+import sys
 import time
 from unittest.mock import MagicMock, patch
 
-from lib.monitor import PollWatcher, create_watcher, handle_change, has_kqueue
+import pytest
+
+from lib.monitor import (
+    InotifyWatcher,
+    PollWatcher,
+    create_watcher,
+    handle_change,
+    has_inotifywait,
+    has_kqueue,
+    log,
+)
 
 
 class TestHasKqueue:
@@ -158,3 +170,213 @@ class TestHandleChange:
         mock_db.scalar.assert_called_once()
         args = mock_db.scalar.call_args[0]
         assert "bob-jones" in args[1]
+
+
+# ---------------------------------------------------------------------------
+# log()
+# ---------------------------------------------------------------------------
+
+
+class TestLog:
+    def test_log_format(self, capsys):
+        log("hello world")
+        out = capsys.readouterr().out
+        assert "[monitor]" in out
+        assert "hello world" in out
+
+    def test_log_includes_timestamp(self, capsys):
+        log("test")
+        out = capsys.readouterr().out
+        assert ":" in out
+
+
+# ---------------------------------------------------------------------------
+# has_inotifywait
+# ---------------------------------------------------------------------------
+
+
+class TestHasInotifywait:
+    @patch("shutil.which", return_value="/usr/bin/inotifywait")
+    def test_true_when_found(self, mock_which):
+        assert has_inotifywait() is True
+
+    @patch("shutil.which", return_value=None)
+    def test_false_when_not_found(self, mock_which):
+        assert has_inotifywait() is False
+
+
+# ---------------------------------------------------------------------------
+# InotifyWatcher
+# ---------------------------------------------------------------------------
+
+
+class TestInotifyWatcher:
+    def test_init_starts_subprocess(self):
+        mock_proc = MagicMock()
+        mock_proc.stdout = MagicMock()
+        with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+            InotifyWatcher("/some/dir")
+            mock_popen.assert_called_once()
+            assert "inotifywait" in mock_popen.call_args[0][0][0]
+
+    def test_close_terminates_process(self):
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        with patch("subprocess.Popen", return_value=mock_proc):
+            w = InotifyWatcher("/some/dir")
+            w.close()
+        mock_proc.terminate.assert_called_once()
+        mock_proc.wait.assert_called_once()
+
+    def test_close_noop_if_already_exited(self):
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = 0
+        with patch("subprocess.Popen", return_value=mock_proc):
+            w = InotifyWatcher("/some/dir")
+            w.close()
+        mock_proc.terminate.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# create_watcher — kqueue / inotify preference
+# ---------------------------------------------------------------------------
+
+
+class TestCreateWatcherPreference:
+    @patch("lib.monitor.has_kqueue", return_value=True)
+    def test_prefers_kqueue(self, _mock, tmp_path):
+        with patch("lib.monitor.KqueueWatcher") as mock_kq:
+            mock_kq.return_value = MagicMock()
+            create_watcher(str(tmp_path))
+            mock_kq.assert_called_once_with(str(tmp_path))
+
+    @patch("lib.monitor.has_kqueue", return_value=False)
+    @patch("lib.monitor.has_inotifywait", return_value=True)
+    def test_prefers_inotify_over_poll(self, _m1, _m2, tmp_path):
+        with patch("lib.monitor.InotifyWatcher") as mock_in:
+            mock_in.return_value = MagicMock()
+            create_watcher(str(tmp_path))
+            mock_in.assert_called_once_with(str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# do_watch — signal handling and event loop
+# ---------------------------------------------------------------------------
+
+
+class TestDoWatch:
+    def test_stops_on_sigterm(self, tmp_path):
+        from lib.monitor import do_watch
+
+        env = MagicMock()
+        env.sessions_dir = tmp_path
+
+        mock_watcher = MagicMock()
+        call_count = [0]
+
+        def fake_poll(timeout=5.0):
+            call_count[0] += 1
+            if call_count[0] >= 2:
+                signal.raise_signal(signal.SIGTERM)
+            return set()
+
+        mock_watcher.poll = fake_poll
+
+        with patch("lib.monitor.create_watcher", return_value=mock_watcher):
+            do_watch(env)
+        mock_watcher.close.assert_called_once()
+
+    def test_processes_changed_files(self, tmp_path, capsys):
+        from lib.monitor import do_watch
+
+        env = MagicMock()
+        env.sessions_dir = tmp_path
+        env.board_db = tmp_path / "board.db"
+
+        mock_watcher = MagicMock()
+        call_count = [0]
+
+        def fake_poll(timeout=5.0):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return {str(tmp_path / "alice.md")}
+            signal.raise_signal(signal.SIGINT)
+            return set()
+
+        mock_watcher.poll = fake_poll
+
+        with (
+            patch("lib.monitor.create_watcher", return_value=mock_watcher),
+            patch("lib.monitor.handle_change") as mock_handle,
+        ):
+            do_watch(env)
+        mock_handle.assert_called_once_with(str(tmp_path / "alice.md"), env)
+
+
+# ---------------------------------------------------------------------------
+# main dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestMain:
+    def test_unknown_arg_exits(self):
+        from lib.monitor import main
+
+        with (
+            patch("lib.monitor.ClaudesEnv") as mock_env_cls,
+            patch.object(sys, "argv", ["monitor.py", "--badarg"]),
+            pytest.raises(SystemExit),
+        ):
+            mock_env_cls.load.return_value = MagicMock()
+            main()
+
+    def test_help_prints_usage(self, capsys):
+        from lib.monitor import main
+
+        with (
+            patch("lib.monitor.ClaudesEnv") as mock_env_cls,
+            patch.object(sys, "argv", ["monitor.py", "--help"]),
+        ):
+            mock_env_cls.load.return_value = MagicMock()
+            main()
+        out = capsys.readouterr().out
+        assert "monitor" in out.lower()
+
+    def test_watch_is_default(self):
+        from lib.monitor import main
+
+        with (
+            patch("lib.monitor.ClaudesEnv") as mock_env_cls,
+            patch.object(sys, "argv", ["monitor.py"]),
+            patch("lib.monitor.do_watch") as mock_watch,
+        ):
+            env = MagicMock()
+            mock_env_cls.load.return_value = env
+            main()
+        mock_watch.assert_called_once_with(env)
+
+    def test_test_mode(self):
+        from lib.monitor import main
+
+        with (
+            patch("lib.monitor.ClaudesEnv") as mock_env_cls,
+            patch.object(sys, "argv", ["monitor.py", "--test"]),
+            patch("lib.monitor.do_test") as mock_test,
+        ):
+            env = MagicMock()
+            mock_env_cls.load.return_value = env
+            main()
+        mock_test.assert_called_once_with(env)
+
+    def test_benchmark_mode(self):
+        from lib.monitor import main
+
+        with (
+            patch("lib.monitor.ClaudesEnv") as mock_env_cls,
+            patch.object(sys, "argv", ["monitor.py", "--benchmark"]),
+            patch("lib.monitor.do_benchmark") as mock_bench,
+        ):
+            env = MagicMock()
+            mock_env_cls.load.return_value = env
+            main()
+        mock_bench.assert_called_once_with(env)

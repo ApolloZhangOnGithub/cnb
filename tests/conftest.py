@@ -59,7 +59,7 @@ def tmp_project(tmp_path):
     for name in DEFAULT_SESSIONS:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (name,))
     # Mark schema as fully up-to-date so auto-migrate won't re-apply
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6')")
     conn.commit()
     conn.close()
 

@@ -22,7 +22,7 @@ from lib.notification_config import BUILTIN_DEFAULTS, NOTIFICATION_TYPES, load
 
 
 def _env() -> ClaudesEnv:
-    return ClaudesEnv.detect()
+    return ClaudesEnv.load()
 
 
 def _config_path(env: ClaudesEnv) -> Path:

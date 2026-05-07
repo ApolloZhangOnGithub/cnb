@@ -242,6 +242,14 @@ COMMANDS: list[Command] = [
         needs_identity=False,
         takes_rest=False,
     ),
+    # ── pending actions ──
+    Command(
+        "pending",
+        "lib.board_pending",
+        "cmd_pending",
+        "pending actions queue",
+        "pending {add|list|verify|retry|resolve}",
+    ),
     # ── maintenance ──
     Command(
         "prune",

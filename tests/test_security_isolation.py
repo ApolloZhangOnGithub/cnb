@@ -40,7 +40,7 @@ def _make_project(tmp_path: Path, name: str, sessions: list[str]) -> BoardDB:
     conn.executescript(schema.read_text())
     for s in sessions:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (s,))
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6')")
     conn.commit()
     conn.close()
 
@@ -116,17 +116,12 @@ class TestCrossSessionAccess:
         # BUG: alice's status was overwritten by someone using --as alice
         assert "hacked" in row[0]
 
-    def test_add_task_to_any_session(self, db, capsys):
-        """Any identity can add tasks to any other session.
-        This is by design (leads assign tasks), but combined with no auth
-        it means anyone can pile work onto agents.
-        """
-        cmd_task(db, "nobody", ["add", "--to", "alice", "malicious task"])
-        out = capsys.readouterr().out
-        assert "OK" in out
-
+    def test_unregistered_cannot_add_task(self, db, capsys):
+        """Unregistered identity is rejected when trying to add tasks."""
+        with pytest.raises(SystemExit):
+            cmd_task(db, "nobody", ["add", "--to", "alice", "malicious task"])
         tasks = db.query("SELECT description FROM tasks WHERE session='alice'")
-        assert any("malicious" in t[0] for t in tasks)
+        assert not any("malicious" in t[0] for t in tasks)
 
     def test_ack_clears_others_inbox(self, db, capsys):
         """An attacker using --as <victim> can clear victim's unread messages.

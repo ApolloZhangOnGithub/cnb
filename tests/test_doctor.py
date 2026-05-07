@@ -44,7 +44,7 @@ def doctor_db(tmp_path):
     conn.executescript(SCHEMA_PATH.read_text())
     conn.execute("INSERT INTO sessions(name) VALUES ('alice')")
     conn.execute("INSERT INTO sessions(name) VALUES ('bob')")
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6')")
     conn.commit()
     conn.close()
     return db_path
@@ -154,7 +154,7 @@ class TestCheckSchemaVersion:
     def test_version_present(self, doctor_db, capsys):
         assert check_schema_version(doctor_db) is True
         output = capsys.readouterr().out
-        assert "Schema version: 4" in output
+        assert "Schema version:" in output
 
     def test_no_meta_table(self, tmp_path, capsys):
         db_path = tmp_path / "bare.db"

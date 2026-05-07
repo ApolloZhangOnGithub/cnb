@@ -49,7 +49,7 @@ def _init_db(db_path):
     conn.executescript(schema.read_text())
     conn.execute("INSERT INTO sessions(name) VALUES ('alice')")
     conn.execute("INSERT INTO sessions(name) VALUES ('bob')")
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6')")
     conn.commit()
     conn.close()
 
@@ -212,7 +212,7 @@ class TestCmdLog:
         e = _make_env(tmp_path)
         conn = sqlite3.connect(str(e.board_db))
         conn.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', '4')")
+        conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', '6')")
         conn.commit()
         conn.close()
         monkeypatch.setattr(notify_mod, "_env", lambda: e)

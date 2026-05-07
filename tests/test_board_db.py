@@ -18,7 +18,7 @@ def _init_db(tmp_path: Path, sessions: list[str] | None = None) -> Path:
     conn.executescript(SCHEMA_PATH.read_text())
     for name in sessions:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (name,))
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6')")
     conn.commit()
     conn.close()
     return db_path
