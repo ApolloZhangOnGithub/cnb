@@ -66,6 +66,36 @@ def cmd_keygen(db: BoardDB, identity: str) -> None:
     print(f"  已写入 {PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)}")
 
 
+def cmd_keygen_all(db: BoardDB) -> None:
+    assert db.env is not None
+    kd = db.env.claudes_dir / "keys"
+    sessions = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all' ORDER BY name")]
+    if not sessions:
+        print("ERROR: 无注册会话")
+        raise SystemExit(1)
+
+    pubkeys = _load_pubkeys()
+    generated = 0
+    skipped = 0
+
+    for name in sessions:
+        if (kd / f"{name}.pem").exists():
+            skipped += 1
+            continue
+        private, public = generate_keypair()
+        save_keypair(kd, name, private, public)
+        pubkeys[name] = public_key_to_hex(public)
+        generated += 1
+
+    if generated:
+        _save_pubkeys(pubkeys)
+
+    print(f"OK keygen-all: {generated} 生成, {skipped} 跳过 (已有密钥)")
+    if generated:
+        print(f"  密钥目录: {kd}")
+        print(f"  公钥注册: {PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)}")
+
+
 def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
     validate_identity(db, identity)
     name = identity.lower()

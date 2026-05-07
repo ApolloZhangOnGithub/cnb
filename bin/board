@@ -204,6 +204,16 @@ COMMANDS: list[Command] = [
         takes_rest=False,
         hidden=True,
     ),
+    Command(
+        "keygen-all",
+        "lib.board_mailbox",
+        "cmd_keygen_all",
+        "generate keys for all sessions",
+        "keygen-all",
+        needs_identity=False,
+        takes_rest=False,
+        hidden=True,
+    ),
     # ── admin ──
     Command("kudos", "lib.board_admin", "cmd_kudos", "give public recognition", "kudos <target> <reason>", hidden=True),
     Command(
@@ -242,6 +252,8 @@ COMMANDS: list[Command] = [
         needs_identity=False,
         takes_rest=False,
     ),
+    # ── mail ──
+    Command("mail", "lib.board_mail", "cmd_mail", "persistent mail with CC/threading", "mail {send|list|read|reply}"),
     # ── pending actions ──
     Command(
         "pending",

@@ -48,26 +48,26 @@ def make_cfg(tmp_path: Path) -> DispatcherConfig:
 
 
 class TestTmux:
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_returns_stdout_on_success(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="session1\nsession2\n")
         result = tmux("list-sessions", "-F", "#{session_name}")
         assert result == "session1\nsession2"
         mock_run.assert_called_once()
 
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_returns_none_on_failure(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         result = tmux("has-session", "-t", "nonexistent")
         assert result is None
 
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_returns_none_on_timeout(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tmux", timeout=8)
         result = tmux("list-sessions")
         assert result is None
 
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_returns_none_on_os_error(self, mock_run):
         mock_run.side_effect = OSError("tmux not found")
         result = tmux("list-sessions")
@@ -80,17 +80,17 @@ class TestTmux:
 
 
 class TestTmuxOk:
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_true_on_success(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         assert tmux_ok("has-session", "-t", "test") is True
 
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_false_on_failure(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1)
         assert tmux_ok("has-session", "-t", "nonexistent") is False
 
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_false_on_timeout(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tmux", timeout=8)
         assert tmux_ok("has-session", "-t", "test") is False
@@ -102,7 +102,7 @@ class TestTmuxOk:
 
 
 class TestTmuxSend:
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_sends_text_then_enter(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         result = tmux_send("cc-test-alice", "hello world")
@@ -114,13 +114,13 @@ class TestTmuxSend:
         second_call = mock_run.call_args_list[1]
         assert "Enter" in second_call[0][0]
 
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_returns_false_on_error(self, mock_run):
         mock_run.side_effect = subprocess.CalledProcessError(1, "tmux")
         result = tmux_send("cc-test-alice", "hello")
         assert result is False
 
-    @patch("lib.concerns.helpers.subprocess.run")
+    @patch("lib.tmux_utils.subprocess.run")
     def test_returns_false_on_timeout(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tmux", timeout=8)
         result = tmux_send("cc-test-alice", "hello")
@@ -133,38 +133,33 @@ class TestTmuxSend:
 
 
 class TestIsClaudeRunning:
-    @patch("lib.concerns.helpers.tmux")
-    @patch("lib.concerns.helpers.tmux_ok", return_value=True)
-    def test_true_when_claude_process(self, mock_ok, mock_tmux):
-        mock_tmux.return_value = "node"
+    @patch("lib.tmux_utils.pane_command", return_value="node")
+    @patch("lib.tmux_utils.has_session", return_value=True)
+    def test_true_when_claude_process(self, mock_has, mock_cmd):
         assert is_claude_running("cc-test-alice") is True
 
-    @patch("lib.concerns.helpers.tmux")
-    @patch("lib.concerns.helpers.tmux_ok", return_value=True)
-    def test_false_when_shell(self, mock_ok, mock_tmux):
-        mock_tmux.return_value = "zsh"
+    @patch("lib.tmux_utils.pane_command", return_value="zsh")
+    @patch("lib.tmux_utils.has_session", return_value=True)
+    def test_false_when_shell(self, mock_has, mock_cmd):
         assert is_claude_running("cc-test-alice") is False
 
-    @patch("lib.concerns.helpers.tmux")
-    @patch("lib.concerns.helpers.tmux_ok", return_value=True)
-    def test_false_when_bash(self, mock_ok, mock_tmux):
-        mock_tmux.return_value = "bash"
+    @patch("lib.tmux_utils.pane_command", return_value="bash")
+    @patch("lib.tmux_utils.has_session", return_value=True)
+    def test_false_when_bash(self, mock_has, mock_cmd):
         assert is_claude_running("cc-test-alice") is False
 
-    @patch("lib.concerns.helpers.tmux_ok", return_value=False)
-    def test_false_when_no_session(self, mock_ok):
+    @patch("lib.tmux_utils.has_session", return_value=False)
+    def test_false_when_no_session(self, mock_has):
         assert is_claude_running("cc-test-alice") is False
 
-    @patch("lib.concerns.helpers.tmux")
-    @patch("lib.concerns.helpers.tmux_ok", return_value=True)
-    def test_false_when_empty_command(self, mock_ok, mock_tmux):
-        mock_tmux.return_value = ""
+    @patch("lib.tmux_utils.pane_command", return_value="")
+    @patch("lib.tmux_utils.has_session", return_value=True)
+    def test_false_when_empty_command(self, mock_has, mock_cmd):
         assert is_claude_running("cc-test-alice") is False
 
-    @patch("lib.concerns.helpers.tmux")
-    @patch("lib.concerns.helpers.tmux_ok", return_value=True)
-    def test_false_when_tmux_returns_none(self, mock_ok, mock_tmux):
-        mock_tmux.return_value = None
+    @patch("lib.tmux_utils.pane_command", return_value="")
+    @patch("lib.tmux_utils.has_session", return_value=True)
+    def test_false_when_tmux_returns_none(self, mock_has, mock_cmd):
         assert is_claude_running("cc-test-alice") is False
 
 
@@ -174,7 +169,7 @@ class TestIsClaudeRunning:
 
 
 class TestGetDevSessions:
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_extracts_session_names(self, mock_tmux, tmp_path):
         cfg = make_cfg(tmp_path)
         mock_tmux.return_value = "cc-test-alice\ncc-test-bob\ncc-test-charlie"
@@ -183,7 +178,7 @@ class TestGetDevSessions:
         assert "bob" in result
         assert "charlie" in result
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_excludes_dispatcher_and_lead(self, mock_tmux, tmp_path):
         cfg = make_cfg(tmp_path)
         mock_tmux.return_value = "cc-test-alice\ncc-test-dispatcher\ncc-test-lead"
@@ -192,14 +187,14 @@ class TestGetDevSessions:
         assert "dispatcher" not in result
         assert "lead" not in result
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_ignores_non_prefixed_sessions(self, mock_tmux, tmp_path):
         cfg = make_cfg(tmp_path)
         mock_tmux.return_value = "cc-test-alice\nother-session\nrandom"
         result = get_dev_sessions(cfg)
         assert result == ["alice"]
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_returns_empty_when_tmux_fails(self, mock_tmux, tmp_path):
         cfg = make_cfg(tmp_path)
         mock_tmux.return_value = None
@@ -212,19 +207,19 @@ class TestGetDevSessions:
 
 
 class TestPaneMd5:
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_returns_md5_of_content(self, mock_tmux):
         mock_tmux.return_value = "hello world"
         expected = hashlib.md5(b"hello world").hexdigest()
         assert pane_md5("cc-test-alice") == expected
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_returns_md5_of_empty_on_none(self, mock_tmux):
         mock_tmux.return_value = None
         expected = hashlib.md5(b"").hexdigest()
         assert pane_md5("cc-test-alice") == expected
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_different_content_different_hash(self, mock_tmux):
         mock_tmux.return_value = "content A"
         hash_a = pane_md5("cc-test-alice")
@@ -271,27 +266,27 @@ class TestBoardSend:
 
 
 class TestIsPaneTyping:
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_true_when_prompt_has_text(self, mock_tmux):
         mock_tmux.return_value = "some output\n❯ git status"
         assert is_pane_typing("cc-test-alice") is True
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_false_when_empty_prompt(self, mock_tmux):
         mock_tmux.return_value = "some output\n❯"
         assert is_pane_typing("cc-test-alice") is False
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_false_when_short_prompt(self, mock_tmux):
         mock_tmux.return_value = "some output\n❯ a"
         assert is_pane_typing("cc-test-alice") is False
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_false_when_no_prompt(self, mock_tmux):
         mock_tmux.return_value = "just some output"
         assert is_pane_typing("cc-test-alice") is False
 
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_false_when_tmux_returns_none(self, mock_tmux):
         mock_tmux.return_value = None
         assert is_pane_typing("cc-test-alice") is False
@@ -303,7 +298,7 @@ class TestIsPaneTyping:
 
 
 class TestHasToolProcess:
-    @patch("lib.concerns.helpers.tmux")
+    @patch("lib.concerns.helpers.tmux_run")
     def test_false_when_no_pane_pid(self, mock_tmux):
         mock_tmux.return_value = None
         assert has_tool_process("cc-test-alice") is False

@@ -24,24 +24,24 @@ def admin_db(db):
 
 class TestSuspend:
     def test_suspend_adds_to_db(self, admin_db):
-        with patch("lib.board_admin.subprocess"):
+        with patch("lib.board_admin.has_session", return_value=False):
             cmd_suspend(admin_db, "lead", ["alice"])
         row = admin_db.scalar("SELECT COUNT(*) FROM suspended WHERE name='alice'")
         assert row == 1
 
     def test_suspend_writes_file(self, admin_db):
-        with patch("lib.board_admin.subprocess"):
+        with patch("lib.board_admin.has_session", return_value=False):
             cmd_suspend(admin_db, "lead", ["alice"])
         assert "alice" in admin_db.env.suspended_file.read_text()
 
     def test_suspend_creates_system_message(self, admin_db):
-        with patch("lib.board_admin.subprocess"):
+        with patch("lib.board_admin.has_session", return_value=False):
             cmd_suspend(admin_db, "lead", ["alice"])
         msg = admin_db.scalar("SELECT body FROM messages WHERE sender='SYSTEM' ORDER BY id DESC LIMIT 1")
         assert "SUSPEND alice by lead" in msg
 
     def test_suspend_idempotent(self, admin_db, capsys):
-        with patch("lib.board_admin.subprocess"):
+        with patch("lib.board_admin.has_session", return_value=False):
             cmd_suspend(admin_db, "lead", ["alice"])
             cmd_suspend(admin_db, "lead", ["alice"])
         output = capsys.readouterr().out
@@ -56,7 +56,7 @@ class TestSuspend:
             cmd_suspend(admin_db, "lead", ["nonexistent"])
 
     def test_suspend_records_who_suspended(self, admin_db):
-        with patch("lib.board_admin.subprocess"):
+        with patch("lib.board_admin.has_session", return_value=False):
             cmd_suspend(admin_db, "lead", ["bob"])
         who = admin_db.scalar("SELECT suspended_by FROM suspended WHERE name='bob'")
         assert who == "lead"
@@ -64,20 +64,20 @@ class TestSuspend:
 
 class TestResume:
     def test_resume_removes_from_db(self, admin_db):
-        with patch("lib.board_admin.subprocess"):
+        with patch("lib.board_admin.has_session", return_value=False):
             cmd_suspend(admin_db, "lead", ["alice"])
         cmd_resume(admin_db, "lead", ["alice"])
         row = admin_db.scalar("SELECT COUNT(*) FROM suspended WHERE name='alice'")
         assert row == 0
 
     def test_resume_removes_from_file(self, admin_db):
-        with patch("lib.board_admin.subprocess"):
+        with patch("lib.board_admin.has_session", return_value=False):
             cmd_suspend(admin_db, "lead", ["alice"])
         cmd_resume(admin_db, "lead", ["alice"])
         assert "alice" not in admin_db.env.suspended_file.read_text()
 
     def test_resume_creates_system_message(self, admin_db):
-        with patch("lib.board_admin.subprocess"):
+        with patch("lib.board_admin.has_session", return_value=False):
             cmd_suspend(admin_db, "lead", ["alice"])
         cmd_resume(admin_db, "lead", ["alice"])
         msg = admin_db.scalar("SELECT body FROM messages WHERE sender='SYSTEM' ORDER BY id DESC LIMIT 1")
