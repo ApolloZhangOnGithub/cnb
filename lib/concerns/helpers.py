@@ -7,6 +7,12 @@ import time
 from pathlib import Path
 
 from lib.board_db import BoardDB
+from lib.tmux_utils import is_agent_running as is_claude_running  # noqa: F401 — re-export
+from lib.tmux_utils import (
+    tmux_ok,  # noqa: F401 — re-export for concerns
+    tmux_run,
+)
+from lib.tmux_utils import tmux_send as _tmux_send_raw
 
 from .config import DispatcherConfig
 
@@ -21,51 +27,25 @@ def warn(msg: str) -> None:
     print(f"[dispatcher] {time.strftime('%H:%M:%S')} WARN {msg}", flush=True, file=sys.stderr)
 
 
-# ── tmux ──
-
-TMUX_TIMEOUT = 8  # seconds
+# ── tmux (thin wrappers that add dispatcher logging) ──
 
 
 def tmux(*args: str) -> str | None:
-    try:
-        r = subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=TMUX_TIMEOUT)
-        return r.stdout.strip() if r.returncode == 0 else None
-    except (subprocess.TimeoutExpired, OSError) as e:
-        warn(f"tmux {' '.join(args)}: {e}")
-        return None
-
-
-def tmux_ok(*args: str) -> bool:
-    try:
-        return subprocess.run(["tmux", *args], capture_output=True, timeout=TMUX_TIMEOUT).returncode == 0
-    except (subprocess.TimeoutExpired, OSError) as e:
-        warn(f"tmux_ok {' '.join(args)}: {e}")
-        return False
+    result = tmux_run(*args)
+    if result is None and args:
+        warn(f"tmux {' '.join(args)}: returned None")
+    return result
 
 
 def tmux_send(sess: str, text: str) -> bool:
-    """Send keys to a tmux session. Returns True on success."""
-    try:
-        subprocess.run(["tmux", "send-keys", "-t", sess, "-l", text], timeout=TMUX_TIMEOUT, check=True)
-        subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=TMUX_TIMEOUT, check=True)
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
-        warn(f"tmux_send {sess}: {e}")
-        return False
-
-
-def is_claude_running(sess: str) -> bool:
-    if not tmux_ok("has-session", "-t", sess):
-        return False
-    cmd = tmux("list-panes", "-t", sess, "-F", "#{pane_current_command}")
-    if not cmd:
-        return False
-    first = cmd.splitlines()[0] if cmd else ""
-    return first not in ("zsh", "bash", "sh", "-zsh", "-bash", "")
+    result = _tmux_send_raw(sess, text)
+    if not result:
+        warn(f"tmux_send {sess}: failed")
+    return result
 
 
 def get_dev_sessions(cfg: DispatcherConfig) -> list[str]:
-    raw = tmux("list-sessions", "-F", "#{session_name}")
+    raw = tmux_run("list-sessions", "-F", "#{session_name}")
     if not raw:
         return []
     pfx = f"{cfg.prefix}-"
@@ -74,7 +54,7 @@ def get_dev_sessions(cfg: DispatcherConfig) -> list[str]:
 
 
 def pane_md5(sess: str) -> str:
-    content = tmux("capture-pane", "-t", sess, "-p") or ""
+    content = tmux_run("capture-pane", "-t", sess, "-p") or ""
     return hashlib.md5(content.encode()).hexdigest()
 
 

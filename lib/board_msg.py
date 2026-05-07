@@ -3,35 +3,20 @@
 import hashlib
 import re
 import shutil
-import subprocess
 from pathlib import Path
 
 from lib.board_db import BoardDB, ts
 from lib.common import parse_flags, validate_identity
+from lib.tmux_utils import capture_pane, has_session, tmux_send
 
 
 def _ack_marker_path(db: BoardDB, name: str) -> Path:
-    """Path to file recording max message_id seen by last inbox call."""
     assert db.env is not None
     return db.env.sessions_dir / f".{name}.ack_max_id"
 
 
 def _is_idle(sess: str) -> bool:
-    """Check if a Claude Code session is idle at its prompt (not mid-response).
-
-    Claude Code's prompt layout puts the prompt marker a few lines above the bottom
-    (status bar, project name, permissions line are below it), so we
-    check the last ~8 lines rather than just the final line.
-    """
-    r = subprocess.run(
-        ["tmux", "capture-pane", "-t", sess, "-p", "-S", "-10"],
-        capture_output=True,
-        text=True,
-        timeout=3,
-    )
-    if r.returncode != 0:
-        return False
-    text = r.stdout.rstrip()
+    text = capture_pane(sess, lines=10)
     if not text:
         return False
     busy_indicators = ("Choreographing", "Seasoning", "Churned", "Gitifying", "Running", "ctrl+b", "thinking")
@@ -48,12 +33,6 @@ def _is_idle(sess: str) -> bool:
 
 
 def _nudge_session(db: BoardDB, recipient: str) -> None:
-    """Inject a fixed prompt into the recipient's tmux session to check inbox.
-
-    Only nudges idle agents — busy agents will pick up messages via the
-    PostToolBatch hook. This avoids commands piling up in Claude Code's
-    message queue when injected mid-response.
-    """
     assert db.env is not None
     if recipient == "all":
         sessions = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all'")]
@@ -65,17 +44,11 @@ def _nudge_session(db: BoardDB, recipient: str) -> None:
         if not re.match(r"^[a-z0-9][a-z0-9_-]*$", name):
             continue
         sess = f"{prefix}-{name}"
-        try:
-            r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True, timeout=5)
-            if r.returncode != 0:
-                continue
-            if not _is_idle(sess):
-                continue
-            cmd = f"{board} --as {name} inbox"
-            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", cmd], capture_output=True, timeout=5)
-            subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], capture_output=True, timeout=5)
-        except (subprocess.TimeoutExpired, OSError):
+        if not has_session(sess):
             continue
+        if not _is_idle(sess):
+            continue
+        tmux_send(sess, f"{board} --as {name} inbox")
 
 
 def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:

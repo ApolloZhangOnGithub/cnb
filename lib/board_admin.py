@@ -1,10 +1,10 @@
 """board_admin — suspend / resume / kudos / kudos-list."""
 
-import subprocess
 import time
 
 from lib.board_db import BoardDB, ts
 from lib.common import validate_identity
+from lib.tmux_utils import has_session, tmux_run
 
 
 def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -38,19 +38,11 @@ def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
 
     prefix = db.env.prefix
     sess = f"{prefix}-{target}"
-    try:
-        r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True, timeout=5)
-        if r.returncode == 0:
-            subprocess.run(
-                ["tmux", "send-keys", "-t", sess, "/exit", "Enter"],
-                capture_output=True,
-                timeout=5,
-            )
-            time.sleep(2)
-            subprocess.run(["tmux", "kill-session", "-t", sess], capture_output=True, timeout=5)
-            print(f"{target}: tmux session 已关闭")
-    except (subprocess.TimeoutExpired, OSError):
-        pass
+    if has_session(sess):
+        tmux_run("send-keys", "-t", sess, "/exit", "Enter")
+        time.sleep(2)
+        tmux_run("kill-session", "-t", sess)
+        print(f"{target}: tmux session 已关闭")
 
     now = ts()
     db.execute(

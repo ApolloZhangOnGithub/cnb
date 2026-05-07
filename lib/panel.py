@@ -98,7 +98,7 @@ def main() -> None:
 
     def _restore(*_):
         print("\033[?25h", end="", flush=True)  # show cursor
-        sys.exit(0)
+        raise SystemExit(0)
 
     signal.signal(signal.SIGINT, _restore)
     signal.signal(signal.SIGTERM, _restore)

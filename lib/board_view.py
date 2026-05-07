@@ -9,6 +9,7 @@ from pathlib import Path
 
 from lib.board_db import BoardDB
 from lib.common import validate_identity
+from lib.tmux_utils import has_session, pane_command
 
 
 def _git(project_root: Path, *args: str) -> str:
@@ -19,27 +20,6 @@ def _git(project_root: Path, *args: str) -> str:
         timeout=5,
     )
     return r.stdout
-
-
-def _tmux_has_session(name: str) -> bool:
-    try:
-        r = subprocess.run(["tmux", "has-session", "-t", name], capture_output=True, timeout=3)
-        return r.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-
-
-def _tmux_pane_command(name: str) -> str:
-    try:
-        r = subprocess.run(
-            ["tmux", "list-panes", "-t", name, "-F", "#{pane_current_command}"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        return r.stdout.strip().split("\n")[0]
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return ""
 
 
 def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tuple[str, str]:
@@ -62,8 +42,8 @@ def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tup
         except ValueError:
             pass
     sess = f"{prefix}-{name}"
-    if _tmux_has_session(sess):
-        cmd = _tmux_pane_command(sess)
+    if has_session(sess):
+        cmd = pane_command(sess)
         if cmd not in ("zsh", "bash", "sh", "-zsh", "-bash"):
             return "● running", ""
         return "○ dead", ""
@@ -114,11 +94,11 @@ def cmd_overview(db: BoardDB) -> None:
     # ── dispatcher ──
     dispatcher_sess = f"{prefix}-dispatcher"
     print()
-    if _tmux_has_session(dispatcher_sess):
+    if has_session(dispatcher_sess):
         print(f"  dispatcher: running ({dispatcher_sess})")
     else:
         running = any(
-            _tmux_has_session(f"{prefix}-{n}") for (n,) in db.query("SELECT name FROM sessions WHERE name != 'all'")
+            has_session(f"{prefix}-{n}") for (n,) in db.query("SELECT name FROM sessions WHERE name != 'all'")
         )
         if running:
             print("  dispatcher: NOT RUNNING — run: cnb dispatcher")
@@ -279,7 +259,7 @@ def cmd_dashboard(db: BoardDB) -> None:
         print(f"         {task}")
     print()
     dispatcher_sess = f"{prefix}-dispatcher"
-    if _tmux_has_session(dispatcher_sess):
+    if has_session(dispatcher_sess):
         print(f"  dispatcher: running ({dispatcher_sess})")
     else:
         print("  dispatcher: NOT RUNNING")
@@ -385,5 +365,5 @@ def cmd_roster(db: BoardDB) -> None:
         "FROM sessions s LEFT JOIN suspended su ON s.name=su.name ORDER BY s.name"
     )
     for name, state in rows:
-        online = "online" if _tmux_has_session(f"{prefix}-{name}") else "offline"
+        online = "online" if has_session(f"{prefix}-{name}") else "offline"
         print(f"  {name:<8s}  {state:<10s}  {online}")
