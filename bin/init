@@ -264,7 +264,7 @@ def main() -> None:
         print(f"Applied {applied} schema migration(s).")
 
     # .gitignore for generated stuff
-    gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\ndispatcher.pid\n"
+    gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\ndispatcher.pid\nkeys/\n"
     (claudes_dir / ".gitignore").write_text(gitignore_content)
 
     # Update .claude/settings.json (merge hooks if exists, create if not)
@@ -273,6 +273,36 @@ def main() -> None:
     # Write multi-agent coordination section into CLAUDE.md
     snippet = _claude_md_snippet(sessions, claudes_home, personas)
     _update_claude_md(project_dir, snippet)
+
+    # Register in global project registry
+    try:
+        from lib.global_registry import register_project
+
+        register_project(project_dir, project_dir.name)
+    except Exception:
+        pass  # non-fatal — registry is optional
+
+    # Generate encryption keypairs for all sessions (Issue #22)
+    try:
+        from lib.board_mailbox import _load_pubkeys, _save_pubkeys
+        from lib.crypto import generate_keypair, public_key_to_hex, save_keypair
+
+        keys_dir = claudes_dir / "keys"
+        pubkeys = _load_pubkeys()
+        gen_count = 0
+        for s in sessions:
+            n = s.lower()
+            if (keys_dir / f"{n}.pem").exists():
+                continue
+            private, public = generate_keypair()
+            save_keypair(keys_dir, n, private, public)
+            pubkeys[n] = public_key_to_hex(public)
+            gen_count += 1
+        if gen_count:
+            _save_pubkeys(pubkeys)
+            print(f"Generated {gen_count} encryption keypair(s).")
+    except ImportError:
+        pass  # cryptography not installed — skip keygen
 
     sessions_str = " ".join(sessions)
     print(f"Initialized cnb (sessions: {sessions_str})")

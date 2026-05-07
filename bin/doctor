@@ -270,6 +270,53 @@ def check_sessions(env: ClaudesEnv) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Global registry checks
+# ---------------------------------------------------------------------------
+
+
+def check_global_registry() -> bool:
+    """Check global project registry for stale projects and expired credentials."""
+    try:
+        from lib.global_registry import list_projects
+
+        ok = True
+
+        # Check projects
+        projects = list_projects()
+        if projects:
+            _ok(f"已注册 {len(projects)} 个项目")
+        else:
+            _warn("全局注册表为空 (运行 cnb init 注册当前项目)")
+
+        # Check for stale projects (without removing)
+        stale = []
+        for p in projects:
+            if not Path(p.get("path", "")).exists():
+                stale.append(p.get("path", ""))
+        if stale:
+            _warn(f"{len(stale)} 个项目路径已失效 (运行 cnb projects cleanup 清理)")
+            ok = False
+        elif projects:
+            _ok("所有项目路径有效")
+
+        # Check credentials for expired ones
+        from lib.global_registry import _read_credentials
+
+        creds = _read_credentials()
+        expired = [name for name, info in creds.items() if isinstance(info, dict) and info.get("status") == "expired"]
+        if expired:
+            _warn(f"过期凭证: {', '.join(expired)}")
+            ok = False
+        elif creds:
+            _ok(f"{len(creds)} 个凭证状态正常")
+
+        return ok
+    except Exception as e:
+        _warn(f"全局注册表检查失败: {e}")
+        return True  # non-fatal
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -312,9 +359,13 @@ def main() -> None:
     print("\n── Sessions ──")
     sess_ok = check_sessions(env)
 
+    # ── Global Registry ──
+    print("\n── Global Registry ──")
+    reg_ok = check_global_registry()
+
     # ── Result ──
     print()
-    all_ok = all([env_ok, cfg_ok, db_ok, sess_ok])
+    all_ok = all([env_ok, cfg_ok, db_ok, sess_ok, reg_ok])
     if all_ok:
         print("✓ All checks passed.")
     else:

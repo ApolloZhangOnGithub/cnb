@@ -68,6 +68,40 @@ print(' '.join(names))
                 echo "OK 团队已启动: $_NAMES"
             fi
             exit 0 ;;
+        projects)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "用法: cnb projects <list|cleanup>" >&2; exit 1
+            fi
+            subcmd="$1"; shift
+            case "$subcmd" in
+                list)
+                    python3 -c "
+import sys; sys.path.insert(0, '$CLAUDES_HOME')
+from lib.global_registry import list_projects
+projects = list_projects()
+if not projects:
+    print('没有已注册的项目')
+else:
+    for p in projects:
+        print(f\"  {p['name']:20s} {p['path']}  (最后活跃: {p.get('last_active', '未知')})\")
+" ;;
+                cleanup)
+                    python3 -c "
+import sys; sys.path.insert(0, '$CLAUDES_HOME')
+from lib.global_registry import cleanup
+removed = cleanup()
+if not removed:
+    print('没有需要清理的项目')
+else:
+    for p in removed:
+        print(f'  已移除: {p}')
+    print(f'OK 清理了 {len(removed)} 个失效项目')
+" ;;
+                *)
+                    echo "用法: cnb projects <list|cleanup>" >&2; exit 1 ;;
+            esac
+            exit 0 ;;
         ui)         shift; exec "$CLAUDES_HOME/bin/board" tui ;;
         version|--version|-v) echo "cnb v${VERSION}"; exit 0 ;;
         help|--help|-h)
@@ -84,6 +118,8 @@ print(' '.join(names))
             printf "  cnb logs <name>       查看某个同学的消息历史\n"
             printf "  cnb exec <name> \"msg\" 给某个同学发指令\n"
             printf "  cnb stop <name>       停止某个同学\n"
+            printf "  cnb projects list     列出所有已注册的项目\n"
+            printf "  cnb projects cleanup  清理已失效的项目\n"
             printf "  cnb doctor            健康检查\n\n"
             printf "  cnb board [...]       底层消息/任务命令\n"
             printf "  cnb swarm [...]       管理后台同学\n"
