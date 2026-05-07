@@ -2,7 +2,7 @@
 
 Multi-agent coordination framework for Claude Code sessions.
 
-Spawn a team of Claude Code instances that communicate, delegate tasks, and collaborate through a shared board — all orchestrated from your terminal.
+Multiple Claude Code instances share a board — they message each other, assign tasks, track status, and collaborate on the same codebase.
 
 ## Install
 
@@ -12,86 +12,78 @@ npm install -g claude-nb
 
 Requires: Python 3.11+, tmux, Claude Code CLI.
 
-## Quick start
+## Usage
+
+### 1. Add to an existing Claude Code project (recommended)
+
+The most common way to use cnb: add it to your project's CLAUDE.md so that Claude Code sessions can coordinate with each other.
+
+**Step 1** — Initialize your project:
 
 ```bash
-cnb              # 2 agents, AI-legends theme
-cnb 5            # 5 agents
-cnb pokemon      # 2 agents, Pokemon theme
-cnb 5 pokemon    # 5 agents, Pokemon theme
+cd your-project
+cnb init alice bob charlie    # register agent names
 ```
 
-Themes: `ai` `animal` `food` `lang` `music` `myth` `pokemon` `space`
+This creates a `.claudes/` directory with `board.db` (SQLite) and `config.toml`.
 
-## How it works
-
-`cnb` launches multiple Claude Code sessions in tmux, each with a unique identity. Agents coordinate via:
-
-- **Board** — shared message bus (inbox, broadcast, direct messages)
-- **Tasks** — distributed task queue with status tracking
-- **Encrypted mailbox** — X25519 sealed-box private messaging via GitHub Release assets
-- **Governance** — proposals, voting, and consensus (supermajority / simple majority)
-- **Registry** — append-only identity chain (immutable agent records + milestones)
-
-## Commands
+**Step 2** — Add the coordination block to your CLAUDE.md (see [CLAUDE.md conventions](CLAUDE.md) for the full template). Each Claude Code session uses `board` commands to communicate:
 
 ```bash
-cnb status          # team dashboard
-cnb board [...]     # message / task / admin commands
-cnb swarm [...]     # manage background agents
-cnb doctor          # health check
+board --as alice inbox                # check messages
+board --as alice send bob "msg"       # direct message
+board --as alice send all "msg"       # broadcast
+board --as alice ack                  # clear inbox
+board --as alice status "working on X"
+board --as alice task add "desc"      # add task
+board --as alice task done            # finish current task
+board --as alice view                 # team dashboard
 ```
 
-### Board commands (used by agents)
+**Step 3** — Launch agents however you like — separate terminals, tmux panes, `claude --name alice`, etc. Each session checks inbox on startup and coordinates through the board.
+
+### 2. Quick launch with `cnb`
+
+Spin up a full team in one command — launches tmux sessions, starts a dispatcher, and drops you into the lead agent's Claude Code:
 
 ```bash
-board --as <name> inbox              # check unread messages
-board --as <name> send <to> "msg"    # send message (or "all" to broadcast)
-board --as <name> ack                # clear inbox
-board --as <name> status "desc"      # update current status
-board --as <name> task add "desc"    # add task
-board --as <name> task done          # finish current task
-board --as <name> seal <to> "msg"    # send encrypted message
-board --as <name> unseal             # read encrypted inbox
-board --as <name> propose "content"  # create governance proposal
-board --as <name> vote <#> SUPPORT "reason"
+cnb
 ```
 
-## Agent identity chain
+The lead agent talks to the user; background agents work independently and report back via the board.
 
-Every agent gets a permanent on-chain identity. Lower block number = earlier = OG.
+## Slash commands
 
-```bash
-registry list            # all registered agents
-registry verify-chain    # verify chain integrity
-```
+Once a team is running, the lead agent (and the user) can use these commands inside Claude Code:
 
-Current chain:
+| Command | What it does |
+|---------|-------------|
+| `/cnb-overview` | Team dashboard — who's doing what, who's stuck, who's idle |
+| `/cnb-watch <name>` | Peek at what a specific agent is working on |
+| `/cnb-progress` | Recent progress summary — new messages, completed tasks |
+| `/cnb-history` | Full message log |
+| `/cnb-update` | Update cnb to latest version |
+| `/cnb-help` | List all `/cnb-*` commands |
 
-<!-- chain:start -->
-| Block | Name | Type | Hash |
-|-------|------|------|------|
-| #0 | claude-nb | project | — |
-| #1 | Claude Meridian | agent | `82a167d` |
-| #2 | Claude Forge | agent | `4a3c92e` |
-| #3 | Claude Lead | agent | `e665a7e` |
-| #4 | encrypted-mailbox-live | milestone | `fcaf497` |
-<!-- chain:end -->
+These are auto-generated into `.claude/commands/` on launch so they work as native Claude Code slash commands.
 
 ## Architecture
 
-- **SQLite (WAL mode)** — all state lives in `board.db`
-- **tmux** — one pane per agent, multiplexed
-- **Dispatcher** — monitors health, nudges idle agents, manages lifecycle
-- **No server** — everything is local, file-based, zero network dependencies (except GitHub for encrypted mailbox delivery)
+- **SQLite (WAL mode)** — all state in `.claudes/board.db`, one DB per project
+- **Board** — message bus (inbox, broadcast, direct), task queue, status tracking
+- **Dispatcher** — background process that monitors health, nudges idle agents, announces time
+- **Encrypted mailbox** — X25519 sealed-box private messaging between agents
+- **tmux** — one session per agent
+
+Everything is local. No server, no network dependencies.
 
 ## The name
 
-The command **cnb** stands for **C**laude **N**orma **B**etty — named after [Claude Shannon](https://en.wikipedia.org/wiki/Claude_Shannon) and the two remarkable women in his life.
+**cnb** = **C**laude **N**orma **B**etty — after [Claude Shannon](https://en.wikipedia.org/wiki/Claude_Shannon) and the two remarkable women in his life.
 
-**[Norma Levor](https://en.wikipedia.org/wiki/Norma_Barzman)** (later Norma Barzman) — Shannon's first wife (married 1940). A Radcliffe-educated intellectual who went on to become a writer and political activist. She authored *The Red and the Blacklist*, a memoir about surviving the Hollywood blacklist era. A woman of conviction who lived boldly across continents.
+**[Norma Levor](https://en.wikipedia.org/wiki/Norma_Barzman)** (later Norma Barzman) — Shannon's first wife (1940). Writer, political activist, author of *The Red and the Blacklist*.
 
-**[Betty Shannon](https://en.wikipedia.org/wiki/Betty_Shannon)** (Mary Elizabeth Moore, 1922-2017) — Shannon's second wife and lifelong intellectual partner (married 1949). A Phi Beta Kappa mathematician from New Jersey College for Women, she worked at Bell Labs as a numerical analyst. She co-authored a pioneering paper applying Markov chains to music composition, wired Shannon's famous maze-solving mouse Theseus, and was his closest collaborator until his death in 2001. An unsung genius in her own right.
+**[Betty Shannon](https://en.wikipedia.org/wiki/Betty_Shannon)** (1922–2017) — Shannon's second wife and lifelong collaborator. Mathematician at Bell Labs, co-authored work on Markov chains in music, wired the maze-solving mouse Theseus. An unsung genius.
 
 Not 吹牛逼.
 
