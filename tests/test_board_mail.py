@@ -144,6 +144,17 @@ class TestMailList:
         out = capsys.readouterr().out
         assert "#1" in out
 
+    def test_list_does_not_match_name_prefix(self, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        _send_mail(db, sender="alice", to="bob")
+        cmd_mail(db, "bob", ["list"])
+        out = capsys.readouterr().out
+        assert "#1" in out
+        capsys.readouterr()
+        cmd_mail(db, "charlie", ["list"])
+        out = capsys.readouterr().out
+        assert "邮箱为空" in out
+
 
 class TestMailRead:
     def test_reads_mail(self, tmp_path, capsys):
