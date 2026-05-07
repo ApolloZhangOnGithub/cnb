@@ -158,6 +158,29 @@ A 6-tongxue team running for a full shift typically spends <2% of total tokens o
 | tester | 测试加固、质量保障 |
 | sutskever | 架构重构 (#26) |
 
+<!-- section:faq -->
+## FAQ
+
+**Q: How does cnb compare to Claude Squad / amux / ittybitty?**
+
+Different focus. Those are session managers — great at launching, isolating, and monitoring parallel agents. cnb is an organizational layer on top: module ownership, daily reports, accountability, handoff protocols. They're complementary; you could use a session manager for the tmux layer and cnb for team coordination.
+
+**Q: How does cnb compare to Codex?**
+
+Different category. Codex runs isolated tasks in cloud sandboxes. cnb coordinates persistent local teams across sessions. Use Codex for one-off jobs, cnb when you need continuity and ownership across restarts.
+
+**Q: How does cnb compare to OpenClaw?**
+
+Completely different projects. OpenClaw is a personal AI assistant across 20+ messaging platforms (WhatsApp, Telegram, Slack, etc.). cnb is a multi-agent coordination framework specifically for Claude Code development teams. No overlap.
+
+**Q: Can cnb run without a human watching?**
+
+Not yet. Today, the lead tongxue needs a human to drive it. But this is the active development direction — see [ROADMAP.md](ROADMAP.md) Phase 2. The goal is for module owners to autonomously detect issues, verify their work, and deliver PRs without being told.
+
+**Q: Is cnb token-efficient?**
+
+Yes. All coordination (messages, tasks, status) runs through shell commands + SQLite, not LLM calls. A 6-tongxue team spends <2% of tokens on coordination. See [Token efficiency](#token-efficiency).
+
 <!-- section:contributing -->
 ## Contributing
 
