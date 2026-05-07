@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""check-readme-sync — verify README.md and README_zh.md have matching section structure.
+
+Both files use <!-- section:NAME --> markers. This script checks that they
+have the same markers in the same order. Content differs (that's the point
+of two languages), but structure must match.
+
+Usage:
+    bin/check-readme-sync          # check and report
+    bin/check-readme-sync --fix    # print which sections are missing/extra
+
+Exit 0 if in sync, 1 if not.
+"""
+
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+MARKER = re.compile(r"<!--\s*section:(\S+)\s*-->")
+
+
+def extract_sections(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    return MARKER.findall(path.read_text())
+
+
+def main() -> None:
+    en = ROOT / "README.md"
+    zh = ROOT / "README_zh.md"
+
+    en_sections = extract_sections(en)
+    zh_sections = extract_sections(zh)
+
+    if not en_sections:
+        print(f"ERROR: no section markers in {en.name}")
+        raise SystemExit(1)
+    if not zh_sections:
+        print(f"ERROR: no section markers in {zh.name}")
+        raise SystemExit(1)
+
+    if en_sections == zh_sections:
+        print(f"OK {len(en_sections)} sections in sync: {', '.join(en_sections)}")
+        return
+
+    en_set = set(en_sections)
+    zh_set = set(zh_sections)
+
+    missing_in_zh = en_set - zh_set
+    missing_in_en = zh_set - en_set
+
+    if missing_in_zh:
+        print(f"README_zh.md missing: {', '.join(sorted(missing_in_zh))}")
+    if missing_in_en:
+        print(f"README.md missing: {', '.join(sorted(missing_in_en))}")
+
+    if en_sections != zh_sections and not (missing_in_zh or missing_in_en):
+        print("Section order differs:")
+        for i, (e, z) in enumerate(zip(en_sections, zh_sections)):
+            if e != z:
+                print(f"  position {i}: README.md has '{e}', README_zh.md has '{z}'")
+                break
+
+    raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

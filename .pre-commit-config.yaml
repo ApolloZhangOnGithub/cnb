@@ -5,3 +5,11 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+  - repo: local
+    hooks:
+      - id: readme-sync
+        name: README bilingual sync check
+        entry: bin/check-readme-sync
+        language: python
+        files: README.*\.md$
+        pass_filenames: false
