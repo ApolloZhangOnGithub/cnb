@@ -29,6 +29,9 @@
 ### Security
 
 - **Pre-commit hook auto-install** — `bin/init` now installs `bin/secret-scan` as a git pre-commit hook automatically. Appends to existing hooks, idempotent on re-run. Directly addresses BUG-005 root cause.
+- **Shell injection in pending commands** — `board_pending.py` executed user-supplied verify/retry commands with `shell=True`, allowing shell metacharacter injection. Replaced with `shlex.split()`.
+- **LIKE wildcard injection in history** — `cmd_history` used user input directly in a LIKE pattern without `escape_like()`. Fixed.
+- **Bug assign / kudos target validation** — `_bug_assign` and `cmd_kudos` accepted arbitrary target names without checking session existence. Now reject non-existent sessions.
 
 ### Tests
 
