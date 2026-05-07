@@ -1,13 +1,15 @@
 """Tests for the board BBS (forum) subsystem.
 
 Covers: thread creation (post), reply, view thread with replies,
-list threads with reply count, and error handling for nonexistent threads.
+list threads with reply count, error handling for nonexistent threads,
+and all cmd_* command functions with their error paths.
 """
 
 import sqlite3
 
 import pytest
 
+from lib.board_bbs import cmd_post, cmd_reply, cmd_thread, cmd_threads
 from tests.conftest import ts
 
 
@@ -218,3 +220,136 @@ class TestListThreads:
         row = db_conn.execute("SELECT id FROM threads WHERE id LIKE 'abc%' LIMIT 1").fetchone()
         assert row is not None
         assert row["id"] == "abcdef"
+
+
+# ---------------------------------------------------------------------------
+# Command function tests (cmd_post, cmd_reply, cmd_thread, cmd_threads)
+# ---------------------------------------------------------------------------
+
+
+class TestCmdPost:
+    def test_missing_args_exits(self, db):
+        with pytest.raises(SystemExit):
+            cmd_post(db, "alice", [])
+        with pytest.raises(SystemExit):
+            cmd_post(db, "alice", ["only-title"])
+
+    def test_post_creates_thread(self, db, capsys):
+        cmd_post(db, "alice", ["Design Review", "Let's discuss the new API"])
+        out = capsys.readouterr().out
+        assert "OK" in out
+        assert "帖子已创建" in out
+
+        rows = db.query("SELECT id, title, author FROM threads")
+        assert len(rows) == 1
+        assert rows[0][1] == "Design Review"
+        assert rows[0][2] == "alice"
+
+    def test_post_creates_broadcast_message(self, db, capsys):
+        cmd_post(db, "bob", ["Bug Report", "Found a critical issue"])
+        msgs = db.query("SELECT body FROM messages WHERE body LIKE '%BBS%'")
+        assert len(msgs) == 1
+        assert "Bug Report" in msgs[0][0]
+
+    def test_post_output_includes_tid(self, db, capsys):
+        cmd_post(db, "alice", ["Test Title", "Test Body"])
+        out = capsys.readouterr().out
+        tid = db.scalar("SELECT id FROM threads LIMIT 1")
+        assert tid in out
+
+
+class TestCmdReply:
+    @pytest.fixture
+    def thread_id(self, db):
+        db.execute("INSERT INTO threads(id, title, author) VALUES (?, ?, ?)", ("abc123", "Test", "alice"))
+        return "abc123"
+
+    def test_missing_args_exits(self, db):
+        with pytest.raises(SystemExit):
+            cmd_reply(db, "alice", [])
+        with pytest.raises(SystemExit):
+            cmd_reply(db, "alice", ["abc123"])
+
+    def test_nonexistent_thread_exits(self, db):
+        with pytest.raises(SystemExit):
+            cmd_reply(db, "alice", ["nonexistent", "some reply"])
+
+    def test_reply_success(self, db, thread_id, capsys):
+        cmd_reply(db, "bob", [thread_id, "Looks", "good"])
+        out = capsys.readouterr().out
+        assert "OK" in out
+        assert "回帖成功" in out
+
+        replies = db.query("SELECT author, body FROM thread_replies WHERE thread_id=?", (thread_id,))
+        assert len(replies) == 1
+        assert replies[0][0] == "bob"
+        assert replies[0][1] == "Looks good"
+
+    def test_reply_by_prefix(self, db, thread_id, capsys):
+        cmd_reply(db, "charlie", ["abc", "prefix reply"])
+        out = capsys.readouterr().out
+        assert "OK" in out
+        replies = db.query("SELECT body FROM thread_replies WHERE thread_id=?", (thread_id,))
+        assert len(replies) == 1
+
+    def test_reply_creates_broadcast(self, db, thread_id, capsys):
+        cmd_reply(db, "bob", [thread_id, "test reply"])
+        msgs = db.query("SELECT body FROM messages WHERE body LIKE '%BBS%' AND body LIKE '%回帖%'")
+        assert len(msgs) == 1
+
+
+class TestCmdThread:
+    @pytest.fixture
+    def thread_with_replies(self, db):
+        db.execute("INSERT INTO threads(id, title, author) VALUES (?, ?, ?)", ("view01", "API Design", "alice"))
+        db.execute(
+            "INSERT INTO thread_replies(thread_id, author, body) VALUES (?, ?, ?)",
+            ("view01", "bob", "LGTM"),
+        )
+        db.execute(
+            "INSERT INTO thread_replies(thread_id, author, body) VALUES (?, ?, ?)",
+            ("view01", "charlie", "Need tests"),
+        )
+        return "view01"
+
+    def test_missing_args_exits(self, db):
+        with pytest.raises(SystemExit):
+            cmd_thread(db, [])
+
+    def test_nonexistent_thread_exits(self, db):
+        with pytest.raises(SystemExit):
+            cmd_thread(db, ["nonexistent"])
+
+    def test_view_thread_shows_title_and_replies(self, db, thread_with_replies, capsys):
+        cmd_thread(db, [thread_with_replies])
+        out = capsys.readouterr().out
+        assert "API Design" in out
+        assert "@alice" in out
+        assert "LGTM" in out
+        assert "Need tests" in out
+
+    def test_view_by_prefix(self, db, thread_with_replies, capsys):
+        cmd_thread(db, ["view"])
+        out = capsys.readouterr().out
+        assert "API Design" in out
+
+
+class TestCmdThreads:
+    def test_empty_list(self, db, capsys):
+        cmd_threads(db)
+        out = capsys.readouterr().out
+        assert "暂无话题" in out
+
+    def test_lists_threads_with_reply_count(self, db, capsys):
+        db.execute("INSERT INTO threads(id, title, author) VALUES (?, ?, ?)", ("t1", "Thread One", "alice"))
+        db.execute("INSERT INTO threads(id, title, author) VALUES (?, ?, ?)", ("t2", "Thread Two", "bob"))
+        db.execute(
+            "INSERT INTO thread_replies(thread_id, author, body) VALUES (?, ?, ?)",
+            ("t1", "charlie", "reply"),
+        )
+        cmd_threads(db)
+        out = capsys.readouterr().out
+        assert "Thread One" in out
+        assert "Thread Two" in out
+        assert "1 回帖" in out
+        assert "0 回帖" in out
