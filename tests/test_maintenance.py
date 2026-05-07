@@ -154,3 +154,54 @@ class TestRestore:
         bad_file.write_text("not a database")
         with pytest.raises(SystemExit):
             cmd_restore(db, [str(bad_file), "--force"])
+
+    def test_restore_empty_db_exits(self, db, tmp_path):
+        empty_db = tmp_path / "empty.db"
+        conn = sqlite3.connect(str(empty_db))
+        conn.close()
+        with pytest.raises(SystemExit):
+            cmd_restore(db, [str(empty_db), "--force"])
+
+    def test_restore_cancel(self, db, tmp_path, capsys):
+        backup_path = tmp_path / "backup.db"
+        cmd_backup(db, [f"--output={backup_path}"])
+        capsys.readouterr()
+        with patch("builtins.input", return_value="n"):
+            cmd_restore(db, [str(backup_path)])
+        out = capsys.readouterr().out
+        assert "Cancelled" in out
+
+    def test_restore_eof(self, db, tmp_path, capsys):
+        backup_path = tmp_path / "backup.db"
+        cmd_backup(db, [f"--output={backup_path}"])
+        capsys.readouterr()
+        with patch("builtins.input", side_effect=EOFError):
+            cmd_restore(db, [str(backup_path)])
+        out = capsys.readouterr().out
+        assert "Cancelled" in out
+
+
+class TestBackupHelp:
+    def test_backup_help(self, db, capsys):
+        cmd_backup(db, ["--help"])
+        out = capsys.readouterr().out
+        assert "Usage" in out
+
+    def test_restore_help(self, db, capsys):
+        cmd_restore(db, ["--help"])
+        out = capsys.readouterr().out
+        assert "Usage" in out
+
+
+class TestPruneWithDate:
+    def test_prune_with_date_string(self, maint_db, capsys):
+        old_date = (datetime.now() - timedelta(days=200)).strftime("%Y-%m-%d")
+        cmd_prune(maint_db, ["--before", old_date])
+        out = capsys.readouterr().out
+        assert "nothing to prune" in out
+
+    def test_prune_with_recent_date(self, maint_db, capsys):
+        recent_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
+        cmd_prune(maint_db, ["--before", recent_date])
+        out = capsys.readouterr().out
+        assert "pruned" in out
