@@ -16,6 +16,11 @@
 - **parse_flags silent truncation** — Value flag at end of args (missing value) silently returned partial results. Now prints error and raises `SystemExit(1)`.
 - **resources _load_prev_state crash** — `read_text()` could raise `OSError` on unreadable state file, crashing monitor loop. Added try/except.
 - **npmignore recursive pycache** — `__pycache__` pattern only matched top-level. Added `**/__pycache__/` for nested directories.
+- **board_mail LIKE ESCAPE missing** — `_escape_like()` was applied to mail recipient/CC matching but the SQL lacked `ESCAPE '\\'`, making the escaping ineffective. Added ESCAPE clause.
+- **board_view cmd_get LIKE injection** — File hash prefix matching used `LIKE` with `ESCAPE` clause but didn't escape user input. Applied `escape_like()`.
+- **Duplicated `_escape_like` consolidated** — Three identical copies in board_bbs/board_mail/board_view merged into `common.escape_like()`.
+- **board_tui osascript timeout** — `subprocess.run(["osascript", ...])` had no timeout, risking indefinite hang. Added `timeout=10`.
+- **Flaky test root cause: Signal leak** — `conftest.py` autouse fixture only cleared `_db_cache` but not `inbox_delivered` Signal listeners, causing mock failures under `pytest-randomly`.
 
 ### Tests
 
@@ -25,6 +30,7 @@
 - Digest scheduler (13): timing, daily/weekly send, dedup, subscriber filtering
 - Notify CLI (28): status, subscriptions, test, digest, log, routing
 - Board pending (28): add/list/verify/retry/resolve, validation, subprocess mock
+- Board mail (33): send/list/read/reply, CC, threading, unread tracking, LIKE prefix regression
 - Global registry (28): register/list/remove projects, credential update/check, cleanup stale, corrupt file handling
 
 ## 0.5.1 (2026-05-08)
