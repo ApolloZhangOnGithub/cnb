@@ -151,6 +151,11 @@ def sanitize_session_name(name: str) -> str:
     return name.replace("/", "_").replace("\\", "_").replace("\0", "")
 
 
+def escape_like(s: str) -> str:
+    """Escape SQL LIKE wildcards (%, _) for safe use with ESCAPE '\\'."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def ts() -> str:
     """Current timestamp as 'YYYY-MM-DD HH:MM:SS'."""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")

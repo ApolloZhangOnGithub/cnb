@@ -3,11 +3,7 @@
 import hashlib
 
 from lib.board_db import BoardDB, ts
-from lib.common import validate_identity
-
-
-def _escape_like(s: str) -> str:
-    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+from lib.common import escape_like, validate_identity
 
 
 def cmd_post(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -49,7 +45,7 @@ def cmd_reply(db: BoardDB, identity: str, args: list[str]) -> None:
 
     full_tid = db.scalar(
         "SELECT id FROM threads WHERE id LIKE ? ESCAPE '\\' LIMIT 1",
-        (_escape_like(tid) + "%",),
+        (escape_like(tid) + "%",),
     )
     if not full_tid:
         print(f"ERROR: 帖子 {tid} 不存在")
@@ -73,7 +69,7 @@ def cmd_thread(db: BoardDB, args: list[str]) -> None:
     tid = args[0]
     full_tid = db.scalar(
         "SELECT id FROM threads WHERE id LIKE ? ESCAPE '\\' LIMIT 1",
-        (_escape_like(tid) + "%",),
+        (escape_like(tid) + "%",),
     )
     if not full_tid:
         print(f"ERROR: 帖子 {tid} 不存在")

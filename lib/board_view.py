@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from lib.board_db import BoardDB
-from lib.common import validate_identity
+from lib.common import escape_like, validate_identity
 from lib.tmux_utils import has_session, pane_command
 
 
@@ -291,7 +291,7 @@ def cmd_get(db: BoardDB, args: list[str]) -> None:
     row = db.query_one(
         "SELECT hash, original_name, sender, ts, stored_path FROM files "
         "WHERE hash LIKE ? ESCAPE '\\' OR original_name=? LIMIT 1",
-        (query + "%", query),
+        (escape_like(query) + "%", query),
     )
     if not row:
         print(f"ERROR: no file matching '{query}'")
