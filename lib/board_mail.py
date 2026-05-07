@@ -3,10 +3,15 @@
 import json
 
 from lib.board_db import BoardDB, ts
-from lib.common import parse_flags
+from lib.common import parse_flags, validate_identity
+
+
+def _escape_like(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def cmd_mail(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     subcmd = args[0] if args else "list"
     rest = args[1:] if len(args) > 1 else []
 
@@ -87,7 +92,7 @@ def _mail_list(db: BoardDB, identity: str, args: list[str]) -> None:
         rows = db.query(
             "SELECT id, thread_id, sender, recipients, cc, subject, ts, read_by FROM mail "
             "WHERE recipients LIKE ? OR cc LIKE ? OR sender=? ORDER BY ts DESC",
-            (f'%"{name}"%', f'%"{name}"%', name),
+            (f'%"{_escape_like(name)}"%', f'%"{_escape_like(name)}"%', name),
         )
 
     if not rows:

@@ -155,7 +155,7 @@ def _bug_overdue(db: BoardDB) -> None:
             continue
         elapsed = now_epoch - rep_epoch
         limit = {"P0": 0, "P1": 14400, "P2": 86400}.get(sev, 0)
-        if elapsed > limit:
+        if elapsed >= limit:
             found = True
             print(f"OVERDUE: {bid} [{sev}] — {elapsed // 60}min since reported")
     if not found:
