@@ -9,7 +9,7 @@ of duplicating SQL logic.
 
 import pytest
 
-from lib.board_task import _promote_next, _task_add, _task_done, _task_list, _task_next
+from lib.board_task import _promote_next, _task_add, _task_done, _task_list, _task_next, cmd_task
 
 
 class TestTaskAdd:
@@ -250,3 +250,50 @@ class TestPromoteNext:
         _task_next(db, "alice")
         out = capsys.readouterr().out
         assert "next task" in out
+
+
+class TestCmdTask:
+    """cmd_task dispatch and edge cases."""
+
+    def test_invalid_subcommand_exits(self, db):
+        with pytest.raises(SystemExit):
+            cmd_task(db, "alice", ["bogus"])
+
+    def test_no_args_defaults_to_list(self, db, capsys):
+        cmd_task(db, "alice", [])
+        out = capsys.readouterr().out
+        assert "任务队列" in out
+
+    def test_dispatches_add(self, db, capsys):
+        cmd_task(db, "alice", ["add", "test task"])
+        out = capsys.readouterr().out
+        assert "OK task #" in out
+
+    def test_done_invalid_id_exits(self, db):
+        with pytest.raises(SystemExit):
+            _task_done(db, "alice", ["notanumber"])
+
+    def test_done_nonexistent_id_exits(self, db):
+        with pytest.raises(SystemExit):
+            _task_done(db, "alice", ["9999"])
+
+    def test_list_by_positional_session(self, db, capsys):
+        _task_add(db, "bob", ["bob task"])
+        capsys.readouterr()
+        _task_list(db, "alice", ["bob"])
+        out = capsys.readouterr().out
+        assert "bob task" in out
+
+    def test_list_too_many_positional_exits(self, db):
+        with pytest.raises(SystemExit):
+            _task_list(db, "alice", ["bob", "charlie"])
+
+    def test_list_all_include_done(self, db, capsys):
+        _task_add(db, "alice", ["will finish"])
+        capsys.readouterr()
+        _task_done(db, "alice", [])
+        capsys.readouterr()
+        _task_list(db, "alice", ["--all", "--done"])
+        out = capsys.readouterr().out
+        assert "will finish" in out
+        assert "done" in out
