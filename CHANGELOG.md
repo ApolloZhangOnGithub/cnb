@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.5.0 (2026-05-08)
+## 0.4.2-dev (unreleased)
+
+_Current development version._
+
+## 0.4.1 (2026-05-08 03:40)
 
 ### Bug Fixes
 
