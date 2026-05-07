@@ -35,10 +35,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: python bin/sync-version --check
+      - name: Version must change on every push
+        run: |
+          PREV=$(git show HEAD~1:VERSION 2>/dev/null || echo "")
+          CURR=$(cat VERSION)
+          if [ "$PREV" = "$CURR" ] && [ -n "$PREV" ]; then
+            echo "ERROR: VERSION unchanged ($CURR). Every commit to master must bump the version."
+            echo "Use patch versions liberally: 0.5.1 → 0.5.2, not 0.6.0."
+            exit 1
+          fi
+      - name: Check npm publish status
+        run: |
+          LOCAL=$(cat VERSION)
+          # Strip -dev suffix for comparison
+          LOCAL_CLEAN=$(echo "$LOCAL" | sed 's/-dev$//')
+          NPM=$(npm view claude-nb version 2>/dev/null || echo "0.0.0")
+          if [ "$LOCAL_CLEAN" != "$NPM" ]; then
+            echo "::warning::npm package is outdated: npm=$NPM local=$LOCAL_CLEAN. Run 'npm publish' to update."
+          fi
 
   test:
     runs-on: ubuntu-latest
