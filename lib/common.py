@@ -315,7 +315,8 @@ def parse_flags(
         if args[i] in val_lookup:
             canonical = val_lookup[args[i]]
             if i + 1 >= len(args):
-                return result, positional
+                print(f"ERROR: {args[i]} 需要一个参数值")
+                raise SystemExit(1)
             result[canonical] = args[i + 1]
             i += 2
         elif args[i] in bool_lookup:
