@@ -2,7 +2,8 @@
 
 Covers: find_claudes_dir traversal, ClaudesEnv config parsing,
 DB parameterized queries, SQL injection prevention, ts() format,
-is_suspended(), and date_to_epoch().
+is_suspended(), date_to_epoch(), validate_identity, escape_like,
+sanitize_session_name, is_terminal_*_status, is_privileged.
 """
 
 import sqlite3
@@ -10,6 +11,14 @@ import time
 
 import pytest
 
+from lib.common import (
+    escape_like,
+    is_privileged,
+    is_terminal_bug_status,
+    is_terminal_task_status,
+    sanitize_session_name,
+    validate_identity,
+)
 from tests.conftest import ts
 
 
@@ -385,3 +394,99 @@ class TestSchemaIntegrity:
             ids.append(cur.lastrowid)
         db_conn.commit()
         assert ids[0] < ids[1] < ids[2]
+
+
+# ---------------------------------------------------------------------------
+# validate_identity
+# ---------------------------------------------------------------------------
+
+
+class TestValidateIdentity:
+    def test_registered_session_passes(self, db):
+        validate_identity(db, "alice")
+
+    def test_unregistered_session_exits(self, db):
+        with pytest.raises(SystemExit):
+            validate_identity(db, "intruder")
+
+    def test_privileged_role_always_passes(self, db):
+        validate_identity(db, "lead")
+        validate_identity(db, "dispatcher")
+
+    def test_case_insensitive(self, db):
+        validate_identity(db, "Alice")
+
+
+# ---------------------------------------------------------------------------
+# escape_like
+# ---------------------------------------------------------------------------
+
+
+class TestEscapeLike:
+    def test_no_special_chars(self):
+        assert escape_like("hello") == "hello"
+
+    def test_escapes_percent(self):
+        assert escape_like("100%") == "100\\%"
+
+    def test_escapes_underscore(self):
+        assert escape_like("my_var") == "my\\_var"
+
+    def test_escapes_backslash(self):
+        assert escape_like("a\\b") == "a\\\\b"
+
+    def test_escapes_all_together(self):
+        assert escape_like("a%b_c\\d") == "a\\%b\\_c\\\\d"
+
+    def test_empty_string(self):
+        assert escape_like("") == ""
+
+
+# ---------------------------------------------------------------------------
+# sanitize_session_name
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeSessionName:
+    def test_normal_name_unchanged(self):
+        assert sanitize_session_name("alice") == "alice"
+
+    def test_strips_forward_slash(self):
+        assert sanitize_session_name("../evil") == ".._evil"
+
+    def test_strips_backslash(self):
+        assert sanitize_session_name("a\\b") == "a_b"
+
+    def test_strips_null_byte(self):
+        assert sanitize_session_name("alice\0") == "alice"
+
+    def test_combined_traversal(self):
+        assert sanitize_session_name("../../etc/passwd") == ".._.._etc_passwd"
+
+
+# ---------------------------------------------------------------------------
+# is_terminal_*_status / is_privileged
+# ---------------------------------------------------------------------------
+
+
+class TestStatusHelpers:
+    def test_done_is_terminal_task(self):
+        assert is_terminal_task_status("done") is True
+
+    def test_active_not_terminal_task(self):
+        assert is_terminal_task_status("active") is False
+
+    def test_fixed_is_terminal_bug(self):
+        assert is_terminal_bug_status("FIXED") is True
+
+    def test_open_not_terminal_bug(self):
+        assert is_terminal_bug_status("OPEN") is False
+
+    def test_lead_is_privileged(self):
+        assert is_privileged("lead") is True
+
+    def test_dispatcher_is_privileged(self):
+        assert is_privileged("dispatcher") is True
+
+    def test_normal_user_not_privileged(self):
+        assert is_privileged("alice") is False
