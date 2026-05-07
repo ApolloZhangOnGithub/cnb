@@ -7,6 +7,7 @@
 - **Notification push system (Issue #33)** — Full notification infrastructure: TOML-based subscription config (`notifications.toml`), `NotificationPushConcern` for realtime @mention and bug activity delivery, `DigestScheduler` for daily/weekly digest scheduling, `generate_daily_digest` for activity summaries, and `bin/notify` CLI for subscription management, test delivery, and notification log viewing. Includes `notification_log` DB table for dedup.
 - **Pending actions queue** — `board pending` subcommand for tracking actions requiring user intervention (auth, approve, confirm). Supports add/list/verify/retry/resolve lifecycle with subprocess-based verification.
 - **Global project registry (Issue #36)** — `lib/global_registry.py` for cross-project discovery and shared credential status tracking. Registry at `~/.cnb/` stores project list and credential status (valid/expired/unknown). Integrated into `bin/init` (auto-register), `bin/cnb projects list|cleanup`, and `bin/doctor` (stale project and expired credential checks).
+- **Token usage tracking (Issue #38)** — `cnb usage` command parses Claude Code JSONL session logs to show per-agent token usage and estimated API costs. Summary view aggregates by agent name; `--detail` shows per-session breakdown. Supports Opus, Sonnet, and Haiku pricing.
 
 ### Bug Fixes
 
@@ -38,6 +39,7 @@
 - Notify CLI (28): status, subscriptions, test, digest, log, routing
 - Board pending (28): add/list/verify/retry/resolve, validation, subprocess mock
 - Board mail (33): send/list/read/reply, CC, threading, unread tracking, LIKE prefix regression
+- Token usage (23): JSONL parsing, cost estimation, aggregation, slug generation, CLI output
 - Global registry (28): register/list/remove projects, credential update/check, cleanup stale, corrupt file handling
 
 ## 0.5.1 (2026-05-08)
