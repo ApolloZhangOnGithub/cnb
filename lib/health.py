@@ -110,8 +110,8 @@ def print_health_report() -> None:
     sessions = get_sessions(prefix)
 
     print()
-    print("  Session\t\tStatus\t\tRestarts\tUptime\t\tAgent")
-    print("  -------\t\t------\t\t--------\t------\t\t-----")
+    print("  Session\t\tStatus\t\tRestarts\tUptime\t\tEngine")
+    print("  -------\t\t------\t\t--------\t------\t\t------")
 
     total = 0
     alive = 0

@@ -289,7 +289,7 @@ class SwarmManager:
 
         print()
         backend_name = type(self.cfg.backend).__name__.lower().replace("backend", "")
-        print(f"Mode: {backend_name} | Agent: {self.cfg.agent} | Started: {started}")
+        print(f"Mode: {backend_name} | Engine: {self.cfg.agent} | Started: {started}")
         print(f"Logs: {self._env.log_dir}")
         if isinstance(self.cfg.backend, TmuxBackend):
             print(f"  tmux attach -t {self._env.prefix}-<name>   # attach (Ctrl-B D to detach)")
@@ -299,7 +299,7 @@ class SwarmManager:
 
     def status(self) -> None:
         backend_name = type(self.cfg.backend).__name__.lower().replace("backend", "")
-        print(f"=== Swarm Status (mode: {backend_name}, agent: {self.cfg.agent}) ===")
+        print(f"=== 同学状态 (mode: {backend_name}, engine: {self.cfg.agent}) ===")
         prefix = self._env.prefix
         sf = self._env.suspended_file
         for name in self._env.sessions:
@@ -309,7 +309,7 @@ class SwarmManager:
                 line = self.cfg.backend.status_line(prefix, name, self.cfg.agent)
                 print(f"  {name}: {line}")
             elif self.cfg.backend.is_running(prefix, name):
-                print(f"  {name}: stale (session exists, agent exited)")
+                print(f"  {name}: stale (session exists, 同学已退出)")
             else:
                 print(f"  {name}: stopped")
 
@@ -436,10 +436,10 @@ class SwarmManager:
     def help(self) -> None:
         backend_name = type(self.cfg.backend).__name__.lower().replace("backend", "")
         print(f"""\
-swarm — manage multi-agent session swarm
+swarm — 管理同学协作会话
 
 Mode: {backend_name} (override with SWARM_MODE=tmux|screen)
-Agent: {self.cfg.agent} (override with SWARM_AGENT=claude|trae|qwen)
+Engine: {self.cfg.agent} (override with SWARM_AGENT=claude|trae|qwen)
 
   start [names...]    Launch sessions (default: all non-suspended)
   start --role=dev    Launch only sessions with matching role

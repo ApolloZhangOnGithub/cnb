@@ -80,13 +80,13 @@ print(' '.join(names))
             printf "  cnb compose [file]    从配置文件启动团队\n\n"
             printf "  主题: ai animal food lang music myth space threebody titan\n\n"
             printf "  cnb ui                交互式团队面板\n"
-            printf "  cnb ps                列出 agent 状态\n"
-            printf "  cnb logs <name>       查看某个 agent 的消息历史\n"
-            printf "  cnb exec <name> \"msg\" 给某个 agent 发指令\n"
-            printf "  cnb stop <name>       停止某个 agent\n"
+            printf "  cnb ps                列出同学状态\n"
+            printf "  cnb logs <name>       查看某个同学的消息历史\n"
+            printf "  cnb exec <name> \"msg\" 给某个同学发指令\n"
+            printf "  cnb stop <name>       停止某个同学\n"
             printf "  cnb doctor            健康检查\n\n"
             printf "  cnb board [...]       底层消息/任务命令\n"
-            printf "  cnb swarm [...]       管理后台 agent\n"
+            printf "  cnb swarm [...]       管理后台同学\n"
             exit 0 ;;
     esac
 fi

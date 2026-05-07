@@ -311,7 +311,7 @@ def _fmt_command(cmd: Command, width: int) -> str:
 def print_help() -> None:
     visible = [c for c in COMMANDS if not c.hidden]
     max_name = max(len(c.name) + (2 + len(", ".join(c.aliases)) if c.aliases else 0) for c in visible) + 2
-    print("board — agent coordination tool\n")
+    print("board — 同学协作工具\n")
     print("Usage: board --as <name> <command> [args...]\n")
     print("Commands:")
     for c in visible:

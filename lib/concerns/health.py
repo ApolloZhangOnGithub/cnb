@@ -32,7 +32,7 @@ class SessionKeepAlive(Concern):
                 continue
             sess = f"{self.cfg.prefix}-{name}"
             if tmux_ok("has-session", "-t", sess) and not is_claude_running(sess):
-                log(f"{name}: agent exited, NOT restarting (idle policy)")
+                log(f"{name}: 同学已退出, NOT restarting (idle policy)")
 
 
 class HealthChecker(Concern):

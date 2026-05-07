@@ -102,7 +102,7 @@ class TestTmuxCapturePane:
 class TestTmuxStatusLine:
     def test_format(self):
         b = TmuxBackend()
-        assert b.status_line("cnb", "alice", "claude") == "running (tmux, agent: claude)"
+        assert b.status_line("cnb", "alice", "claude") == "running (tmux, engine: claude)"
 
 
 class TestTmuxInject:
