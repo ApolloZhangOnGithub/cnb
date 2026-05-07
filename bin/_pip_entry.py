@@ -15,7 +15,7 @@ def main() -> None:
     bash_script = claudes_home / "bin" / "claudes-code"
 
     if bash_script.exists():
-        os.execvp("bash", ["bash", str(bash_script)] + sys.argv[1:])
+        os.execvp("bash", ["bash", str(bash_script), *sys.argv[1:]])
 
     print(f"FATAL: {bash_script} not found", file=sys.stderr)
     raise SystemExit(1)
