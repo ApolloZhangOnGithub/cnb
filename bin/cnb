@@ -103,6 +103,15 @@ else:
             esac
             exit 0 ;;
         ui)         shift; exec "$CLAUDES_HOME/bin/board" tui ;;
+        usage)
+            shift
+            python3 -c "
+import sys; sys.path.insert(0, '$CLAUDES_HOME')
+from pathlib import Path
+from lib.token_usage import cmd_usage
+cmd_usage(Path('$CNB_PROJECT'), sys.argv[1:])
+" "$@"
+            exit 0 ;;
         leaderboard)
             echo "${B}${G}◆ 贡献排行榜${N}"
             echo ""
@@ -137,6 +146,7 @@ else:
             printf "  cnb stop <name>       停止某个同学\n"
             printf "  cnb projects list     列出所有已注册的项目\n"
             printf "  cnb projects cleanup  清理已失效的项目\n"
+            printf "  cnb usage             token 用量统计\n"
             printf "  cnb leaderboard       贡献排行榜\n"
             printf "  cnb doctor            健康检查\n\n"
             printf "  cnb board [...]       底层消息/任务命令\n"
