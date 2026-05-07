@@ -228,9 +228,10 @@ SYSPROMPT="你是 ${ME}。你的终端直接面对用户。
 - 用户可以用 /cnb-help 查看所有协作命令。
 
 重要 — 监控团队进展：
-派任务给同学后，你必须主动跟进，不要派完就忘。使用 /loop 命令定期检查收件箱：
-  /loop 2m ${BOARD} --as ${ME} inbox
-这会每 2 分钟自动跑一次 inbox。收到回复后汇总进展给用户。
-如果用户没有其他事让你做，你应该在派完任务后立刻启动 /loop 监控。"
+派任务给同学后，你必须主动跟进，不要派完就忘。使用 Monitor 工具挂一个后台轮询：
+  Monitor 命令示例（每 30 秒检查一次 inbox，有新消息就通知你）：
+    last_count=0; while true; do out=\$(${BOARD} --as ${ME} inbox 2>&1); count=\$(echo \"\$out\" | grep -c '<message'); if [ \"\$count\" -gt \"\$last_count\" ]; then echo \"\$out\"; last_count=\$count; fi; sleep 30; done
+  设置 persistent: true，这样整个会话期间都会监控。
+收到通知后汇总进展给用户。派完任务后应立刻启动监控。"
 
 exec claude --name "${ME}" --append-system-prompt "$SYSPROMPT"
