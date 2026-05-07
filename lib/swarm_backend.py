@@ -15,6 +15,9 @@ class SessionBackend(ABC):
     @abstractmethod
     def is_running(self, prefix: str, name: str) -> bool: ...
 
+    def is_agent_active(self, prefix: str, name: str) -> bool:
+        return self.is_running(prefix, name)
+
     @abstractmethod
     def start_session(
         self,
@@ -51,6 +54,21 @@ class TmuxBackend(SessionBackend):
             timeout=5,
         )
         return r.returncode == 0
+
+    def _pane_command(self, prefix: str, name: str) -> str:
+        r = subprocess.run(
+            ["tmux", "list-panes", "-t", self._sess(prefix, name), "-F", "#{pane_current_command}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return r.stdout.strip().split("\n")[0] if r.returncode == 0 else ""
+
+    def is_agent_active(self, prefix: str, name: str) -> bool:
+        if not self.is_running(prefix, name):
+            return False
+        cmd = self._pane_command(prefix, name)
+        return cmd not in ("zsh", "bash", "sh", "-zsh", "-bash", "")
 
     def capture_pane(self, prefix: str, name: str) -> str:
         r = subprocess.run(
@@ -193,7 +211,18 @@ class ScreenBackend(SessionBackend):
         sess = self._sess(prefix, name)
         subprocess.run(["screen", "-dmS", sess])
         time.sleep(1)
-        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", f"cd '{project_root}' && export CNB_PROJECT='{project_root}'"])
+        subprocess.run(
+            [
+                "screen",
+                "-S",
+                sess,
+                "-p",
+                "0",
+                "-X",
+                "stuff",
+                f"cd '{project_root}' && export CNB_PROJECT='{project_root}'",
+            ]
+        )
         subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
         time.sleep(0.5)
         subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", agent_cmd])

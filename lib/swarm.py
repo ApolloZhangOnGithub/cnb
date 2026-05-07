@@ -205,8 +205,11 @@ class SwarmManager:
         backend = self.cfg.backend
 
         if backend.is_running(prefix, name):
-            print(f"  {name}: already running")
-            return
+            if backend.is_agent_active(prefix, name):
+                print(f"  {name}: already running")
+                return
+            backend.stop_session(prefix, name, "true")
+            time.sleep(1)
 
         self.log_startup(name)
         agent_cmd = self.build_agent_cmd(name)
@@ -289,9 +292,11 @@ class SwarmManager:
         for name in self._env.sessions:
             if is_suspended(name, sf):
                 print(f"  {name}: SUSPENDED")
-            elif self.cfg.backend.is_running(prefix, name):
+            elif self.cfg.backend.is_agent_active(prefix, name):
                 line = self.cfg.backend.status_line(prefix, name, self.cfg.agent)
                 print(f"  {name}: {line}")
+            elif self.cfg.backend.is_running(prefix, name):
+                print(f"  {name}: stale (session exists, agent exited)")
             else:
                 print(f"  {name}: stopped")
 
