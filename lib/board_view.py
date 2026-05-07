@@ -50,9 +50,9 @@ def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tup
             if delta < 120:
                 ago = f"[{int(delta)}s ago]"
                 return "● active", ago
-            elif delta < 300:
+            elif delta < 180:
                 return "◐ thinking", f"[{int(delta / 60)}m ago]"
-            elif delta < 900:
+            elif delta < 600:
                 return "○ stale", f"[{int(delta / 60)}m ago]"
             else:
                 hours = delta / 3600
