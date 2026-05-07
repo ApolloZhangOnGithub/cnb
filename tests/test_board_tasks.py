@@ -21,7 +21,7 @@ class TestTaskAdd:
 
         row = db.query_one("SELECT status FROM tasks WHERE session='alice'")
         assert row["status"] == "active"
-        assert "OK #" in capsys.readouterr().out
+        assert "OK task #" in capsys.readouterr().out
 
     def test_second_task_stays_pending(self, db, capsys):
         """When an active task exists, new tasks are added as pending."""
@@ -50,7 +50,7 @@ class TestTaskAdd:
         assert row is not None
         assert row["description"] == "task from alice"
         out = capsys.readouterr().out
-        assert "OK #" in out
+        assert "OK task #" in out
 
     def test_negative_priority(self, db, capsys):
         """Negative priority values are valid and sort lower."""

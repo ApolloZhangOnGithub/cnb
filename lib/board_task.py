@@ -90,7 +90,7 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
             (target, desc, status, priority),
             c=c,
         )
-        print(f"OK #{task_id}")
+        print(f"OK task #{task_id} added to {target} ({status})")
 
         if target != name:
             now = ts()
@@ -100,6 +100,8 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
                 c=c,
             )
             db.execute("INSERT INTO inbox(session, message_id) VALUES (?, ?)", (target, msg_id), c=c)
+            print(f"OK notified {target}")
+    _print_queue(db, target)
 
 
 def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -140,9 +142,18 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
 
     now = ts()
     db.execute("UPDATE tasks SET status='done', done_at=? WHERE id=?", (now, task_id))
-    print(f"OK #{task_id} done")
+    print(f"OK task #{task_id} done: {desc}")
 
     _promote_next(db, assignee)
+    nxt = db.query_one(
+        "SELECT id, description FROM tasks WHERE session=? AND status='active' ORDER BY id ASC LIMIT 1",
+        (assignee,),
+    )
+    if nxt:
+        print(f"Next: #{nxt[0]} {nxt[1]}")
+    else:
+        print(f"No remaining active/pending tasks for {assignee}.")
+    _print_queue(db, assignee)
 
 
 def _task_list(db: BoardDB, identity: str, args: list[str]) -> None:
