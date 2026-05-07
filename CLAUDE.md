@@ -3,6 +3,8 @@
 Multi-agent coordination framework for Claude Code sessions.
 Python 3.11+, SQLite (WAL mode), tmux-based session management.
 
+> **First time here?** Read [README.md](README.md) first for install, usage, and slash commands. It also links to [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the issue workflow and versioning rules.
+
 ## Language
 
 - **Code**: identifiers, docstrings, commit messages, PR descriptions — English.

@@ -69,6 +69,16 @@ cnb doctor              # health check
 - **Encrypted mailbox** — X25519 sealed-box private messaging between agents
 - **tmux** — one session per agent, all local
 
+## Contributing
+
+Before writing code, read [CONTRIBUTING.md](.github/CONTRIBUTING.md) — it covers the issue workflow, versioning rules, naming conventions, and feature ownership model.
+
+Key points:
+- Every change starts with an issue
+- Every commit bumps VERSION (patch versions are fine)
+- 同学 not "agent" in all user-facing text
+- `ruff` + `mypy` + `pytest` must pass before push
+
 ## The name
 
 **cnb** = **C**laude **N**orma **B**etty — after [Claude Shannon](https://en.wikipedia.org/wiki/Claude_Shannon) and the two remarkable women in his life.
