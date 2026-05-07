@@ -16,13 +16,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.board_view import (
     _heartbeat_status,
+    cmd_dashboard,
+    cmd_dirty,
     cmd_files,
     cmd_freshness,
     cmd_get,
     cmd_history,
+    cmd_overview,
     cmd_p0,
     cmd_prebuild,
     cmd_relations,
+    cmd_roster,
+    cmd_view,
 )
 
 
@@ -237,3 +242,93 @@ class TestCmdFiles:
         output = capsys.readouterr().out
         assert "test.txt" in output
         assert "alice" in output
+
+
+class TestCmdOverview:
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_sessions(self, _mock, db, capsys):
+        cmd_overview(db)
+        output = capsys.readouterr().out
+        assert "alice" in output
+        assert "bob" in output
+
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_recent_messages(self, _mock, db, capsys):
+        db.execute(
+            "INSERT INTO messages(ts, sender, recipient, body) VALUES ('2025-01-01', 'alice', 'bob', 'test msg')"
+        )
+        cmd_overview(db)
+        output = capsys.readouterr().out
+        assert "test msg" in output
+
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_dispatcher_not_running(self, _mock, db, capsys):
+        cmd_overview(db)
+        output = capsys.readouterr().out
+        assert "No sessions running" in output
+
+
+class TestCmdView:
+    @patch("lib.board_view.has_session", return_value=False)
+    @patch("lib.board_view.pane_command", return_value="")
+    def test_shows_board(self, _cmd, _has, db, capsys):
+        cmd_view(db, "alice")
+        output = capsys.readouterr().out
+        assert "Board" in output
+        assert "Alice" in output or "alice" in output
+
+    @patch("lib.board_view.has_session", return_value=False)
+    @patch("lib.board_view.pane_command", return_value="")
+    def test_shows_inbox_count(self, _cmd, _has, db, capsys):
+        db.execute("INSERT INTO messages(ts, sender, recipient, body) VALUES ('2025-01-01', 'bob', 'alice', 'hi')")
+        msg_id = db.scalar("SELECT id FROM messages ORDER BY id DESC LIMIT 1")
+        db.execute("INSERT INTO inbox(session, message_id) VALUES ('alice', ?)", (msg_id,))
+        cmd_view(db, "alice")
+        output = capsys.readouterr().out
+        assert "1 条未读" in output
+
+
+class TestCmdDashboard:
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_team_status(self, _mock, db, capsys):
+        cmd_dashboard(db)
+        output = capsys.readouterr().out
+        assert "Team Dashboard" in output
+        assert "alice" in output
+
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_dispatcher_status(self, _mock, db, capsys):
+        cmd_dashboard(db)
+        output = capsys.readouterr().out
+        assert "dispatcher" in output
+
+
+class TestCmdDirty:
+    def test_no_git_repo(self, db, capsys):
+        with patch("lib.board_view._git", return_value=""):
+            cmd_dirty(db)
+        output = capsys.readouterr().out
+        assert "clean" in output.lower() or "无" in output or "干净" in output
+
+    def test_shows_dirty_files(self, db, capsys):
+        with patch("lib.board_view._git", return_value=" M lib/foo.py\n M lib/bar.py\n"):
+            cmd_dirty(db)
+        output = capsys.readouterr().out
+        assert "foo.py" in output
+
+
+class TestCmdRoster:
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_all_sessions(self, _mock, db, capsys):
+        cmd_roster(db)
+        output = capsys.readouterr().out
+        assert "alice" in output
+        assert "bob" in output
+        assert "charlie" in output
+        assert "offline" in output
+
+    @patch("lib.board_view.has_session", return_value=True)
+    def test_online_status(self, _mock, db, capsys):
+        cmd_roster(db)
+        output = capsys.readouterr().out
+        assert "online" in output
