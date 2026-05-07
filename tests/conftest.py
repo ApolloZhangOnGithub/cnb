@@ -28,6 +28,18 @@ DEFAULT_SESSIONS = ["alice", "bob", "charlie"]
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _clear_helpers_db_cache():
+    """Clear the module-level _db_cache in concerns/helpers to prevent cross-test leaks."""
+    yield
+    try:
+        from lib.concerns.helpers import _db_cache
+
+        _db_cache.clear()
+    except ImportError:
+        pass
+
+
 @pytest.fixture
 def tmp_project(tmp_path):
     """Create a temporary project with .claudes/ directory structure.
@@ -59,7 +71,7 @@ def tmp_project(tmp_path):
     for name in DEFAULT_SESSIONS:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (name,))
     # Mark schema as fully up-to-date so auto-migrate won't re-apply
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
     conn.commit()
     conn.close()
 
