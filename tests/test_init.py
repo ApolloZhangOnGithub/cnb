@@ -5,12 +5,21 @@ database initialization from schema, session .md file creation,
 CLAUDE.md generation, idempotency, and session name validation.
 """
 
+import importlib.util
 import re
 import sqlite3
+import types
+from pathlib import Path
 
 import pytest
 
 from tests.conftest import DEFAULT_SESSIONS, SCHEMA_PATH
+
+_init_script = Path(__file__).parent.parent / "bin" / "init"
+_spec = importlib.util.spec_from_loader("init_mod", loader=None, origin=str(_init_script))
+init_mod = types.ModuleType("init_mod")
+init_mod.__file__ = str(_init_script)
+exec(compile(_init_script.read_text(), _init_script, "exec"), init_mod.__dict__)
 
 
 class TestDirectoryStructure:
@@ -331,3 +340,53 @@ class TestSessionNameValidation:
         """Names over 64 chars are rejected."""
         with pytest.raises(ValueError):
             _validate("a" * 65)
+
+
+class TestPreCommitHook:
+    """Pre-commit hook installation for secret scanning."""
+
+    def test_installs_hook_in_git_repo(self, tmp_path):
+        git_dir = tmp_path / ".git" / "hooks"
+        git_dir.mkdir(parents=True)
+        secret_scan = tmp_path / "bin" / "secret-scan"
+        secret_scan.parent.mkdir(parents=True)
+        secret_scan.write_text("#!/bin/sh\nexit 0\n")
+        init_mod._install_pre_commit_hook(tmp_path, tmp_path)
+        hook = tmp_path / ".git" / "hooks" / "pre-commit"
+        assert hook.exists()
+        assert "secret-scan" in hook.read_text()
+        assert hook.stat().st_mode & 0o111
+
+    def test_skips_when_no_git(self, tmp_path):
+        init_mod._install_pre_commit_hook(tmp_path, tmp_path)
+        assert not (tmp_path / ".git" / "hooks" / "pre-commit").exists()
+
+    def test_skips_when_no_secret_scan(self, tmp_path):
+        (tmp_path / ".git" / "hooks").mkdir(parents=True)
+        init_mod._install_pre_commit_hook(tmp_path, tmp_path)
+        assert not (tmp_path / ".git" / "hooks" / "pre-commit").exists()
+
+    def test_appends_to_existing_hook(self, tmp_path):
+        git_dir = tmp_path / ".git" / "hooks"
+        git_dir.mkdir(parents=True)
+        hook = git_dir / "pre-commit"
+        hook.write_text("#!/bin/sh\necho existing\n")
+        hook.chmod(0o755)
+        secret_scan = tmp_path / "bin" / "secret-scan"
+        secret_scan.parent.mkdir(parents=True)
+        secret_scan.write_text("#!/bin/sh\nexit 0\n")
+        init_mod._install_pre_commit_hook(tmp_path, tmp_path)
+        content = hook.read_text()
+        assert "echo existing" in content
+        assert "secret-scan" in content
+
+    def test_idempotent(self, tmp_path):
+        git_dir = tmp_path / ".git" / "hooks"
+        git_dir.mkdir(parents=True)
+        secret_scan = tmp_path / "bin" / "secret-scan"
+        secret_scan.parent.mkdir(parents=True)
+        secret_scan.write_text("#!/bin/sh\nexit 0\n")
+        init_mod._install_pre_commit_hook(tmp_path, tmp_path)
+        init_mod._install_pre_commit_hook(tmp_path, tmp_path)
+        content = (git_dir / "pre-commit").read_text()
+        assert content.count("secret-scan") == 1
