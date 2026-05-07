@@ -97,6 +97,11 @@ class TestBugAssign:
         with pytest.raises(SystemExit):
             _bug_assign(db, "alice", ["BUG-001"])
 
+    def test_nonexistent_assignee_exits(self, db):
+        _bug_report(db, "alice", ["P1", "crash"])
+        with pytest.raises(SystemExit):
+            _bug_assign(db, "alice", ["BUG-001", "ghost"])
+
 
 class TestBugFix:
     def test_fixes_bug(self, db, capsys):

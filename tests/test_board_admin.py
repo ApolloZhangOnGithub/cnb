@@ -122,6 +122,10 @@ class TestKudos:
         with pytest.raises(SystemExit):
             cmd_kudos(admin_db, "alice", ["bob"])
 
+    def test_kudos_nonexistent_target_exits(self, admin_db):
+        with pytest.raises(SystemExit):
+            cmd_kudos(admin_db, "alice", ["ghost", "great", "work"])
+
 
 class TestKudosList:
     def test_empty_kudos_list(self, admin_db, capsys):

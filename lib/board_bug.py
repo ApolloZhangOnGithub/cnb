@@ -59,6 +59,10 @@ def _bug_assign(db: BoardDB, identity: str, args: list[str]) -> None:
         bugid = f"BUG-{bugid}"
     assignee = args[1].lower()
 
+    if not db.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (assignee,)):
+        print(f"ERROR: 会话 '{assignee}' 不存在")
+        raise SystemExit(1)
+
     exists = db.scalar("SELECT COUNT(*) FROM bugs WHERE id=?", (bugid,))
     if not exists:
         print(f"ERROR: {bugid} not found")

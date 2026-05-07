@@ -93,6 +93,10 @@ def cmd_kudos(db: BoardDB, identity: str, args: list[str]) -> None:
     target = clean_args[0].lower()
     reason = " ".join(clean_args[1:])
 
+    if not db.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (target,)):
+        print(f"ERROR: 会话 '{target}' 不存在")
+        raise SystemExit(1)
+
     if name == target:
         print("ERROR: cannot kudos yourself")
         raise SystemExit(1)
