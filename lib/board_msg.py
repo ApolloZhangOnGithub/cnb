@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from lib.board_db import BoardDB, ts
-from lib.common import parse_flags
+from lib.common import parse_flags, validate_identity
 
 
 def _ack_marker_path(db: BoardDB, name: str) -> Path:
@@ -80,6 +80,7 @@ def _nudge_session(db: BoardDB, recipient: str) -> None:
 
 def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     assert db.env is not None
+    validate_identity(db, identity)
     name = identity.lower()
     flags, send_args = parse_flags(args, value_flags={"attach": ["--attach", "-a"]})
     attach_file = flags.get("attach")
@@ -148,6 +149,7 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     if not args:
         print("Usage: ./board --as <name> status <description>")
@@ -163,8 +165,8 @@ def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_inbox(db: BoardDB, identity: str) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
-    db.ensure_session(name)
     count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
     if not count:
         print("收件箱为空")
@@ -203,6 +205,7 @@ def _task_print_queue_short(db: BoardDB, target: str) -> None:
 
 
 def cmd_ack(db: BoardDB, identity: str) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     marker = _ack_marker_path(db, name)
     max_id = None

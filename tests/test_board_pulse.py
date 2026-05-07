@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
+import pytest
+
 from lib.board_pulse import cmd_pulse
 from lib.board_view import _heartbeat_status
 
@@ -31,11 +33,10 @@ class TestPulse:
         out = capsys.readouterr().out
         assert "1 条未读" in out
 
-    def test_pulse_auto_registers_unknown_session(self, db):
-        cmd_pulse(db, "newcomer")
-        row = db.query_one("SELECT last_heartbeat FROM sessions WHERE name='newcomer'")
-        assert row is not None
-        assert row["last_heartbeat"] is not None
+    def test_pulse_rejects_unknown_session(self, db):
+        with pytest.raises(SystemExit):
+            cmd_pulse(db, "newcomer")
+        assert db.scalar("SELECT COUNT(*) FROM sessions WHERE name='newcomer'") == 0
 
     def test_pulse_updates_heartbeat_on_repeat(self, db):
         cmd_pulse(db, "alice")

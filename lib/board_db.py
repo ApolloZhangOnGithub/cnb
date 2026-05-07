@@ -112,8 +112,16 @@ class BoardDB(BaseDB):
     def ensure_session(self, name: str, *, c: sqlite3.Connection | None = None) -> None:
         n = name.lower()
         existing = self.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (n,), c=c)
-        if existing == 0:
-            self.execute("INSERT INTO sessions(name) VALUES (?)", (n,), c=c)
+        if existing:
+            return
+        if self.env is not None:
+            from lib.common import PRIVILEGED_ROLES
+
+            allowed = {s.lower() for s in self.env.sessions} | {"all"} | PRIVILEGED_ROLES
+            if n not in allowed:
+                print(f"ERROR: '{n}' is not a registered session")
+                raise SystemExit(1)
+        self.execute("INSERT INTO sessions(name) VALUES (?)", (n,), c=c)
 
     def deliver_to_inbox(
         self, sender: str, recipient: str, msg_id: int, *, c: sqlite3.Connection | None = None

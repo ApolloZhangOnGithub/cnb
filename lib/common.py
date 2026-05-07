@@ -116,6 +116,16 @@ def is_privileged(name: str) -> bool:
     return name in PRIVILEGED_ROLES
 
 
+def validate_identity(db: "BaseDB", identity: str) -> None:
+    name = identity.lower()
+    if name in PRIVILEGED_ROLES:
+        return
+    exists = db.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (name,))
+    if not exists:
+        print(f"ERROR: '{name}' is not a registered session")
+        raise SystemExit(1)
+
+
 def is_terminal_task_status(status: str) -> bool:
     """Return True if *status* is a terminal state (task will not transition further).
 

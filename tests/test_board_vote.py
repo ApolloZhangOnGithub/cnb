@@ -149,7 +149,7 @@ class TestAutoDecision:
     def _setup_proposal_with_sessions(self, db, capsys, n_sessions=5):
         """Create a proposal and add extra sessions to meet thresholds."""
         for i in range(n_sessions):
-            db.ensure_session(f"voter{i}")
+            db.execute("INSERT OR IGNORE INTO sessions(name) VALUES (?)", (f"voter{i}",))
         cmd_propose(db, "alice", ["test proposal"])
         capsys.readouterr()
 
@@ -269,7 +269,7 @@ class TestMissingDispatcherMeta:
     def test_single_vote_does_not_auto_pass_without_meta(self, db, capsys):
         db.execute("DELETE FROM meta WHERE key='dispatcher_session'")
         for i in range(4):
-            db.ensure_session(f"extra{i}")
+            db.execute("INSERT OR IGNORE INTO sessions(name) VALUES (?)", (f"extra{i}",))
         cmd_propose(db, "alice", ["test"])
         capsys.readouterr()
 

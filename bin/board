@@ -14,7 +14,7 @@ CLAUDES_HOME = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
 from lib.board_db import BoardDB
-from lib.common import ClaudesEnv, parse_flags
+from lib.common import ClaudesEnv, parse_flags, validate_identity
 
 # ---------------------------------------------------------------------------
 # Command registry
@@ -348,7 +348,7 @@ def main() -> None:
         raise SystemExit(1)
 
     if identity:
-        db.ensure_session(identity.lower())
+        validate_identity(db, identity)
 
     _dispatch(cmd, db, identity, rest)
 
