@@ -114,7 +114,7 @@ class TmuxBackend(SessionBackend):
                 "send-keys",
                 "-t",
                 sess,
-                f"source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; cd '{project_root}'",
+                f"source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; cd '{project_root}' && export CNB_PROJECT='{project_root}'",
                 "Enter",
             ]
         )
@@ -193,7 +193,7 @@ class ScreenBackend(SessionBackend):
         sess = self._sess(prefix, name)
         subprocess.run(["screen", "-dmS", sess])
         time.sleep(1)
-        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", f"cd '{project_root}'"])
+        subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", f"cd '{project_root}' && export CNB_PROJECT='{project_root}'"])
         subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"])
         time.sleep(0.5)
         subprocess.run(["screen", "-S", sess, "-p", "0", "-X", "stuff", agent_cmd])

@@ -38,7 +38,7 @@ class CoralManager(Concern):
         log("Starting Coral...")
         tmux("kill-session", "-t", self.cfg.coral_sess)
         tmux("new-session", "-d", "-s", self.cfg.coral_sess, "-x", "200", "-y", "50")
-        tmux_send(self.cfg.coral_sess, f"cd '{self.cfg.project_root}'")
+        tmux_send(self.cfg.coral_sess, f"cd '{self.cfg.project_root}' && export CNB_PROJECT='{self.cfg.project_root}'")
         time.sleep(0.5)
         tmux_send(
             self.cfg.coral_sess,

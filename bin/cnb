@@ -10,6 +10,9 @@ else
     B='' D='' G='' C='' Y='' N=''
 fi
 
+# ---- Export project root so all subprocesses can find .claudes/ ----
+export CNB_PROJECT="${CNB_PROJECT:-$(pwd)}"
+
 # ---- Subcommands (exact match, always first) ----
 if [ $# -gt 0 ]; then
     case "$1" in
@@ -88,6 +91,18 @@ print(' '.join(names))
     esac
 fi
 
+# ---- Helper: start dispatcher if not already running ----
+_start_dispatcher() {
+    local pidfile=".claudes/dispatcher.pid"
+    if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+        return
+    fi
+    mkdir -p .claudes/logs
+    "$CLAUDES_HOME/bin/dispatcher" >> .claudes/logs/dispatcher.log 2>&1 &
+    echo $! > "$pidfile"
+    disown
+}
+
 # ---- Compose mode: reuse existing team from config.toml ----
 if [ -f .claudes/config.toml ] && [ -f .claudes/board.db ]; then
     _EXISTING=$(grep '^sessions' .claudes/config.toml | sed 's/sessions = \[//;s/\]//;s/"//g;s/,/ /g;s/  */ /g' | xargs)
@@ -96,7 +111,9 @@ if [ -f .claudes/config.toml ] && [ -f .claudes/board.db ]; then
         WORKERS=$(echo "$_EXISTING" | cut -d' ' -f2-)
         LABEL=$(grep '^prefix' .claudes/config.toml | cut -d'"' -f2)
         _NUM=$(echo "$WORKERS" | wc -w | tr -d ' ')
-        "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 || true
+        "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 &
+        disown
+        _start_dispatcher
     fi
 else
     # ---- Fresh start: parse [number] [theme] in any order ----
@@ -144,40 +161,42 @@ else
 
     printf "${D}初始化 .claudes/ ...${N}\n"
     "$CLAUDES_HOME/bin/init" $ALL_NAMES >/dev/null 2>&1
-    "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 || true
+    "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 &
+    disown
+    _start_dispatcher
 fi
 
 # ---- Slash commands (runtime, gitignored) ----
 CMD_DIR=".claude/commands"
 mkdir -p "$CMD_DIR"
-grep -qx 'commands/cs-*' .claude/.gitignore 2>/dev/null || echo 'commands/cs-*' >> .claude/.gitignore 2>/dev/null || true
+grep -qx 'commands/cnb-*' .claude/.gitignore 2>/dev/null || echo 'commands/cnb-*' >> .claude/.gitignore 2>/dev/null || true
 BOARD="$CLAUDES_HOME/bin/board"
 SWARM="$CLAUDES_HOME/bin/swarm"
 _PREFIX=$(grep '^prefix' .claudes/config.toml 2>/dev/null | cut -d'"' -f2)
-cat > "$CMD_DIR/cs-watch.md"     <<EOF
+cat > "$CMD_DIR/cnb-watch.md"     <<EOF
 看某个同学在干什么。解析 \$ARGUMENTS 拿到名字。
 运行 \`tmux capture-pane -t ${_PREFIX}-<名字> -p -S -30 2>/dev/null | tail -20\`，用简洁的话告诉用户这个同学在做什么、进展到哪了。
 EOF
-cat > "$CMD_DIR/cs-overview.md"  <<EOF
+cat > "$CMD_DIR/cnb-overview.md"  <<EOF
 团队总览。对每个同学运行 \`tmux capture-pane -t ${_PREFIX}-<名字> -p -S -10 2>/dev/null | tail -5\`，汇总成一个简洁的表格告诉用户：谁在干什么、谁卡了、谁闲着。
 同学列表：${WORKERS}
 EOF
-cat > "$CMD_DIR/cs-progress.md"  <<EOF
+cat > "$CMD_DIR/cnb-progress.md"  <<EOF
 运行 \`${BOARD} --as ${ME} inbox\` 和 \`${BOARD} --as ${ME} view\`，汇总最近的进展：谁完成了什么、有什么新消息、当前整体进度如何。用简洁的话告诉用户。
 EOF
-cat > "$CMD_DIR/cs-history.md"   <<EOF
+cat > "$CMD_DIR/cnb-history.md"   <<EOF
 运行 \`${BOARD} --as ${ME} log 50\`，把完整的消息历史展示给我。
 EOF
-cat > "$CMD_DIR/cs-update.md"    <<EOF
-运行 \`pip install --upgrade cnb\`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 cnb 以生效。
+cat > "$CMD_DIR/cnb-update.md"    <<EOF
+运行 \`pip install --upgrade claude-nb\`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 cnb 以生效。
 EOF
-cat > "$CMD_DIR/cs-help.md"      <<EOF
-列出所有 /cs-* 命令：
-- /cs-overview — 团队总览：谁在干什么、谁卡了
-- /cs-watch <名字> — 看某个同学在干什么
-- /cs-progress — 最近进展汇总
-- /cs-history — 查看完整消息历史
-- /cs-update — 更新 cnb 到最新版
+cat > "$CMD_DIR/cnb-help.md"      <<EOF
+列出所有 /cnb-* 命令：
+- /cnb-overview — 团队总览：谁在干什么、谁卡了
+- /cnb-watch <名字> — 看某个同学在干什么
+- /cnb-progress — 最近进展汇总
+- /cnb-history — 查看完整消息历史
+- /cnb-update — 更新 cnb 到最新版
 EOF
 
 # ---- Require interactive terminal ----
@@ -205,7 +224,7 @@ SYSPROMPT="你是 ${ME}。你的终端直接面对用户。
 - 用户说想做什么，你拆任务分给同学，自己也干活。
 - 不要让用户跑命令。你直接用上面的命令操作。
 - 定期 inbox 看同学的回复，汇总进展给用户。
-- 用户可以用 /cs-help 查看所有协作命令。
+- 用户可以用 /cnb-help 查看所有协作命令。
 - 同学之间可以互相 send 消息协作，不用什么都通过你。"
 
 exec claude --name "${ME}" --append-system-prompt "$SYSPROMPT"

@@ -12,13 +12,21 @@ from typing import Any, Generic, TypeVar
 
 
 def find_claudes_dir() -> Path:
-    """Walk up from cwd to find the .claudes/ directory."""
+    """Find .claudes/ directory. Checks CNB_PROJECT env var first, then walks up from cwd."""
+    import os
+
+    env_root = os.environ.get("CNB_PROJECT")
+    if env_root:
+        p = Path(env_root) / ".claudes"
+        if p.is_dir():
+            return p
+
     d = Path.cwd()
     while d != d.parent:
         if (d / ".claudes").is_dir():
             return d / ".claudes"
         d = d.parent
-    raise FileNotFoundError(".claudes/ not found")
+    raise FileNotFoundError(".claudes/ not found (set CNB_PROJECT or run from project dir)")
 
 
 def _parse_toml(path: Path) -> dict:
@@ -26,6 +34,30 @@ def _parse_toml(path: Path) -> dict:
     import tomllib
 
     return tomllib.loads(path.read_text())
+
+
+def _write_config_toml(path: Path, data: dict) -> None:
+    """Serialize *data* back to our config.toml format."""
+    lines: list[str] = []
+    for key, val in data.items():
+        if key == "session":
+            continue
+        if isinstance(val, list):
+            items = ", ".join(f'"{v}"' for v in val)
+            lines.append(f"{key} = [{items}]")
+        else:
+            lines.append(f'{key} = "{val}"')
+    lines.append("")
+    for name, section in data.get("session", {}).items():
+        lines.append(f"[session.{name}]")
+        for k, v in section.items():
+            sv = str(v)
+            if "\n" in sv:
+                lines.append(f'{k} = """{sv}"""')
+            else:
+                lines.append(f'{k} = "{sv}"')
+        lines.append("")
+    path.write_text("\n".join(lines) + "\n")
 
 
 @dataclass

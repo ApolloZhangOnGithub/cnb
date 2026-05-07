@@ -290,25 +290,31 @@ class TestSuspendResume:
 
 
 class TestRoleFiltering:
-    def test_get_role_no_roster(self, mgr):
+    def _write_roles(self, mgr):
+        config = mgr._env.claudes_dir / "config.toml"
+        config.write_text(
+            'claudes_home = "/tmp"\nsessions = ["alice", "bob", "charlie"]\nprefix = "cc-test"\n\n'
+            '[session.alice]\npersona = ""\nrole = "lead"\n\n'
+            '[session.bob]\npersona = ""\nrole = "intern"\n\n'
+            '[session.charlie]\npersona = ""\nrole = "dev"\n'
+        )
+
+    def test_get_role_no_config_section(self, mgr):
         assert mgr.get_role("alice") == "unknown"
 
-    def test_get_role_from_roster(self, mgr):
-        roster = mgr._env.claudes_dir / "ROSTER.md"
-        roster.write_text("| **alice** | lead |\n| **bob** | 实习生 |\n| **charlie** | dev |\n")
+    def test_get_role_from_config(self, mgr):
+        self._write_roles(mgr)
         assert mgr.get_role("alice") == "lead"
         assert mgr.get_role("bob") == "intern"
         assert mgr.get_role("charlie") == "dev"
 
     def test_filter_sessions_by_role(self, mgr):
-        roster = mgr._env.claudes_dir / "ROSTER.md"
-        roster.write_text("| **alice** | lead |\n| **bob** | 实习生 |\n| **charlie** | dev |\n")
+        self._write_roles(mgr)
         devs = mgr.filter_sessions(role="dev")
         assert devs == ["charlie"]
 
     def test_filter_sessions_exclude(self, mgr):
-        roster = mgr._env.claudes_dir / "ROSTER.md"
-        roster.write_text("| **alice** | lead |\n| **bob** | 实习生 |\n| **charlie** | dev |\n")
+        self._write_roles(mgr)
         non_interns = mgr.filter_sessions(exclude="intern")
         assert "bob" not in non_interns
         assert "alice" in non_interns

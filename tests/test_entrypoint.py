@@ -161,7 +161,14 @@ class TestSlashCommands:
         project_dir = fake_project[0]
         cmd_dir = project_dir / ".claude" / "commands"
         assert cmd_dir.is_dir()
-        expected = ["cs-watch.md", "cs-overview.md", "cs-progress.md", "cs-history.md", "cs-update.md", "cs-help.md"]
+        expected = [
+            "cnb-watch.md",
+            "cnb-overview.md",
+            "cnb-progress.md",
+            "cnb-history.md",
+            "cnb-update.md",
+            "cnb-help.md",
+        ]
         for f in expected:
             assert (cmd_dir / f).exists(), f"Missing: {f}"
 
@@ -217,19 +224,23 @@ def board_project(tmp_path):
 
 
 def _board(project_dir, *args):
+    env = {**os.environ, "CNB_PROJECT": str(project_dir)}
     return subprocess.run(
         [str(BOARD), *args],
         cwd=project_dir,
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
 class TestSendValidation:
-    def test_send_to_nonexistent_recipient(self, board_project):
+    def test_send_to_unknown_recipient_auto_registers(self, board_project):
         r = _board(board_project, "--as", "lead", "send", "nobody", "hello")
-        assert r.returncode != 0
-        assert "不存在" in r.stdout
+        assert r.returncode == 0
+        assert "OK" in r.stdout
+        r2 = _board(board_project, "--as", "nobody", "inbox")
+        assert r2.returncode == 0
 
     def test_send_empty_message(self, board_project):
         r = _board(board_project, "--as", "lead", "send", "alpha", "")
@@ -247,10 +258,10 @@ class TestSendValidation:
 
 
 class TestInboxValidation:
-    def test_unregistered_session(self, board_project):
+    def test_unknown_session_auto_registers(self, board_project):
         r = _board(board_project, "--as", "ghost", "inbox")
-        assert r.returncode != 0
-        assert "未注册" in r.stdout
+        assert r.returncode == 0
+        assert "收件箱为空" in r.stdout
 
     def test_registered_session(self, board_project):
         r = _board(board_project, "--as", "alpha", "inbox")

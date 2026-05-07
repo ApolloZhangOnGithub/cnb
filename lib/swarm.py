@@ -1,14 +1,15 @@
 """swarm — launch and manage multi-agent sessions."""
 
 import os
-import re
 import threading
+import time
+import tomllib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from lib.board_db import BoardDB
-from lib.common import ClaudesEnv, is_suspended
+from lib.common import ClaudesEnv, _write_config_toml, is_suspended
 from lib.swarm_backend import SessionBackend, TmuxBackend, detect_backend
 
 
@@ -113,15 +114,17 @@ class SwarmManager:
 
         config_path = self._env.claudes_dir / "config.toml"
         if config_path.exists():
-            text = config_path.read_text()
+            data = tomllib.loads(config_path.read_text())
+            current_sessions = list(data.get("sessions", []))
             changed = False
             for n in names:
-                if f'"{n}"' not in text:
-                    text = text.replace("sessions = [", f'sessions = ["{n}", ', 1)
-                    text += f'\n[session.{n}]\npersona = ""\n'
+                if n not in current_sessions:
+                    current_sessions.append(n)
+                    data.setdefault("session", {})[n] = {"persona": ""}
                     changed = True
             if changed:
-                config_path.write_text(text)
+                data["sessions"] = current_sessions
+                _write_config_toml(config_path, data)
         self._env.sessions.extend([n for n in names if n not in self._env.sessions])
 
     # --- Attendance ---
@@ -174,24 +177,15 @@ class SwarmManager:
     # --- Role filtering ---
 
     def get_role(self, name: str) -> str:
-        roster = self._env.claudes_dir / "ROSTER.md"
-        if not roster.exists():
+        config_path = self._env.claudes_dir / "config.toml"
+        if not config_path.exists():
             return "unknown"
         try:
-            text = roster.read_text()
-        except OSError:
+            data = tomllib.loads(config_path.read_text())
+        except (OSError, tomllib.TOMLDecodeError):
             return "unknown"
-        for line in text.splitlines():
-            if re.search(rf"\| \*\*{re.escape(name)}\*\*", line, re.IGNORECASE):
-                lower = line.lower()
-                if "实习生" in lower:
-                    return "intern"
-                if "调度员" in lower:
-                    return "dispatcher"
-                if "lead" in lower:
-                    return "lead"
-                return "dev"
-        return "unknown"
+        role = data.get("session", {}).get(name, {}).get("role", "")
+        return role if role else "unknown"
 
     def filter_sessions(self, *, role: str = "", exclude: str = "") -> list[str]:
         result: list[str] = []
@@ -367,8 +361,6 @@ class SwarmManager:
                 continue
             if self.cfg.backend.is_running(prefix, name):
                 self.cfg.backend.stop_session(prefix, name, self._save_cmd(name))
-                import time
-
                 time.sleep(1)
             self._start_one(name)
             print(f"  {name}: restarted")
@@ -410,8 +402,6 @@ class SwarmManager:
                 lines = [l for l in sf.read_text().splitlines() if l != name]
                 sf.write_text("\n".join(lines) + "\n" if lines else "")
             self._start_one(name)
-            import time
-
             time.sleep(1)
             if self.cfg.backend.is_running(prefix, name):
                 self.clock_in(name)
@@ -445,7 +435,7 @@ Agent: {self.cfg.agent} (override with SWARM_AGENT=claude|trae|qwen)
   attendance          Show attendance records
   help                This message
 
-Roles (from ROSTER.md): lead, dev, intern, dispatcher
+Roles (from config.toml [session.X] role key): lead, dev, intern, dispatcher
 
 Examples:
   swarm start                           # launch all with Claude (default)
