@@ -1,6 +1,7 @@
 """Tests for bin/secret-scan — pre-commit hook to block sensitive files."""
 
 import importlib.util
+import sys
 import types
 from pathlib import Path
 from unittest.mock import patch
@@ -124,3 +125,86 @@ class TestMain:
         out = capsys.readouterr().out
         assert "BLOCKED" in out
         assert "server.pem" in out
+
+    @patch.object(secret_scan, "_get_staged_files", return_value=["image.png"])
+    def test_skipped_files_pass(self, _mock):
+        assert secret_scan.main() == 0
+
+    @patch.object(secret_scan, "_get_all_tracked_files", return_value=["clean.py"])
+    @patch.object(secret_scan, "_scan_filename", return_value=None)
+    @patch.object(secret_scan, "_scan_content", return_value=[])
+    def test_all_flag_uses_tracked_files(self, _c, _f, _t):
+        old_argv = sys.argv
+        try:
+            sys.argv = ["secret-scan", "--all"]
+            assert secret_scan.main() == 0
+        finally:
+            sys.argv = old_argv
+        _t.assert_called_once()
+
+    @patch.object(secret_scan, "_get_staged_files", return_value=["config.py"])
+    @patch.object(secret_scan, "_scan_filename", return_value=None)
+    @patch.object(secret_scan, "_scan_content", return_value=[(5, "API key")])
+    def test_content_finding_returns_one(self, _c, _f, _s, capsys):
+        result = secret_scan.main()
+        assert result == 1
+        out = capsys.readouterr().out
+        assert "config.py:5" in out
+        assert "API key" in out
+
+
+class TestContentEdgeCases:
+    def test_detects_openai_key(self, tmp_path):
+        f = tmp_path / "openai.py"
+        f.write_text('OPENAI_KEY = "sk-abcdefghij1234567890abcdefghij12"\n')
+        findings = secret_scan._scan_content(str(f))
+        assert any("OpenAI" in label for _, label in findings)
+
+    def test_detects_npm_token(self, tmp_path):
+        f = tmp_path / "npmrc.txt"
+        f.write_text("npm_abcdefghijklmnopqrstuvwxyz1234567890\n")
+        findings = secret_scan._scan_content(str(f))
+        assert any("npm" in label for _, label in findings)
+
+    def test_detects_ec_private_key(self, tmp_path):
+        f = tmp_path / "ec.pem"
+        f.write_text("-----BEGIN EC PRIVATE KEY-----\ndata\n-----END EC PRIVATE KEY-----\n")
+        findings = secret_scan._scan_content(str(f))
+        assert any("private key" in label for _, label in findings)
+
+    def test_detects_openssh_private_key(self, tmp_path):
+        f = tmp_path / "ssh.key"
+        f.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\ndata\n-----END OPENSSH PRIVATE KEY-----\n")
+        findings = secret_scan._scan_content(str(f))
+        assert any("private key" in label for _, label in findings)
+
+    def test_multiple_findings_in_one_file(self, tmp_path):
+        f = tmp_path / "multi.py"
+        f.write_text("AKIA1234567890123456\nxoxb-123456789-abcdefghij\n")
+        findings = secret_scan._scan_content(str(f))
+        assert len(findings) >= 2
+
+    def test_unreadable_file_returns_empty(self, tmp_path):
+        findings = secret_scan._scan_content(str(tmp_path / "nonexistent.py"))
+        assert findings == []
+
+    def test_returns_line_numbers(self, tmp_path):
+        f = tmp_path / "lines.py"
+        f.write_text("clean line\nclean line\nAKIA1234567890123456\n")
+        findings = secret_scan._scan_content(str(f))
+        assert findings[0][0] == 3
+
+
+class TestSkipEdgeCases:
+    def test_skips_crypto_module(self):
+        assert secret_scan._should_skip("lib/crypto.py") is True
+
+    def test_skips_nested_test_files(self):
+        assert secret_scan._should_skip("tests/unit/test_auth.py") is True
+
+    def test_skips_sqlite_wal(self):
+        assert secret_scan._should_skip("board.db-wal") is True
+
+    def test_case_insensitive_extension(self):
+        assert secret_scan._should_skip("photo.JPG") is True
+        assert secret_scan._should_skip("archive.ZIP") is True
