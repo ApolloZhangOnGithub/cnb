@@ -22,8 +22,15 @@
 - **board_tui osascript timeout** — `subprocess.run(["osascript", ...])` had no timeout, risking indefinite hang. Added `timeout=10`.
 - **Flaky test root cause: Signal leak** — `conftest.py` autouse fixture only cleared `_db_cache` but not `inbox_delivered` Signal listeners, causing mock failures under `pytest-randomly`.
 
+### Security
+
+- **Pre-commit hook auto-install** — `bin/init` now installs `bin/secret-scan` as a git pre-commit hook automatically. Appends to existing hooks, idempotent on re-run. Directly addresses BUG-005 root cause.
+
 ### Tests
 
+- tmux_utils (30): tmux_run, tmux_ok, tmux_send, has_session, pane_command, capture_pane, is_agent_running
+- Pre-commit hook (5): install in git repo, skip when no git/no script, append to existing, idempotent
+- Secret-scan test fix: fixed import (ModuleNotFoundError from hyphenated filename), fixed 2 assertions (pattern ordering overlap)
 - Notification config (29): load, is_subscribed, channel_for, subscribers_for, TOML parsing
 - Notification push (27): mention regex, scan mentions/bugs, dedup, delivery, config reload
 - Digest (16): daily digest generation, all sections, edge cases, truncation
