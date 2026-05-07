@@ -5,6 +5,7 @@ state transitions and dedup, to_json serialization, state file management.
 """
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -19,7 +20,16 @@ from lib.resources import (
     BatteryInfo,
     CPUInfo,
     MemoryInfo,
+    _load_prev_state,
+    _run,
+    _save_state,
+    check_battery,
+    check_cpu,
+    check_memory,
+    get_all,
+    main,
     notify_if_changed,
+    print_status,
     to_json,
 )
 
@@ -140,3 +150,297 @@ class TestThresholds:
     def test_battery_critical_threshold(self):
         assert BATTERY_CRITICAL == 15
         assert BATTERY_CRITICAL < BATTERY_LOW
+
+
+# ---------------------------------------------------------------------------
+# _run
+# ---------------------------------------------------------------------------
+
+
+class TestRun:
+    def test_returns_stdout(self):
+        result = _run("echo hello")
+        assert result == "hello"
+
+    def test_returns_default_on_failure(self):
+        result = _run("false", default="fallback")
+        assert result == "fallback"
+
+    def test_returns_default_on_timeout(self):
+        with patch("lib.resources.subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 10)):
+            result = _run("sleep 999", default="timed-out")
+        assert result == "timed-out"
+
+
+# ---------------------------------------------------------------------------
+# check_battery
+# ---------------------------------------------------------------------------
+
+
+class TestCheckBattery:
+    def test_no_pmset_returns_na(self):
+        with patch("shutil.which", return_value=None):
+            info = check_battery()
+        assert info.status == "N/A"
+        assert info.pct == 100
+        assert info.on_battery is False
+
+    def test_ac_power(self):
+        pmset_output = "Now drawing from 'AC Power'\n -InternalBattery-0 (id=123)\t85%; AC attached; not charging"
+        with (
+            patch("shutil.which", return_value="/usr/bin/pmset"),
+            patch("lib.resources._run", return_value=pmset_output),
+        ):
+            info = check_battery()
+        assert info.status == "AC"
+        assert info.pct == 85
+        assert info.on_battery is False
+
+    def test_battery_power_low(self):
+        pmset_output = "Now drawing from 'Battery Power'\n -InternalBattery-0\t25%; discharging; 2:30 remaining"
+        with (
+            patch("shutil.which", return_value="/usr/bin/pmset"),
+            patch("lib.resources._run", return_value=pmset_output),
+        ):
+            info = check_battery()
+        assert info.status == "LOW"
+        assert info.pct == 25
+        assert info.on_battery is True
+        assert "2:30" in info.remaining
+
+    def test_battery_power_critical(self):
+        pmset_output = "Now drawing from 'Battery Power'\n -InternalBattery-0\t8%; discharging; 0:15 remaining"
+        with (
+            patch("shutil.which", return_value="/usr/bin/pmset"),
+            patch("lib.resources._run", return_value=pmset_output),
+        ):
+            info = check_battery()
+        assert info.status == "CRITICAL"
+        assert info.pct == 8
+
+    def test_battery_power_normal(self):
+        pmset_output = "Now drawing from 'Battery Power'\n -InternalBattery-0\t75%; discharging"
+        with (
+            patch("shutil.which", return_value="/usr/bin/pmset"),
+            patch("lib.resources._run", return_value=pmset_output),
+        ):
+            info = check_battery()
+        assert info.status == "ON_BATTERY"
+        assert info.pct == 75
+
+
+# ---------------------------------------------------------------------------
+# check_memory
+# ---------------------------------------------------------------------------
+
+
+class TestCheckMemory:
+    def test_normal_memory(self):
+        vm_stat_output = (
+            "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"
+            "Pages free:                              100000.\n"
+            "Pages speculative:                        50000.\n"
+            "Pages active:                            200000.\n"
+        )
+
+        def fake_run(cmd, default=""):
+            if "vm_stat" in cmd:
+                return vm_stat_output
+            return "17179869184"
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/vm_stat"),
+            patch("lib.resources._run", side_effect=fake_run),
+        ):
+            info = check_memory()
+        assert info.status == "OK"
+        assert info.pressure == "normal"
+
+    def test_critical_pressure(self):
+        with (
+            patch("shutil.which", return_value="/usr/bin/cmd"),
+            patch(
+                "lib.resources._run",
+                side_effect=lambda cmd, **kw: (
+                    "System is in critical memory pressure" if "memory_pressure" in cmd else ""
+                ),
+            ),
+        ):
+            info = check_memory()
+        assert info.status == "CRITICAL"
+        assert info.pressure == "critical"
+
+    def test_warn_pressure(self):
+        with (
+            patch("shutil.which", return_value="/usr/bin/cmd"),
+            patch(
+                "lib.resources._run",
+                side_effect=lambda cmd, **kw: "System is in warn memory pressure" if "memory_pressure" in cmd else "",
+            ),
+        ):
+            info = check_memory()
+        assert info.status == "WARNING"
+        assert info.pressure == "warn"
+
+
+# ---------------------------------------------------------------------------
+# check_cpu
+# ---------------------------------------------------------------------------
+
+
+class TestCheckCpu:
+    def test_normal_cpu(self):
+        top_output = "Processes: 400\nCPU usage: 15.0% user, 5.0% sys, 80.0% idle"
+        with patch("shutil.which", return_value="/usr/bin/top"), patch("lib.resources._run", return_value=top_output):
+            info = check_cpu()
+        assert info.status == "OK"
+        assert info.usage == 20
+
+    def test_saturated_cpu(self):
+        top_output = "Processes: 400\nCPU usage: 85.0% user, 10.0% sys, 5.0% idle"
+        with patch("shutil.which", return_value="/usr/bin/top"), patch("lib.resources._run", return_value=top_output):
+            info = check_cpu()
+        assert info.status == "SATURATED"
+        assert info.usage == 95
+
+    def test_no_top_command(self):
+        with patch("shutil.which", return_value=None):
+            info = check_cpu()
+        assert info.status == "OK"
+        assert info.usage == 0
+
+
+# ---------------------------------------------------------------------------
+# _load_prev_state / _save_state
+# ---------------------------------------------------------------------------
+
+
+class TestStateFile:
+    def test_load_default_when_missing(self, state_file):
+        assert not state_file.exists()
+        result = _load_prev_state()
+        assert result == "AC|normal|OK"
+
+    def test_load_existing_state(self, state_file):
+        state_file.write_text("LOW|OK|OK\n")
+        result = _load_prev_state()
+        assert result == "LOW|OK|OK"
+
+    def test_save_and_load(self, state_file):
+        _save_state("CRITICAL|WARNING|SATURATED")
+        assert _load_prev_state() == "CRITICAL|WARNING|SATURATED"
+
+
+# ---------------------------------------------------------------------------
+# get_all
+# ---------------------------------------------------------------------------
+
+
+class TestGetAll:
+    def test_returns_tuple_of_three(self):
+        with (
+            patch("lib.resources.check_battery", return_value=BatteryInfo("AC", 100, False, "—")),
+            patch("lib.resources.check_memory", return_value=MemoryInfo("OK", 50, "normal")),
+            patch("lib.resources.check_cpu", return_value=CPUInfo("OK", 10)),
+        ):
+            result = get_all()
+        assert len(result) == 3
+        assert isinstance(result[0], BatteryInfo)
+        assert isinstance(result[1], MemoryInfo)
+        assert isinstance(result[2], CPUInfo)
+
+
+# ---------------------------------------------------------------------------
+# print_status
+# ---------------------------------------------------------------------------
+
+
+class TestPrintStatus:
+    def _mock_get_all(self):
+        return (
+            BatteryInfo("AC", 85, False, "—"),
+            MemoryInfo("OK", 50, "normal"),
+            CPUInfo("OK", 20),
+        )
+
+    def test_status_mode(self, capsys):
+        with patch("lib.resources.get_all", return_value=self._mock_get_all()):
+            print_status("status")
+        out = capsys.readouterr().out
+        assert "Resource Monitor" in out
+        assert "Battery:" in out
+        assert "nominal" in out
+
+    def test_json_mode(self, capsys):
+        with patch("lib.resources.get_all", return_value=self._mock_get_all()):
+            print_status("json")
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["battery"]["status"] == "AC"
+
+    def test_shows_battery_warning(self, capsys):
+        info = (
+            BatteryInfo("LOW", 20, True, "1:00 remaining"),
+            MemoryInfo("OK", 50, "normal"),
+            CPUInfo("OK", 10),
+        )
+        with patch("lib.resources.get_all", return_value=info):
+            print_status("status")
+        out = capsys.readouterr().out
+        assert "low" in out.lower()
+
+    def test_shows_critical_battery(self, capsys):
+        info = (
+            BatteryInfo("CRITICAL", 5, True, "0:10 remaining"),
+            MemoryInfo("OK", 50, "normal"),
+            CPUInfo("OK", 10),
+        )
+        with patch("lib.resources.get_all", return_value=info):
+            print_status("status")
+        out = capsys.readouterr().out
+        assert "CRITICAL" in out
+
+    def test_shows_memory_warning(self, capsys):
+        info = (
+            BatteryInfo("AC", 100, False, "—"),
+            MemoryInfo("WARNING", 85, "warn"),
+            CPUInfo("OK", 10),
+        )
+        with patch("lib.resources.get_all", return_value=info):
+            print_status("status")
+        out = capsys.readouterr().out
+        assert "Memory pressure" in out
+
+    def test_shows_cpu_saturated(self, capsys):
+        info = (
+            BatteryInfo("AC", 100, False, "—"),
+            MemoryInfo("OK", 50, "normal"),
+            CPUInfo("SATURATED", 95),
+        )
+        with patch("lib.resources.get_all", return_value=info):
+            print_status("status")
+        out = capsys.readouterr().out
+        assert "CPU saturated" in out
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+
+class TestMain:
+    def test_default_status_mode(self, capsys):
+        with (
+            patch.object(sys, "argv", ["resources.py"]),
+            patch("lib.resources.print_status") as mock_ps,
+        ):
+            main()
+        mock_ps.assert_called_once_with("status")
+
+    def test_json_mode(self, capsys):
+        with (
+            patch.object(sys, "argv", ["resources.py", "--json"]),
+            patch("lib.resources.print_status") as mock_ps,
+        ):
+            main()
+        mock_ps.assert_called_once_with("json")
