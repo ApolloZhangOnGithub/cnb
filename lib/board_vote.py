@@ -1,10 +1,11 @@
 """board_vote — governance: vote / tally / propose."""
 
 from lib.board_db import BoardDB, ts
-from lib.common import PRIVILEGED_ROLES, parse_flags
+from lib.common import PRIVILEGED_ROLES, parse_flags, validate_identity
 
 
 def cmd_vote(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     if name in PRIVILEGED_ROLES:
         print("ERROR: privileged roles have no voting rights (charter §二)")
@@ -92,6 +93,7 @@ def cmd_vote(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_propose(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     if len(args) < 1:
         print("Usage: ./board --as <name> propose <内容> [--type S]")

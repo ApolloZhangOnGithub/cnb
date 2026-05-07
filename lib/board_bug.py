@@ -4,10 +4,11 @@ import time
 from datetime import datetime
 
 from lib.board_db import BoardDB, ts
-from lib.common import is_terminal_bug_status
+from lib.common import is_terminal_bug_status, validate_identity
 
 
 def cmd_bug(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     subcmd = args[0] if args else "list"
     rest = args[1:] if len(args) > 1 else []
     dispatch = {

@@ -3,9 +3,11 @@
 import hashlib
 
 from lib.board_db import BoardDB, ts
+from lib.common import validate_identity
 
 
 def cmd_post(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     if len(args) < 2:
         print("Usage: ./board --as <name> post <标题> <内容>")
@@ -37,6 +39,7 @@ def cmd_post(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_reply(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     if len(args) < 2:
         print("Usage: ./board --as <name> reply <帖子ID> <内容>")

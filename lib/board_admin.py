@@ -4,10 +4,12 @@ import subprocess
 import time
 
 from lib.board_db import BoardDB, ts
+from lib.common import validate_identity
 
 
 def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
     assert db.env is not None
+    validate_identity(db, identity)
     name = identity.lower()
     if not args:
         print("Usage: ./board --as <name> suspend <session>")
@@ -59,6 +61,7 @@ def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
 
 def cmd_resume(db: BoardDB, identity: str, args: list[str]) -> None:
     assert db.env is not None
+    validate_identity(db, identity)
     name = identity.lower()
     if not args:
         print("Usage: ./board --as <name> resume <session>")
@@ -86,6 +89,7 @@ def cmd_resume(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_kudos(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     if len(args) < 2:
         print("Usage: ./board --as <name> kudos <target> <reason> [--evidence <commit/link>]")

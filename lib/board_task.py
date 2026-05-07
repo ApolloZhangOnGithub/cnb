@@ -1,7 +1,7 @@
 """board_task — task queue: add / done / list / next."""
 
 from lib.board_db import BoardDB, ts
-from lib.common import is_privileged, is_terminal_task_status, parse_flags
+from lib.common import is_privileged, is_terminal_task_status, parse_flags, validate_identity
 
 
 def _promote_next(db: BoardDB, target: str) -> None:
@@ -48,6 +48,7 @@ def _print_queue(db: BoardDB, target: str, include_done: bool = False) -> None:
 
 
 def cmd_task(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     subcmd = args[0] if args else "list"
     rest = args[1:] if len(args) > 1 else []
 

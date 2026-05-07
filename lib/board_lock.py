@@ -4,6 +4,7 @@ import subprocess
 import time
 
 from lib.board_db import BoardDB, ts
+from lib.common import validate_identity
 
 GIT_LOCK_TTL = 60
 
@@ -14,6 +15,7 @@ def _cleanup_stale(db: BoardDB) -> None:
 
 
 def cmd_git_lock(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     reason = " ".join(args) if args else "git operation"
 
@@ -50,6 +52,7 @@ def cmd_git_lock(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_git_unlock(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     assert db.env is not None
     name = identity.lower()
     force = "--force" in args
