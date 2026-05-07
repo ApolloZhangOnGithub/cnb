@@ -25,6 +25,8 @@ These are complementary. You could use Claude Squad for session management and c
 
 cnb's specific focus is what happens **between** sessions — when a tongxue restarts with no memory, how does it pick up where the last one left off? Daily reports, shift directories, bug tracker with SLA, Co-Authored-By enforcement, and shutdown protocols are all designed for this.
 
+**Where cnb is headed:** Today, a module owner still needs a human to say "go check your issues" or "push your code." The goal is for owners to be fully autonomous within their domain — auto-detecting relevant issues, verifying their own work against CI, creating PRs, and responding to failures. Not "unattended agents doing random tasks" but "responsible owners who don't need to be told to do their job." See [ROADMAP.md](ROADMAP.md).
+
 <!-- section:glossary -->
 ## Glossary
 

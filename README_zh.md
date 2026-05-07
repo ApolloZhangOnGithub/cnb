@@ -38,6 +38,8 @@ Session 管理器回答的问题："怎么同时跑 5 个 agent？"
 
 cnb 聚焦的是 session **之间**发生的事——当一个同学重启后失去所有记忆，怎么接上上一个的工作？日报、轮次目录、带 SLA 的 bug tracker、Co-Authored-By 强制、关停协议，都是为此设计的。
 
+**cnb 的方向：** 今天，一个模块负责人还需要人来说"去看看你的 issue"、"把代码推上去"。目标是让负责人在自己的领域内完全自治——自动发现相关 issue、用 CI 验证自己的工作、创建 PR、响应故障。不是"无人值守的 agent 做随机任务"，而是"负责任的 owner 不需要人催着做份内的事"。详见 [ROADMAP.md](ROADMAP.md)。
+
 <!-- section:glossary -->
 ## 术语表
 
