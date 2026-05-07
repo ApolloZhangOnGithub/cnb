@@ -8,6 +8,7 @@ Concerns (each with independent check intervals):
   IdleKiller         — kill sessions idle >30min
   IdleNudger         — nudge idle sessions to continue working
   InboxNudger        — detect unread inboxes, nudge sessions
+  QueuedMsgFlusher   — auto-Enter when nudged commands queue up
   CoralPoker         — periodic heartbeat to dispatcher session
   HealthChecker      — periodic full status report + team idle detection
   BugSLAChecker      — check overdue bugs
@@ -41,6 +42,7 @@ from lib.concerns import (
     IdleKiller,
     IdleNudger,
     InboxNudger,
+    QueuedMessageFlusher,
     ResourceMonitor,
     SessionKeepAlive,
     TimeAnnouncer,
@@ -105,6 +107,7 @@ def main() -> None:
         IdleKiller(cfg, idle, coral),
         inbox,
         IdleNudger(cfg, idle),
+        QueuedMessageFlusher(cfg),
         poker,
         BugSLAChecker(cfg, poker),
         HealthChecker(cfg, poker, coral),
@@ -131,8 +134,11 @@ def main() -> None:
         while running:
             now = int(time.time())
 
-            if not tmux_ok("has-session", "-t", cfg.coral_sess):
-                log("Coral session gone. Shutting down.")
+            any_alive = any(
+                tmux_ok("has-session", "-t", f"{cfg.prefix}-{s}") for s in cfg.dev_sessions
+            )
+            if not any_alive:
+                log("No dev sessions alive. Shutting down.")
                 break
 
             for c in concerns:
