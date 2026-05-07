@@ -59,10 +59,10 @@ if [ $# -gt 0 ]; then
             "$CLAUDES_HOME/bin/init" --team "$_TEAM_FILE"
             _NAMES=$(python3 -c "
 import tomllib, sys
-data = tomllib.loads(open('$_TEAM_FILE').read())
+data = tomllib.loads(open(sys.argv[1]).read())
 names = list(data.get('session', {}).keys())
 print(' '.join(names))
-")
+" "$_TEAM_FILE")
             if [ -n "$_NAMES" ]; then
                 "$CLAUDES_HOME/bin/swarm" start $_NAMES >/dev/null 2>&1 || true
                 echo "OK 团队已启动: $_NAMES"
@@ -75,10 +75,10 @@ print(' '.join(names))
             printf "  多个 Claude Code 实例协作的团队开发工具\n\n"
             printf "  cnb                   开始（默认2位同学，AI大佬主题）\n"
             printf "  cnb 5                 5位同学\n"
-            printf "  cnb pokemon           宝可梦主题\n"
-            printf "  cnb 5 pokemon         5位同学 + 宝可梦主题\n"
+            printf "  cnb threebody         三体主题\n"
+            printf "  cnb 5 titan           5位同学 + 科技先锋主题\n"
             printf "  cnb compose [file]    从配置文件启动团队\n\n"
-            printf "  主题: ai animal food lang music myth pokemon space\n\n"
+            printf "  主题: ai animal food lang music myth space threebody titan\n\n"
             printf "  cnb ui                交互式团队面板\n"
             printf "  cnb ps                列出 agent 状态\n"
             printf "  cnb logs <name>       查看某个 agent 的消息历史\n"
@@ -93,12 +93,12 @@ fi
 
 # ---- Helper: start dispatcher if not already running ----
 _start_dispatcher() {
-    local pidfile=".claudes/dispatcher.pid"
+    local pidfile="$CNB_PROJECT/.claudes/dispatcher.pid"
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         return
     fi
-    mkdir -p .claudes/logs
-    "$CLAUDES_HOME/bin/dispatcher" >> .claudes/logs/dispatcher.log 2>&1 &
+    mkdir -p "$CNB_PROJECT/.claudes/logs"
+    "$CLAUDES_HOME/bin/dispatcher" >> "$CNB_PROJECT/.claudes/logs/dispatcher.log" 2>&1 &
     echo $! > "$pidfile"
     disown
 }
@@ -120,7 +120,7 @@ else
     _NUM=2
     _THEME_IDX=6  # default: AI 大佬
 
-    _THEME_MAP="ai:6 animal:0 food:2 lang:1 music:5 myth:4 pokemon:7 space:3"
+    _THEME_MAP="ai:6 animal:0 food:2 lang:1 music:5 myth:4 space:3 threebody:7 titan:8"
 
     for arg in "$@"; do
         if [[ "$arg" =~ ^[0-9]+$ ]]; then
@@ -132,7 +132,7 @@ else
             else
                 printf "${Y}未知参数: ${arg}${N}\n" >&2
                 echo "用法: cnb [数量] [主题]" >&2
-                echo "主题: ai animal food lang music myth pokemon space" >&2
+                echo "主题: ai animal food lang music myth space threebody titan" >&2
                 exit 1
             fi
         fi
@@ -146,10 +146,11 @@ else
         "nebula pulsar quasar comet aurora meteor nova orbit cosmos galaxy venus mars saturn pluto titan europa io ceres vega sirius"
         "dragon phoenix griffin hydra kraken sphinx unicorn pixie goblin imp djinn yeti nymph chimera basilisk manticore cerberus minotaur golem banshee"
         "jazz blues funk reggae disco punk grunge techno dubstep waltz tango salsa bossa swing opera gospel motown bebop ska hiphop"
-        "altman dario ilya lecun karpathy hassabis sutskever hinton bengio fei-fei ng zuck bezos nadella pichai musk huang lisa-su amodei jack-clark"
-        "pikachu charmander snorlax eevee jigglypuff mewtwo gengar squirtle bulbasaur vulpix psyduck togepi mudkip lucario gardevoir rayquaza mimikyu ditto zorua umbreon"
+        "altman dario ilya lecun karpathy hassabis vaswani hinton bengio fei-fei ng zuck bezos nadella pichai musk huang lisa-su radford jack-clark"
+        "luo-ji shi-qiang ye-wenjie cheng-xin zhang-beihai yun-tianming wang-miao ding-yi yang-dong zhuang-yan guan-yifan shen-yufei wei-cheng hines tyler wade evans rey-diaz tomoko singer"
+        "wang-xingxing ren-zhengfei zhang-yiming lei-jun li-yanhong li-kaifu liang-wenfeng yang-zhilin kaiming-he ma-huateng wang-jian lu-qi goodfellow schmidhuber dean chollet silver carmack torvalds wolfram"
     )
-    _LABELS=("小动物" "编程语言" "美食" "太空" "神话生物" "音乐风格" "AI 大佬" "宝可梦")
+    _LABELS=("小动物" "编程语言" "美食" "太空" "神话生物" "音乐风格" "AI 大佬" "三体" "科技先锋")
 
     [ "$_NUM" -lt 1 ] && _NUM=1
     [ "$_NUM" -gt 20 ] && _NUM=20
@@ -223,8 +224,13 @@ SYSPROMPT="你是 ${ME}。你的终端直接面对用户。
 工作方式：
 - 用户说想做什么，你拆任务分给同学，自己也干活。
 - 不要让用户跑命令。你直接用上面的命令操作。
-- 定期 inbox 看同学的回复，汇总进展给用户。
+- 同学之间可以互相 send 消息协作，不用什么都通过你。
 - 用户可以用 /cnb-help 查看所有协作命令。
-- 同学之间可以互相 send 消息协作，不用什么都通过你。"
+
+重要 — 监控团队进展：
+派任务给同学后，你必须主动跟进，不要派完就忘。使用 /loop 命令定期检查收件箱：
+  /loop 2m ${BOARD} --as ${ME} inbox
+这会每 2 分钟自动跑一次 inbox。收到回复后汇总进展给用户。
+如果用户没有其他事让你做，你应该在派完任务后立刻启动 /loop 监控。"
 
 exec claude --name "${ME}" --append-system-prompt "$SYSPROMPT"
