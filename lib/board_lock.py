@@ -82,11 +82,15 @@ def cmd_git_unlock(db: BoardDB, identity: str, args: list[str]) -> None:
 
     index_lock = db.env.project_root / ".git" / "index.lock"
     if index_lock.exists():
-        r = subprocess.run(
-            ["pgrep", "-f", f"git.*{db.env.project_root}"],
-            capture_output=True,
-        )
-        if r.returncode != 0:
+        try:
+            r = subprocess.run(
+                ["pgrep", "-f", f"git.*{db.env.project_root}"],
+                capture_output=True,
+                timeout=5,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            r = None
+        if r is None or r.returncode != 0:
             index_lock.unlink()
             print("  Also removed stale .git/index.lock")
         else:

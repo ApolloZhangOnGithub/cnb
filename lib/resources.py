@@ -176,8 +176,11 @@ def _state_file() -> Path:
 
 def _load_prev_state() -> str:
     sf = _state_file()
-    if sf.exists():
-        return sf.read_text().strip()
+    try:
+        if sf.exists():
+            return sf.read_text().strip()
+    except OSError:
+        pass
     return "AC|normal|OK"
 
 

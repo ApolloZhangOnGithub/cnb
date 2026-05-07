@@ -6,6 +6,10 @@ from lib.board_db import BoardDB, ts
 from lib.common import validate_identity
 
 
+def _escape_like(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def cmd_post(db: BoardDB, identity: str, args: list[str]) -> None:
     validate_identity(db, identity)
     name = identity.lower()
@@ -49,22 +53,25 @@ def cmd_reply(db: BoardDB, identity: str, args: list[str]) -> None:
 
     full_tid = db.scalar(
         "SELECT id FROM threads WHERE id LIKE ? ESCAPE '\\' LIMIT 1",
-        (tid + "%",),
+        (_escape_like(tid) + "%",),
     )
     if not full_tid:
         print(f"ERROR: 帖子 {tid} 不存在")
         raise SystemExit(1)
 
-    db.execute(
-        "INSERT INTO thread_replies(thread_id, author, body) VALUES (?, ?, ?)",
-        (full_tid, name, body),
-    )
     title = db.scalar("SELECT title FROM threads WHERE id=?", (full_tid,))
     now = ts()
-    db.execute(
-        "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-        (now, name, f"[BBS] 回帖「{title}」({full_tid})"),
-    )
+    with db.conn() as c:
+        db.execute(
+            "INSERT INTO thread_replies(thread_id, author, body) VALUES (?, ?, ?)",
+            (full_tid, name, body),
+            c=c,
+        )
+        db.execute(
+            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
+            (now, name, f"[BBS] 回帖「{title}」({full_tid})"),
+            c=c,
+        )
     print(f"OK 回帖成功 (帖子: {full_tid})")
 
 
@@ -75,7 +82,7 @@ def cmd_thread(db: BoardDB, args: list[str]) -> None:
     tid = args[0]
     full_tid = db.scalar(
         "SELECT id FROM threads WHERE id LIKE ? ESCAPE '\\' LIMIT 1",
-        (tid + "%",),
+        (_escape_like(tid) + "%",),
     )
     if not full_tid:
         print(f"ERROR: 帖子 {tid} 不存在")
