@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from lib.digest import generate_daily_digest
+from lib.digest import generate_daily_digest, generate_weekly_report
 from lib.notification_config import load as load_config
 
 from .base import Concern
@@ -101,9 +101,19 @@ class DigestScheduler(Concern):
         if not subscribers:
             return
 
-        board_send(self.cfg, "all", f"[Weekly Report] {date_str} — 本周报告待实现")
+        try:
+            board = db(self.cfg)
+            report_text = generate_weekly_report(board)
+        except Exception as e:
+            warn(f"weekly report generation failed: {e}")
+            return
+
         for member in subscribers:
             channel = config.channel_for(member)
+            if channel == "board-inbox":
+                board_send(self.cfg, member, report_text)
+            else:
+                log(f"[digest] {channel} delivery not implemented for {member}")
             self._record_digest("weekly-report", member, date_str, channel)
 
         log(f"Weekly report sent to {len(subscribers)} subscribers")

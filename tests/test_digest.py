@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from lib.board_db import BoardDB
-from lib.digest import generate_daily_digest
+from lib.digest import generate_daily_digest, generate_weekly_report
 
 
 def _setup_db(tmp_path: Path) -> BoardDB:
@@ -250,3 +250,102 @@ class TestDigestEdgeCases:
         result = generate_daily_digest(board)
         assert "新 Bug" not in result
         assert "修复: 1 个" in result
+
+
+class TestGenerateWeeklyReport:
+    def test_empty_activity(self, tmp_path):
+        board = _setup_db(tmp_path)
+        result = generate_weekly_report(board)
+        assert "[Weekly Report]" in result
+        assert "无活动" in result
+
+    def test_includes_message_count(self, tmp_path):
+        board = _setup_db(tmp_path)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with board.conn() as c:
+            for i in range(10):
+                c.execute(
+                    "INSERT INTO messages(ts,sender,recipient,body) VALUES (?,?,?,?)",
+                    (now, "alice", "all", f"msg{i}"),
+                )
+        result = generate_weekly_report(board)
+        assert "消息总计: 10 条" in result
+        assert "alice(10)" in result
+
+    def test_includes_bug_summary(self, tmp_path):
+        board = _setup_db(tmp_path)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with board.conn() as c:
+            c.execute(
+                "INSERT INTO bugs(id,severity,sla,reporter,description,reported_at) VALUES (?,?,?,?,?,?)",
+                ("BUG-W1", "P1", "1h", "alice", "new bug", now),
+            )
+            c.execute(
+                "INSERT INTO bugs(id,severity,sla,reporter,assignee,description,reported_at,status,fixed_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                ("BUG-W2", "P2", "4h", "bob", "alice", "fixed", now, "FIXED", now),
+            )
+        result = generate_weekly_report(board)
+        assert "Bug: 新增 1, 修复 1" in result
+
+    def test_includes_task_summary(self, tmp_path):
+        board = _setup_db(tmp_path)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with board.conn() as c:
+            c.execute(
+                "INSERT INTO tasks(session,description,status,created_at,done_at) VALUES (?,?,?,?,?)",
+                ("alice", "done task", "done", now, now),
+            )
+            c.execute(
+                "INSERT INTO tasks(session,description,status,created_at) VALUES (?,?,?,?)",
+                ("bob", "pending task", "pending", now),
+            )
+        result = generate_weekly_report(board)
+        assert "任务: 完成 1, 待办 1" in result
+
+    def test_includes_top_completers(self, tmp_path):
+        board = _setup_db(tmp_path)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with board.conn() as c:
+            for i in range(3):
+                c.execute(
+                    "INSERT INTO tasks(session,description,status,created_at,done_at) VALUES (?,?,?,?,?)",
+                    ("alice", f"task{i}", "done", now, now),
+                )
+            c.execute(
+                "INSERT INTO tasks(session,description,status,created_at,done_at) VALUES (?,?,?,?,?)",
+                ("bob", "task", "done", now, now),
+            )
+        result = generate_weekly_report(board)
+        assert "完成排行:" in result
+        assert "alice(3)" in result
+        assert "bob(1)" in result
+
+    def test_includes_kudos_summary(self, tmp_path):
+        board = _setup_db(tmp_path)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with board.conn() as c:
+            c.execute("INSERT INTO kudos(sender,target,reason,ts) VALUES (?,?,?,?)", ("alice", "bob", "great", now))
+            c.execute("INSERT INTO kudos(sender,target,reason,ts) VALUES (?,?,?,?)", ("bob", "alice", "nice", now))
+        result = generate_weekly_report(board)
+        assert "Kudos: 2 个" in result
+
+    def test_custom_since(self, tmp_path):
+        board = _setup_db(tmp_path)
+        old = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d %H:%M:%S")
+        recent = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+        with board.conn() as c:
+            c.execute("INSERT INTO messages(ts,sender,recipient,body) VALUES (?,?,?,?)", (old, "alice", "all", "old"))
+            c.execute("INSERT INTO messages(ts,sender,recipient,body) VALUES (?,?,?,?)", (recent, "bob", "all", "new"))
+        result_7d = generate_weekly_report(board)
+        assert "消息总计: 1 条" in result_7d
+        result_all = generate_weekly_report(board, since=datetime.now() - timedelta(days=30))
+        assert "消息总计: 2 条" in result_all
+
+    def test_header_format(self, tmp_path):
+        board = _setup_db(tmp_path)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with board.conn() as c:
+            c.execute("INSERT INTO messages(ts,sender,recipient,body) VALUES (?,?,?,?)", (now, "alice", "all", "msg"))
+        result = generate_weekly_report(board)
+        assert result.startswith("[Weekly Report]")
+        assert "周报" in result
