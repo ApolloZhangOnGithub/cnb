@@ -10,6 +10,22 @@ else
     B='' D='' G='' C='' Y='' N=''
 fi
 
+# ---- Version update check (non-blocking, shown only at interactive startup) ----
+_CACHE="$HOME/.cnb/latest-version"
+_check_update() {
+    mkdir -p "$HOME/.cnb"
+    if [ ! -f "$_CACHE" ] || [ "$(find "$_CACHE" -mmin +60 2>/dev/null)" ]; then
+        (npm view claude-nb version 2>/dev/null > "$_CACHE.tmp" && mv "$_CACHE.tmp" "$_CACHE" || rm -f "$_CACHE.tmp") &
+    fi
+    if [ -f "$_CACHE" ]; then
+        _LATEST=$(cat "$_CACHE" 2>/dev/null | tr -d '[:space:]')
+        _LOCAL=$(echo "$VERSION" | sed 's/-dev$//')
+        if [ -n "$_LATEST" ] && [ "$_LOCAL" != "$_LATEST" ]; then
+            printf "${Y}⬆ cnb v${_LATEST} 已发布，当前 v${VERSION}。运行 pip install --upgrade claude-nb 更新。${N}\n"
+        fi
+    fi
+}
+
 # ---- Export project root so all subprocesses can find .claudes/ ----
 export CNB_PROJECT="${CNB_PROJECT:-$(pwd)}"
 
@@ -23,6 +39,7 @@ if [ $# -gt 0 ]; then
         dispatcher) shift; exec "$CLAUDES_HOME/bin/dispatcher" "$@" ;;
         watchdog)   shift; exec "$CLAUDES_HOME/bin/dispatcher-watchdog" "$@" ;;
         doctor)     shift; exec "$CLAUDES_HOME/bin/doctor" "$@" ;;
+        shutdown)   shift; exec "$CLAUDES_HOME/bin/shutdown" "$@" ;;
         logs)
             shift
             if [ $# -eq 0 ]; then
@@ -273,6 +290,7 @@ fi
 
 # ---- Banner + launch ----
 clear
+_check_update
 printf "${B}${G}◆ cnb${N} ${D}v${VERSION}${N}\n"
 printf "${D}  「${LABEL}」你是 ${ME}，同学: ${WORKERS}${N}\n\n"
 

@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""shutdown — orchestrate the cnb shutdown flow.
+
+Usage:
+  shutdown                     Full shutdown (broadcast, wait, collect, save, stop)
+  shutdown --no-stop           Collect reports but don't stop sessions
+  shutdown --skip-broadcast    Skip broadcast and ack wait
+  shutdown --timeout 60        Ack wait timeout in seconds (default: 120)
+  shutdown --dry-run           Preview without sending or saving
+"""
+
+import sys
+from pathlib import Path
+
+CLAUDES_HOME = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(CLAUDES_HOME))
+
+from lib.common import ClaudesEnv
+from lib.shutdown import run_shutdown
+
+
+def main() -> None:
+    args = sys.argv[1:]
+
+    if "-h" in args or "--help" in args:
+        print(__doc__.strip())
+        raise SystemExit(0)
+
+    timeout = 120
+    skip_broadcast = False
+    skip_stop = False
+    dry_run = False
+
+    i = 0
+    while i < len(args):
+        if args[i] == "--timeout" and i + 1 < len(args):
+            try:
+                timeout = int(args[i + 1])
+            except ValueError:
+                print("ERROR: --timeout 需要整数")
+                raise SystemExit(1)
+            i += 2
+        elif args[i] == "--skip-broadcast":
+            skip_broadcast = True
+            i += 1
+        elif args[i] == "--no-stop":
+            skip_stop = True
+            i += 1
+        elif args[i] == "--dry-run":
+            dry_run = True
+            i += 1
+        else:
+            print(f"ERROR: 未知参数 '{args[i]}'")
+            print(__doc__.strip())
+            raise SystemExit(1)
+
+    env = ClaudesEnv.load()
+    run_shutdown(
+        env,
+        timeout=timeout,
+        skip_broadcast=skip_broadcast or dry_run,
+        skip_stop=skip_stop or dry_run,
+        dry_run=dry_run,
+    )
+
+
+if __name__ == "__main__":
+    main()
