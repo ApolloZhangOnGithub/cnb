@@ -13,15 +13,21 @@
 
 - **Dispatcher pid lock cleanup** — Pidfile removed on graceful shutdown, preventing stale locks.
 - **TimeAnnouncer restart safety** — Initializes `last_hour` to current hour on startup, preventing duplicate announcements.
+- **TimeAnnouncer dedup** — DB-level dedup check prevents duplicate clock messages under concurrent dispatchers.
 - **AI theme duplicate names** — `sutskever` and `amodei` were duplicates of `ilya` and `dario` (same people, different name forms). Replaced with `vaswani` (Ashish Vaswani, Transformer inventor) and `radford` (Alec Radford, GPT author).
 - **SessionBackend missing abstract method** — `inject_initial_prompt` was implemented in TmuxBackend/ScreenBackend but not declared in the ABC, so custom backends would silently lack it. Added to `SessionBackend`.
 - **board_bbs thread view crash** — `query_one` could return `None` and be unpacked directly, crashing with `TypeError`. Added guard.
 - **board_mailbox binascii import** — `base64.binascii.Error` works at runtime but is not recognized by type checkers. Changed to explicit `import binascii`.
 - **board_task type safety** — `task_id` variable was reused across `str | None` and `int` assignments, masking potential `TypeError`. Refactored to separate `raw_id`/`task_id`.
+- **FileWatcher fd leak** — `_loop()` now wraps kqueue setup and event loop in try/finally, ensuring all file descriptors and kqueue are closed on any exception. `_refresh()` closes fd if `kq.control()` fails after `os.open()`.
+- **KqueueWatcher fd leak** — Same `_refresh()` fix applied to `lib/monitor.py` KqueueWatcher.
+- **board_msg/board_admin missing timeouts** — `_nudge_session` and `cmd_suspend` subprocess calls now have `timeout=5` and catch `TimeoutExpired`/`OSError`.
+- **board_vote eligible count** — `eligible` voter count query fixed to exclude dispatcher session correctly.
+- **npm package.json drift** — Version was 0.4.2-dev (should be 0.5.1-dev), license was MIT (should be OpenAll-1.0). Fixed and added `bin/sync-version` script + CI check to prevent recurrence.
 
 ### Tests
 
-- **783 tests total** (up from 314 — more than doubled)
+- **908 tests total** (up from 314 — nearly tripled)
 - NudgeCoordinator (16): cooldown, backoff, priority, offline sessions, structure
 - Dispatcher (6): pid lock, TimeAnnouncer init
 - Concern helpers (35): tmux ops, session detection, board_send, process inspection
@@ -40,6 +46,16 @@
 - Board messaging ops (22): send/inbox/ack/status/log with attachments
 - Health concerns (15), coral (12), idle concerns (22), adaptive throttle (9)
 - Entrypoint (25): worker clamping, theme selection, banner, system prompt, slash commands
+- Concern base (18): should_tick, maybe_tick, interval, subclassing
+- Monitor (17): PollWatcher, create_watcher, handle_change
+- Inject (18): detect_mode, send_tmux/screen, inject
+- Health (15): get_sessions, is_claude_running, session_status
+- Swarm backend (38): TmuxBackend, ScreenBackend, detect_backend
+- Panel (7): status_icon pattern matching
+- Board bug (32): report, assign, fix, list, overdue
+- Board vote (14): vote, propose, tally, auto-decision
+- Sync-version (13): conversions, check, sync, main modes
+- Board TUI (17), CLI (4), theme profiles (12)
 
 ## 0.4.1 (2026-05-08 03:25)
 
