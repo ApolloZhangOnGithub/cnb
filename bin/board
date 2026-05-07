@@ -86,10 +86,34 @@ COMMANDS: list[Command] = [
         hidden=True,
     ),
     Command(
-        "files", "lib.board_view", "cmd_files", "list shared files", "files", needs_identity=False, takes_rest=False, hidden=True
+        "files",
+        "lib.board_view",
+        "cmd_files",
+        "list shared files",
+        "files",
+        needs_identity=False,
+        takes_rest=False,
+        hidden=True,
     ),
-    Command("get", "lib.board_view", "cmd_get", "view shared file content", "get <hash|name>", needs_identity=False, hidden=True),
-    Command("roster", "lib.board_view", "cmd_roster", "team roster", "roster", needs_identity=False, takes_rest=False, hidden=True),
+    Command(
+        "get",
+        "lib.board_view",
+        "cmd_get",
+        "view shared file content",
+        "get <hash|name>",
+        needs_identity=False,
+        hidden=True,
+    ),
+    Command(
+        "roster",
+        "lib.board_view",
+        "cmd_roster",
+        "team roster",
+        "roster",
+        needs_identity=False,
+        takes_rest=False,
+        hidden=True,
+    ),
     Command(
         "history",
         "lib.board_view",
@@ -122,7 +146,15 @@ COMMANDS: list[Command] = [
     # ── BBS ──
     Command("post", "lib.board_bbs", "cmd_post", "BBS: create new thread", "post <标题> <内容>", hidden=True),
     Command("reply", "lib.board_bbs", "cmd_reply", "BBS: reply to thread", "reply <帖子ID> <内容>", hidden=True),
-    Command("thread", "lib.board_bbs", "cmd_thread", "BBS: view thread", "thread <帖子ID>", needs_identity=False, hidden=True),
+    Command(
+        "thread",
+        "lib.board_bbs",
+        "cmd_thread",
+        "BBS: view thread",
+        "thread <帖子ID>",
+        needs_identity=False,
+        hidden=True,
+    ),
     Command(
         "threads",
         "lib.board_bbs",
@@ -138,15 +170,31 @@ COMMANDS: list[Command] = [
     # ── task ──
     Command("task", "lib.board_task", "cmd_task", "task queue management", "task {add|done|list|next}", hidden=True),
     # ── heartbeat ──
-    Command("pulse", "lib.board_pulse", "cmd_pulse", "heartbeat + unread count", "pulse", takes_rest=False, hidden=True),
+    Command(
+        "pulse", "lib.board_pulse", "cmd_pulse", "heartbeat + unread count", "pulse", takes_rest=False, hidden=True
+    ),
     # ── voting ──
     Command("propose", "lib.board_vote", "cmd_propose", "create a proposal", "propose <内容> [--type S]", hidden=True),
-    Command("vote", "lib.board_vote", "cmd_vote", "vote on a proposal", "vote <N> <SUPPORT|OBJECT> <reason>", hidden=True),
+    Command(
+        "vote", "lib.board_vote", "cmd_vote", "vote on a proposal", "vote <N> <SUPPORT|OBJECT> <reason>", hidden=True
+    ),
     Command("tally", "lib.board_vote", "cmd_tally", "recount votes", "tally <N>", needs_identity=False, hidden=True),
     # ── mailbox (encrypted) ──
-    Command("keygen", "lib.board_mailbox", "cmd_keygen", "generate encryption keypair", "keygen", takes_rest=False, hidden=True),
-    Command("seal", "lib.board_mailbox", "cmd_seal", "send encrypted message", "seal <recipient> <message>", hidden=True),
-    Command("unseal", "lib.board_mailbox", "cmd_unseal", "read encrypted inbox", "unseal", takes_rest=False, hidden=True),
+    Command(
+        "keygen",
+        "lib.board_mailbox",
+        "cmd_keygen",
+        "generate encryption keypair",
+        "keygen",
+        takes_rest=False,
+        hidden=True,
+    ),
+    Command(
+        "seal", "lib.board_mailbox", "cmd_seal", "send encrypted message", "seal <recipient> <message>", hidden=True
+    ),
+    Command(
+        "unseal", "lib.board_mailbox", "cmd_unseal", "read encrypted inbox", "unseal", takes_rest=False, hidden=True
+    ),
     Command(
         "mailbox-log",
         "lib.board_mailbox",

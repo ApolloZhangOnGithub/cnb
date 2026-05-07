@@ -70,6 +70,9 @@ def cmd_thread(db: BoardDB, args: list[str]) -> None:
         raise SystemExit(1)
 
     row = db.query_one("SELECT title, author, created_at FROM threads WHERE id=?", (full_tid,))
+    if not row:
+        print(f"ERROR: 帖子 {full_tid} 数据异常")
+        raise SystemExit(1)
     title, author, created = row
     print(f"# {title}")
     print(f"> @{author} — {created}\n")

@@ -107,23 +107,23 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
 def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
     name = identity.lower()
 
-    task_id = args[0] if args else None
+    raw_id: str | int | None = args[0] if args else None
 
-    if not task_id:
+    if not raw_id:
         _promote_next(db, name)
-        task_id = db.scalar(
+        raw_id = db.scalar(
             "SELECT id FROM tasks WHERE session=? AND status='active' ORDER BY id ASC LIMIT 1",
             (name,),
         )
-    if not task_id:
+    if not raw_id:
         print(f"No active task for {name}.")
         _print_queue(db, name)
         return
 
     try:
-        task_id = int(task_id)
-    except ValueError:
-        print(f"ERROR: 无效的任务 ID: {task_id}")
+        task_id = int(raw_id)
+    except (ValueError, TypeError):
+        print(f"ERROR: 无效的任务 ID: {raw_id}")
         raise SystemExit(1)
     row = db.query_one("SELECT session, status, description FROM tasks WHERE id=?", (task_id,))
     if not row:

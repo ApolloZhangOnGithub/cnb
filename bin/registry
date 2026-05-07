@@ -32,7 +32,9 @@ def _content_hash(entry: dict) -> str:
 def _load_chain() -> list[dict]:
     entries = []
     for f in sorted(REGISTRY_DIR.glob("*.json")):
-        entries.append(json.loads(f.read_text()))
+        data = json.loads(f.read_text())
+        if "block" in data:
+            entries.append(data)
     entries.sort(key=lambda e: e["block"])
     return entries
 
@@ -279,21 +281,13 @@ def cmd_whois(args: list[str]) -> None:
     print(f"  Commits:      {contrib['commits']}")
 
 
-CHAIN_START = "<!-- chain:start -->"
-CHAIN_END = "<!-- chain:end -->"
-
-
 def _sync_readme() -> None:
-    readme = REGISTRY_DIR.parent / "README.md"
-    if not readme.exists():
-        return
-    text = readme.read_text()
-    if CHAIN_START not in text:
-        return
+    readme = REGISTRY_DIR / "README.md"
 
     chain = _load_chain()
     lines = [
-        CHAIN_START,
+        "# Registry Chain",
+        "",
         "| Block | Name | Role | Hash |",
         "|-------|------|------|------|",
     ]
@@ -303,17 +297,8 @@ def _sync_readme() -> None:
         role = entry.get("role", entry.get("type", ""))
         chain_hash = f"`{entry['chain']}`" if entry.get("chain") else "—"
         lines.append(f"| {block} | {name} | {role} | {chain_hash} |")
-    lines.append(CHAIN_END)
-
-    import re
-
-    text = re.sub(
-        rf"{re.escape(CHAIN_START)}.*?{re.escape(CHAIN_END)}",
-        "\n".join(lines),
-        text,
-        flags=re.DOTALL,
-    )
-    readme.write_text(text)
+    lines.append("")
+    readme.write_text("\n".join(lines))
 
 
 def main() -> None:

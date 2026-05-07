@@ -71,6 +71,7 @@ def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tup
 
 def cmd_overview(db: BoardDB) -> None:
     """Default view when running cnb with no args."""
+    assert db.env is not None
     prefix = db.env.prefix
     now = datetime.now().strftime("%H:%M")
     print(f"=== {db.env.project_root.name}  {now} ===")
@@ -125,6 +126,7 @@ def cmd_overview(db: BoardDB) -> None:
 
 
 def cmd_view(db: BoardDB, identity: str) -> None:
+    assert db.env is not None
     print("=== Board ===\n")
 
     roadmap = db.env.project_root / "ROADMAP.md"
@@ -182,6 +184,7 @@ def cmd_view(db: BoardDB, identity: str) -> None:
 
 
 def cmd_p0(db: BoardDB) -> None:
+    assert db.env is not None
     roadmap = db.env.project_root / "ROADMAP.md"
     if not roadmap.is_file():
         print("ERROR: ROADMAP.md not found")
@@ -209,6 +212,7 @@ def cmd_p0(db: BoardDB) -> None:
 
 
 def cmd_prebuild(db: BoardDB) -> None:
+    assert db.env is not None
     print("=== Pre-build Check ===\n")
     has_fail = False
     pr = db.env.project_root
@@ -235,6 +239,7 @@ def cmd_prebuild(db: BoardDB) -> None:
 
 
 def cmd_dirty(db: BoardDB) -> None:
+    assert db.env is not None
     print("=== Uncommitted Changes ===\n")
     pr = db.env.project_root
     changes = _git(pr, "status", "--porcelain").strip()
@@ -256,6 +261,7 @@ def cmd_dirty(db: BoardDB) -> None:
 
 
 def cmd_dashboard(db: BoardDB) -> None:
+    assert db.env is not None
     prefix = db.env.prefix
     print(f"=== Team Dashboard {datetime.now().strftime('%H:%M')} ===\n")
     for row in db.query("SELECT name, status, last_heartbeat FROM sessions ORDER BY name"):
@@ -277,6 +283,7 @@ def cmd_dashboard(db: BoardDB) -> None:
 
 
 def cmd_files(db: BoardDB) -> None:
+    assert db.env is not None
     print("=== 共享文件 ===\n")
     rows = db.query("SELECT hash, original_name, sender, ts FROM files ORDER BY ts DESC")
     if not rows:
@@ -293,6 +300,7 @@ def cmd_files(db: BoardDB) -> None:
 
 
 def cmd_get(db: BoardDB, args: list[str]) -> None:
+    assert db.env is not None
     if not args:
         print("Usage: ./board get <hash-prefix|filename>")
         raise SystemExit(1)
@@ -366,6 +374,7 @@ def cmd_history(db: BoardDB, args: list[str]) -> None:
 
 
 def cmd_roster(db: BoardDB) -> None:
+    assert db.env is not None
     print("=== 员工状态 ===")
     prefix = db.env.prefix
     rows = db.query(

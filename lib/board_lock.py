@@ -50,6 +50,7 @@ def cmd_git_lock(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_git_unlock(db: BoardDB, identity: str, args: list[str]) -> None:
+    assert db.env is not None
     name = identity.lower()
     force = "--force" in args
 
@@ -90,6 +91,7 @@ def cmd_git_unlock(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_git_lock_status(db: BoardDB) -> None:
+    assert db.env is not None
     _cleanup_stale(db)
 
     row = db.query_one("SELECT session, reason, acquired_at, expires_at FROM git_locks WHERE id=1")

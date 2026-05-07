@@ -1,8 +1,6 @@
 """Tests for lib/monitor.py — file watchers and handle_change."""
 
-import os
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from lib.monitor import PollWatcher, create_watcher, handle_change, has_kqueue

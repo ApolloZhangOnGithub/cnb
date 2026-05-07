@@ -1,7 +1,7 @@
 """Tests for lib/health.py — session health report helpers."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from lib.health import get_sessions, is_claude_running, session_status
 

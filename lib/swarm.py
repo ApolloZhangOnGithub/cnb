@@ -11,6 +11,7 @@ from pathlib import Path
 from lib.board_db import BoardDB
 from lib.common import ClaudesEnv, _write_config_toml, is_suspended
 from lib.swarm_backend import SessionBackend, TmuxBackend, detect_backend
+from lib.theme_profiles import PROFILES
 
 
 @dataclass
@@ -30,6 +31,13 @@ class SwarmConfig:
         return cls(env=env, agent=agent, backend=backend, install_home=install_home)
 
 
+def _lookup_profile(name: str) -> dict[str, str] | None:
+    for theme_profiles in PROFILES.values():
+        if name in theme_profiles:
+            return theme_profiles[name]
+    return None
+
+
 class SwarmManager:
     def __init__(self, cfg: SwarmConfig) -> None:
         self.cfg = cfg
@@ -44,8 +52,13 @@ class SwarmManager:
 
     def build_system_prompt(self, name: str) -> str:
         board = self._board_path()
+        profile = _lookup_profile(name)
+        identity = f"你是 {name}"
+        if profile:
+            identity += f"（{profile['full_name']} — {profile['info']}）"
+        identity += "，cnb 团队的一员。你在后台工作，通过消息板与组长和同学协作。\n"
         return (
-            f"你是 {name}，cnb 团队的一员。你在后台工作，通过消息板与组长和同学协作。\n"
+            f"{identity}"
             f"协作命令：\n"
             f"  {board} --as {name} inbox          # 查看收件箱\n"
             f"  {board} --as {name} ack            # 清空收件箱\n"

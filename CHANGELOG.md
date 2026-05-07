@@ -14,10 +14,14 @@
 - **Dispatcher pid lock cleanup** — Pidfile removed on graceful shutdown, preventing stale locks.
 - **TimeAnnouncer restart safety** — Initializes `last_hour` to current hour on startup, preventing duplicate announcements.
 - **AI theme duplicate names** — `sutskever` and `amodei` were duplicates of `ilya` and `dario` (same people, different name forms). Replaced with `vaswani` (Ashish Vaswani, Transformer inventor) and `radford` (Alec Radford, GPT author).
+- **SessionBackend missing abstract method** — `inject_initial_prompt` was implemented in TmuxBackend/ScreenBackend but not declared in the ABC, so custom backends would silently lack it. Added to `SessionBackend`.
+- **board_bbs thread view crash** — `query_one` could return `None` and be unpacked directly, crashing with `TypeError`. Added guard.
+- **board_mailbox binascii import** — `base64.binascii.Error` works at runtime but is not recognized by type checkers. Changed to explicit `import binascii`.
+- **board_task type safety** — `task_id` variable was reused across `str | None` and `int` assignments, masking potential `TypeError`. Refactored to separate `raw_id`/`task_id`.
 
 ### Tests
 
-- **667 tests total** (up from 314 — nearly doubled)
+- **783 tests total** (up from 314 — more than doubled)
 - NudgeCoordinator (16): cooldown, backoff, priority, offline sessions, structure
 - Dispatcher (6): pid lock, TimeAnnouncer init
 - Concern helpers (35): tmux ops, session detection, board_send, process inspection
@@ -32,6 +36,8 @@
 - Maintenance (17): prune, backup, restore, dry-run
 - Doctor (23): DB integrity, orphan detection, config, Python version, disk space
 - Resources (14): notify_if_changed state transitions/dedup, JSON serialization
+- Notifications (21): InboxNudger, QueuedMessageFlusher, TimeAnnouncer, BugSLAChecker
+- Board messaging ops (22): send/inbox/ack/status/log with attachments
 - Health concerns (15), coral (12), idle concerns (22), adaptive throttle (9)
 - Entrypoint (25): worker clamping, theme selection, banner, system prompt, slash commands
 

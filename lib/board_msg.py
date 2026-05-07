@@ -12,6 +12,7 @@ from lib.common import parse_flags
 
 def _ack_marker_path(db: BoardDB, name: str) -> Path:
     """Path to file recording max message_id seen by last inbox call."""
+    assert db.env is not None
     return db.env.sessions_dir / f".{name}.ack_max_id"
 
 
@@ -53,6 +54,7 @@ def _nudge_session(db: BoardDB, recipient: str) -> None:
     PostToolBatch hook. This avoids commands piling up in Claude Code's
     message queue when injected mid-response.
     """
+    assert db.env is not None
     if recipient == "all":
         sessions = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all'")]
     else:
@@ -77,6 +79,7 @@ def _nudge_session(db: BoardDB, recipient: str) -> None:
 
 
 def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
+    assert db.env is not None
     name = identity.lower()
     flags, send_args = parse_flags(args, value_flags={"attach": ["--attach", "-a"]})
     attach_file = flags.get("attach")
@@ -100,7 +103,7 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     stored_path = ""
     h = ""
     if attach_file:
-        path = Path(attach_file)
+        path = Path(str(attach_file))
         if not path.is_file():
             print(f"ERROR: file not found: {attach_file}")
             raise SystemExit(1)

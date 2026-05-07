@@ -41,6 +41,10 @@ class BoardDB(BaseDB):
             self.env = None
             self.db_path = Path(env_or_path)
 
+    def require_env(self) -> ClaudesEnv:
+        assert self.env is not None, "BoardDB created without ClaudesEnv — this command requires a full environment"
+        return self.env
+
     def _auto_migrate(self) -> None:
         """Apply pending schema migrations on first load (idempotent).
 
@@ -92,18 +96,18 @@ class BoardDB(BaseDB):
 
     def execute(self, sql: str, params: tuple[Any, ...] = (), *, c: sqlite3.Connection | None = None) -> int:
         if c is not None:
-            return c.execute(sql, params).lastrowid
+            return c.execute(sql, params).lastrowid or 0
         with self.conn() as conn:
             cur = conn.execute(sql, params)
-            return cur.lastrowid
+            return cur.lastrowid or 0
 
     def execute_changes(self, sql: str, params: tuple[Any, ...] = (), *, c: sqlite3.Connection | None = None) -> int:
         if c is not None:
             c.execute(sql, params)
-            return c.execute("SELECT changes()").fetchone()[0]
+            return int(c.execute("SELECT changes()").fetchone()[0])
         with self.conn() as conn:
             conn.execute(sql, params)
-            return conn.execute("SELECT changes()").fetchone()[0]
+            return int(conn.execute("SELECT changes()").fetchone()[0])
 
     def ensure_session(self, name: str, *, c: sqlite3.Connection | None = None) -> None:
         n = name.lower()

@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""sync-version — sync VERSION to package.json and pyproject.toml.
+
+Reads the canonical version from VERSION file and updates:
+  - package.json: "version" field
+  - pyproject.toml: version field (PEP 440 format: X.Y.Z.dev0)
+Also syncs the license from pyproject.toml to package.json.
+
+Usage:
+    ./bin/sync-version          # sync + report
+    ./bin/sync-version --check  # check consistency only (exit 1 if drift)
+"""
+
+import json
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def read_version() -> str:
+    return (ROOT / "VERSION").read_text().strip()
+
+
+def read_pyproject() -> tuple[str, str]:
+    """Return (version, license) from pyproject.toml."""
+    text = (ROOT / "pyproject.toml").read_text()
+    ver_m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    lic_m = re.search(r'^license\s*=\s*\{text\s*=\s*"([^"]+)"\}', text, re.MULTILINE)
+    return (ver_m.group(1) if ver_m else ""), (lic_m.group(1) if lic_m else "")
+
+
+def read_package_json() -> tuple[str, str]:
+    """Return (version, license) from package.json."""
+    data = json.loads((ROOT / "package.json").read_text())
+    return data.get("version", ""), data.get("license", "")
+
+
+def canonical_to_pep440(ver: str) -> str:
+    """Convert '0.5.1-dev' to '0.5.1.dev0' (PEP 440)."""
+    return re.sub(r"-dev$", ".dev0", ver)
+
+
+def pep440_to_npm(ver: str) -> str:
+    """Convert '0.5.1.dev0' to '0.5.1-dev'."""
+    return re.sub(r"\.dev\d+$", "-dev", ver)
+
+
+def check() -> list[str]:
+    """Return list of inconsistency descriptions. Empty = all good."""
+    ver = read_version()
+    pep_ver, pep_lic = read_pyproject()
+    npm_ver, npm_lic = read_package_json()
+
+    expected_pep = canonical_to_pep440(ver)
+    errors = []
+
+    if pep_ver != expected_pep:
+        errors.append(f"pyproject.toml version '{pep_ver}' != expected '{expected_pep}' (from VERSION '{ver}')")
+    if npm_ver != ver:
+        errors.append(f"package.json version '{npm_ver}' != VERSION '{ver}'")
+    if pep_lic and npm_lic != pep_lic:
+        errors.append(f"package.json license '{npm_lic}' != pyproject.toml license '{pep_lic}'")
+
+    return errors
+
+
+def sync() -> None:
+    ver = read_version()
+    _, pep_lic = read_pyproject()
+
+    # Sync package.json
+    pkg_path = ROOT / "package.json"
+    pkg = json.loads(pkg_path.read_text())
+    changed = False
+    if pkg.get("version") != ver:
+        print(f"package.json version: '{pkg['version']}' -> '{ver}'")
+        pkg["version"] = ver
+        changed = True
+    if pep_lic and pkg.get("license") != pep_lic:
+        print(f"package.json license: '{pkg.get('license')}' -> '{pep_lic}'")
+        pkg["license"] = pep_lic
+        changed = True
+    if changed:
+        pkg_path.write_text(json.dumps(pkg, indent=2) + "\n")
+    else:
+        print("package.json: already in sync")
+
+    # Sync pyproject.toml version
+    pyp_path = ROOT / "pyproject.toml"
+    text = pyp_path.read_text()
+    expected_pep = canonical_to_pep440(ver)
+    new_text = re.sub(
+        r'^(version\s*=\s*")[^"]+"',
+        rf'\g<1>{expected_pep}"',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if new_text != text:
+        pep_ver, _ = read_pyproject()
+        print(f"pyproject.toml version: '{pep_ver}' -> '{expected_pep}'")
+        pyp_path.write_text(new_text)
+    else:
+        print("pyproject.toml: already in sync")
+
+
+def main() -> None:
+    if "--check" in sys.argv:
+        errors = check()
+        if errors:
+            print("VERSION DRIFT DETECTED:")
+            for e in errors:
+                print(f"  - {e}")
+            raise SystemExit(1)
+        print("OK all versions and licenses consistent")
+        return
+
+    sync()
+    errors = check()
+    if errors:
+        print("\nWARNING: still inconsistent after sync:")
+        for e in errors:
+            print(f"  - {e}")
+        raise SystemExit(1)
+    print("\nOK all synced")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,6 @@
 """board_mailbox — encrypted async messaging between registered agents."""
 
-import base64
+import binascii
 import json
 from pathlib import Path
 
@@ -22,12 +22,14 @@ PUBKEYS_FILE = REGISTRY_DIR / "pubkeys.json"
 
 
 def _keys_dir(db: BoardDB) -> Path:
+    assert db.env is not None
     return db.env.claudes_dir / "keys"
 
 
 def _load_pubkeys() -> dict[str, str]:
     if PUBKEYS_FILE.exists():
-        return json.loads(PUBKEYS_FILE.read_text())
+        data: dict[str, str] = json.loads(PUBKEYS_FILE.read_text())
+        return data
     return {}
 
 
@@ -117,7 +119,7 @@ def cmd_unseal(db: BoardDB, identity: str) -> None:
             plaintext = unseal_b64(encrypted_body, private)
             print(f"  [{msg_ts}] **{sender}**: {plaintext}")
             decrypted_ids.append(msg_id)
-        except (InvalidTag, ValueError, base64.binascii.Error, UnicodeDecodeError) as e:
+        except (InvalidTag, ValueError, binascii.Error, UnicodeDecodeError) as e:
             print(f"  [{msg_ts}] **{sender}**: [解密失败 — {type(e).__name__}: {e}]")
 
     if decrypted_ids:
@@ -149,5 +151,5 @@ def cmd_mailbox_log(db: BoardDB, identity: str) -> None:
         try:
             plaintext = unseal_b64(encrypted_body, private)
             print(f"  [{msg_ts}] {sender}: {plaintext}")
-        except (InvalidTag, ValueError, base64.binascii.Error, UnicodeDecodeError) as e:
+        except (InvalidTag, ValueError, binascii.Error, UnicodeDecodeError) as e:
             print(f"  [{msg_ts}] {sender}: [无法解密 — {type(e).__name__}: {e}]")

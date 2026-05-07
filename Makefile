@@ -8,13 +8,13 @@ SCRIPTS = bin/cnb bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin
 # All python sources (bin + lib)
 PY_SOURCES = bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init lib/ tests/
 
-.PHONY: all install uninstall test lint typecheck format check ci clean version
+.PHONY: all install uninstall test lint typecheck format check ci clean version sync-version check-version
 
 all: check
 
 check: lint test
 
-ci: lint typecheck test
+ci: lint typecheck test check-version
 
 lint:
 	@echo "=== ruff ==="
@@ -55,6 +55,12 @@ clean:
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
 	rm -rf dist/ build/ .mypy_cache/ .ruff_cache/
+
+sync-version:
+	python3 bin/sync-version
+
+check-version:
+	python3 bin/sync-version --check
 
 version:
 	@echo $(VERSION)

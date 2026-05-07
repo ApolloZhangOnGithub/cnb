@@ -57,6 +57,7 @@ def _run(fake_project, args=None):
     )
     script = script.replace("exec claude", str(fake_claude))
     script = script.replace('"$CLAUDES_HOME/bin/swarm"', str(stub_swarm))
+    script = script.replace("_start_dispatcher\n", "# _start_dispatcher (stubbed)\n")
     script = script.replace("clear\n", "")
     script = script.replace("if [ ! -t 0 ] || [ ! -t 1 ]; then", "if false; then")
 
@@ -103,9 +104,9 @@ class TestThemeSelection:
         assert "美食" in r.stdout
 
     def test_number_and_theme(self, fake_project):
-        r = _run(fake_project, ["3", "pokemon"])
+        r = _run(fake_project, ["3", "threebody"])
         assert r.returncode == 0
-        assert "宝可梦" in r.stdout
+        assert "三体" in r.stdout
         assert "3 位同学" in r.stdout
 
     def test_theme_before_number(self, fake_project):
@@ -204,7 +205,7 @@ class TestSubcommands:
             text=True,
         )
         assert r.returncode == 0
-        assert "pokemon" in r.stdout
+        assert "threebody" in r.stdout
 
 
 # ── Board message validation (found by AI self-play) ──

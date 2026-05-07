@@ -7,6 +7,7 @@ from lib.board_db import BoardDB, ts
 
 
 def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
+    assert db.env is not None
     name = identity.lower()
     if not args:
         print("Usage: ./board --as <name> suspend <session>")
@@ -57,6 +58,7 @@ def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_resume(db: BoardDB, identity: str, args: list[str]) -> None:
+    assert db.env is not None
     name = identity.lower()
     if not args:
         print("Usage: ./board --as <name> resume <session>")

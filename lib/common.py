@@ -222,7 +222,7 @@ class DB(BaseDB):
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> int:
         with self.conn() as c:
-            return c.execute(sql, params).lastrowid
+            return c.execute(sql, params).lastrowid or 0
 
 
 # ---------------------------------------------------------------------------

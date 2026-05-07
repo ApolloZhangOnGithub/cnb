@@ -50,7 +50,7 @@ class NudgeCoordinator(Concern):
         if not rec or rec.consecutive_ineffective <= 1:
             return self.COOLDOWN
         backoff_exp = min(rec.consecutive_ineffective - 1, 3)
-        return self.COOLDOWN * min(2**backoff_exp, self.MAX_BACKOFF_MULTIPLIER)
+        return int(self.COOLDOWN * min(2**backoff_exp, self.MAX_BACKOFF_MULTIPLIER))
 
     def _can_nudge(self, name: str, now: int) -> bool:
         rec = self._records.get(name)

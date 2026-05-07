@@ -146,11 +146,13 @@ class InotifyWatcher:
         import selectors
 
         sel = selectors.DefaultSelector()
-        sel.register(self.proc.stdout, selectors.EVENT_READ)
+        stdout = self.proc.stdout
+        assert stdout is not None
+        sel.register(stdout, selectors.EVENT_READ)
         changed = set()
         events = sel.select(timeout=timeout)
         for key, _ in events:
-            line = key.fileobj.readline().strip()
+            line = key.fileobj.readline().strip()  # type: ignore[union-attr]
             if line:
                 changed.add(line)
         sel.close()

@@ -42,6 +42,9 @@ class SessionBackend(ABC):
     @abstractmethod
     def capture_pane(self, prefix: str, name: str) -> str: ...
 
+    @abstractmethod
+    def inject_initial_prompt(self, prefix: str, name: str, prompt: str, log_dir: Path) -> None: ...
+
 
 class TmuxBackend(SessionBackend):
     def _sess(self, prefix: str, name: str) -> str:

@@ -47,6 +47,17 @@ class TimeAnnouncer(Concern):
 
         self.last_hour = dt.now().hour
 
+    def _already_sent(self, hour_ts: str) -> bool:
+        """Check DB for a clock message already sent this hour (prevents duplicate announcements)."""
+        try:
+            count = db(self.cfg).scalar(
+                "SELECT COUNT(*) FROM messages WHERE sender='dispatcher' AND body LIKE '%[Clock]%' AND ts LIKE ?",
+                (f"{hour_ts}%",),
+            )
+            return bool(count)
+        except Exception:
+            return False
+
     def tick(self, now: int) -> None:
         from datetime import datetime as dt
 
@@ -55,6 +66,10 @@ class TimeAnnouncer(Concern):
             return
         self.last_hour = d.hour
         ts = d.strftime("%Y-%m-%d %H:%M")
+
+        if self._already_sent(ts):
+            log(f"Hourly announcement: {d.hour}:00 (already sent, skipping)")
+            return
 
         if d.hour == 9:
             board_send(
