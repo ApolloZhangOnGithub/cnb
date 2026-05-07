@@ -239,6 +239,7 @@ class TestTmuxEnableMouse:
             mock.assert_called_once_with(
                 ["tmux", "set", "-g", "mouse", "on"],
                 capture_output=True,
+                timeout=10,
             )
 
 
