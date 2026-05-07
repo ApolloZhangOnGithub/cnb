@@ -8,6 +8,7 @@
 - **Pending actions queue** — `board pending` subcommand for tracking actions requiring user intervention (auth, approve, confirm). Supports add/list/verify/retry/resolve lifecycle with subprocess-based verification.
 - **Global project registry (Issue #36)** — `lib/global_registry.py` for cross-project discovery and shared credential status tracking. Registry at `~/.cnb/` stores project list and credential status (valid/expired/unknown). Integrated into `bin/init` (auto-register), `bin/cnb projects list|cleanup`, and `bin/doctor` (stale project and expired credential checks).
 - **Token usage tracking (Issue #38)** — `cnb usage` command parses Claude Code JSONL session logs to show per-agent token usage and estimated API costs. Summary view aggregates by agent name; `--detail` shows per-session breakdown. Supports Opus, Sonnet, and Haiku pricing.
+- **Automated shutdown flow (Issue #41)** — `cnb shutdown` orchestrates the full shift-end flow: broadcast shutdown notice, wait for acks (configurable timeout), auto-collect per-agent daily reports (`lib/shift_report.py`), generate `_meta.md` shift summary, save to `dailies/{shift}/`, and stop all sessions. Supports `--dry-run`, `--no-stop`, `--skip-broadcast`, `--timeout` flags. Includes `lib/shift_report.py` for per-agent report generation and shift metadata with git commit counts.
 
 ### Bug Fixes
 
@@ -49,6 +50,8 @@
 - Board mail (33): send/list/read/reply, CC, threading, unread tracking, LIKE prefix regression
 - Token usage (23): JSONL parsing, cost estimation, aggregation, slug generation, CLI output
 - Global registry (28): register/list/remove projects, credential update/check, cleanup stale, corrupt file handling
+- Shift report (23): agent report generation, shift meta, shift numbering, git commits
+- Shutdown flow (20): active sessions, unread count, broadcast, wait acks, collect reports, save shift, full flow orchestration
 
 ## 0.5.1 (2026-05-08)
 
