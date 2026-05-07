@@ -21,6 +21,7 @@ from lib.board_view import (
     cmd_get,
     cmd_history,
     cmd_p0,
+    cmd_prebuild,
     cmd_relations,
 )
 
@@ -187,6 +188,38 @@ class TestCmdRelations:
         cmd_relations(db)
         output = capsys.readouterr().out
         assert "alice → bob: 3" in output
+
+
+class TestCmdPrebuild:
+    def test_clean_tree_passes(self, db, capsys):
+        with patch("lib.board_view._git", return_value="?? untracked.txt\n"):
+            cmd_prebuild(db)
+        out = capsys.readouterr().out
+        assert "Ready to build" in out
+
+    def test_dirty_tree_exits(self, db, capsys):
+        with (
+            patch(
+                "lib.board_view._git",
+                side_effect=lambda pr, *a: (
+                    " M lib/something.py\n M lib/other.py" if "status" in a else "abc1234 Some commit"
+                ),
+            ),
+            pytest.raises(SystemExit),
+        ):
+            cmd_prebuild(db)
+        out = capsys.readouterr().out
+        assert "FAIL" in out
+        assert "NOT ready" in out
+
+    def test_ignores_board_and_untracked(self, db, capsys):
+        with patch(
+            "lib.board_view._git",
+            side_effect=lambda pr, *a: ("?? newfile.py\n M board/something" if "status" in a else "abc1234 commit"),
+        ):
+            cmd_prebuild(db)
+        out = capsys.readouterr().out
+        assert "Ready to build" in out
 
 
 class TestCmdFiles:

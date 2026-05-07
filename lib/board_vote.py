@@ -58,7 +58,9 @@ def cmd_vote(db: BoardDB, identity: str, args: list[str]) -> None:
 
     prop_type = db.scalar("SELECT type FROM proposals WHERE id=?", (prop_id,))
     eligible = (
-        db.scalar("SELECT COUNT(*) FROM sessions WHERE name NOT IN (SELECT value FROM meta WHERE key='dispatcher_session')")
+        db.scalar(
+            "SELECT COUNT(*) FROM sessions WHERE name NOT IN (SELECT value FROM meta WHERE key='dispatcher_session')"
+        )
         or 0
     )
     threshold = (eligible * 2 + 2) // 3 if prop_type == "S" else eligible // 2 + 1
@@ -157,7 +159,9 @@ def cmd_tally(db: BoardDB, args: list[str]) -> None:
     )
     prop_type = db.scalar("SELECT type FROM proposals WHERE id=?", (prop_id,))
     eligible = (
-        db.scalar("SELECT COUNT(*) FROM sessions WHERE name NOT IN (SELECT value FROM meta WHERE key='dispatcher_session')")
+        db.scalar(
+            "SELECT COUNT(*) FROM sessions WHERE name NOT IN (SELECT value FROM meta WHERE key='dispatcher_session')"
+        )
         or 0
     )
     threshold = (eligible * 2 + 2) // 3 if prop_type == "S" else eligible // 2 + 1

@@ -8,6 +8,7 @@ import sqlite3
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -118,6 +119,16 @@ class TestBackup:
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
         conn.close()
         assert "sessions" in tables
+
+    def test_backup_verification_failure_exits(self, db, tmp_path):
+        out_path = tmp_path / "bad-backup.db"
+
+        def write_garbage(src, dst):
+            Path(dst).write_text("not a database")
+
+        with patch("shutil.copy2", side_effect=write_garbage), pytest.raises(SystemExit):
+            cmd_backup(db, [f"--output={out_path}"])
+        assert not out_path.exists()
 
 
 class TestRestore:
