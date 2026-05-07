@@ -143,16 +143,19 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         if count:
             print(f">>> 你有 {count} 条未读消息，运行 ./board inbox 查看 <<<\n")
 
+    prefix = db.env.prefix
     print("Status:")
-    for name, task in db.query("SELECT name, status FROM sessions ORDER BY name"):
+    for name, task, last_hb in db.query("SELECT name, status, last_heartbeat FROM sessions ORDER BY name"):
         cap = name[0].upper() + name[1:] if name else name
+        status, ago = _heartbeat_status(last_hb, prefix, name)
         task = task or "(none)"
         tag = ""
         if p0_locked and "[P0]" not in task:
             tag = " [!! 未标 P0]"
-        if len(task) > 72:
-            task = task[:69] + "..."
-        print(f"  {cap:<8s} {task}{tag}")
+        if len(task) > 60:
+            task = task[:57] + "..."
+        ago_str = f"  {ago}" if ago else ""
+        print(f"  {status:12s} {cap:<10s} {task}{tag}{ago_str}")
     print()
 
     print("Recent messages:")
