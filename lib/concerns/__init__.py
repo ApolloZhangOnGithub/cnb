@@ -11,7 +11,7 @@ from .file_watcher import FileWatcher
 from .health import HealthChecker, ResourceMonitor, SessionKeepAlive
 from .helpers import log, tmux_ok, warn
 from .idle import IdleDetector, IdleKiller, IdleNudger
-from .notifications import BugSLAChecker, InboxNudger, TimeAnnouncer
+from .notifications import BugSLAChecker, InboxNudger, QueuedMessageFlusher, TimeAnnouncer
 
 __all__ = [
     "AdaptiveThrottle",
@@ -26,6 +26,7 @@ __all__ = [
     "IdleKiller",
     "IdleNudger",
     "InboxNudger",
+    "QueuedMessageFlusher",
     "ResourceMonitor",
     "SessionKeepAlive",
     "TimeAnnouncer",

@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS sessions(
     name TEXT PRIMARY KEY,
     status TEXT DEFAULT '',
     persona TEXT DEFAULT '',
-    updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M','now','localtime'))
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M','now','localtime')),
+    last_heartbeat TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS messages(

@@ -147,7 +147,8 @@ def _update_settings(project_dir: Path, claudes_home: Path) -> None:
     already = any(
         isinstance(h, dict)
         and any(
-            "board" in sub.get("command", "") and ("pulse" in sub.get("command", "") or "inbox" in sub.get("command", ""))
+            "board" in sub.get("command", "")
+            and ("pulse" in sub.get("command", "") or "inbox" in sub.get("command", ""))
             for sub in h.get("hooks", [])
             if isinstance(sub, dict)
         )
@@ -251,7 +252,7 @@ def main() -> None:
         (claudes_dir / "sessions" / f"{n}.md").write_text(md_content)
     conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('dispatcher_session', 'dispatcher')")
     # Record schema version so migration runner knows where we are
-    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '2')")
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '4')")
     conn.commit()
     conn.close()
 

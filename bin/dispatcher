@@ -88,7 +88,22 @@ if not Path(cfg.board_sh).exists():
 # ---------------------------------------------------------------------------
 
 
+def _acquire_pidlock() -> Path:
+    pidfile = cfg.claudes_dir / "dispatcher.pid"
+    if pidfile.exists():
+        try:
+            old_pid = int(pidfile.read_text().strip())
+            os.kill(old_pid, 0)
+            print(f"FATAL: dispatcher already running (pid {old_pid})", file=sys.stderr)
+            sys.exit(1)
+        except (ValueError, ProcessLookupError, PermissionError):
+            pass
+    pidfile.write_text(str(os.getpid()))
+    return pidfile
+
+
 def main() -> None:
+    pidfile = _acquire_pidlock()
     base_interval = 2
 
     coral = CoralManager(cfg)
@@ -134,9 +149,7 @@ def main() -> None:
         while running:
             now = int(time.time())
 
-            any_alive = any(
-                tmux_ok("has-session", "-t", f"{cfg.prefix}-{s}") for s in cfg.dev_sessions
-            )
+            any_alive = any(tmux_ok("has-session", "-t", f"{cfg.prefix}-{s}") for s in cfg.dev_sessions)
             if not any_alive:
                 log("No dev sessions alive. Shutting down.")
                 break
@@ -150,6 +163,7 @@ def main() -> None:
     finally:
         log("Shutting down...")
         file_watcher.stop()
+        pidfile.unlink(missing_ok=True)
         log("Stopped.")
 
 
