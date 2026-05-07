@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""notify — notification subscription management and manual trigger CLI.
+
+Usage:
+  notify status                   Show current notification config
+  notify subscriptions [member]   Show subscriptions for member (or all)
+  notify test <member> <type>     Send a test notification
+  notify digest [--send]          Generate daily digest (--send to deliver)
+  notify log [--limit N]          Show recent notification log
+"""
+
+import sys
+from pathlib import Path
+
+CLAUDES_HOME = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(CLAUDES_HOME))
+
+from lib.board_db import BoardDB
+from lib.common import ClaudesEnv
+from lib.digest import generate_daily_digest
+from lib.notification_config import BUILTIN_DEFAULTS, NOTIFICATION_TYPES, load
+
+
+def _env() -> ClaudesEnv:
+    return ClaudesEnv.detect()
+
+
+def _config_path(env: ClaudesEnv) -> Path:
+    return Path(env.claudes_dir) / "notifications.toml"
+
+
+def cmd_status() -> None:
+    env = _env()
+    path = _config_path(env)
+    config = load(path)
+
+    print(f"配置文件: {path}")
+    print(f"  存在: {'是' if path.exists() else '否（使用默认值）'}")
+    print(f"  人类通道: {config.human_channel}")
+    print(f"  队友通道: {config.teammate_channel}")
+    print()
+    print("默认订阅:")
+    for t in NOTIFICATION_TYPES:
+        default = config.defaults.get(t, BUILTIN_DEFAULTS.get(t, False))
+        print(f"  {t}: {'✓' if default else '✗'}")
+    if config.overrides:
+        print()
+        print("个人覆盖:")
+        for member, prefs in config.overrides.items():
+            overrides_str = ", ".join(f"{k}={'✓' if v else '✗'}" for k, v in prefs.items())
+            print(f"  {member}: {overrides_str}")
+    if config.human:
+        print()
+        print(f"人类: {config.human.name} <{config.human.email}>")
+        if config.human.subscriptions:
+            subs = ", ".join(f"{k}={'✓' if v else '✗'}" for k, v in config.human.subscriptions.items())
+            print(f"  订阅: {subs}")
+
+
+def cmd_subscriptions(member: str | None = None) -> None:
+    env = _env()
+    config = load(_config_path(env))
+
+    if member:
+        print(f"{member} 的订阅:")
+        for t in NOTIFICATION_TYPES:
+            subscribed = config.is_subscribed(member, t)
+            channel = config.channel_for(member)
+            print(f"  {t}: {'✓' if subscribed else '✗'} (via {channel})")
+    else:
+        db_path = Path(env.claudes_dir) / "board.db"
+        if not db_path.exists():
+            print("ERROR: board.db 不存在")
+            raise SystemExit(1)
+        board = BoardDB(db_path)
+        sessions = board.query("SELECT name FROM sessions ORDER BY name")
+        if not sessions:
+            print("无会话")
+            return
+        for row in sessions:
+            name = row[0]
+            subs = [t for t in NOTIFICATION_TYPES if config.is_subscribed(name, t)]
+            channel = config.channel_for(name)
+            subs_str = ", ".join(subs) if subs else "无"
+            print(f"  {name}: {subs_str} (via {channel})")
+
+
+def cmd_test(member: str, notif_type: str) -> None:
+    if notif_type not in NOTIFICATION_TYPES:
+        print(f"ERROR: 未知通知类型 '{notif_type}'")
+        print(f"可用类型: {', '.join(NOTIFICATION_TYPES)}")
+        raise SystemExit(1)
+
+    env = _env()
+    config = load(_config_path(env))
+    channel = config.channel_for(member)
+    subscribed = config.is_subscribed(member, notif_type)
+
+    print(f"测试通知: {notif_type} → {member}")
+    print(f"  通道: {channel}")
+    print(f"  已订阅: {'是' if subscribed else '否'}")
+
+    if channel == "board-inbox":
+        import subprocess
+
+        board_sh = str(CLAUDES_HOME / "bin" / "board")
+        msg = f"[测试通知] 类型: {notif_type} — 这是一条测试消息"
+        try:
+            subprocess.run([board_sh, "--as", "dispatcher", "send", member, msg], capture_output=True, timeout=10)
+            print("OK 测试通知已发送")
+        except Exception as e:
+            print(f"ERROR: 发送失败: {e}")
+            raise SystemExit(1)
+    else:
+        print(f"通道 {channel} 尚未实现投递")
+
+
+def cmd_digest(send: bool = False) -> None:
+    env = _env()
+    db_path = Path(env.claudes_dir) / "board.db"
+    if not db_path.exists():
+        print("ERROR: board.db 不存在")
+        raise SystemExit(1)
+
+    board = BoardDB(db_path)
+    digest = generate_daily_digest(board)
+    print(digest)
+
+    if send:
+        config = load(_config_path(env))
+        sessions = board.query("SELECT name FROM sessions ORDER BY name")
+        members = [r[0] for r in (sessions or [])]
+        subscribers = config.subscribers_for("daily-digest", members)
+        if not subscribers:
+            print("\n无订阅者")
+            return
+
+        import subprocess
+
+        board_sh = str(CLAUDES_HOME / "bin" / "board")
+        sent = 0
+        for member in subscribers:
+            channel = config.channel_for(member)
+            if channel == "board-inbox":
+                try:
+                    subprocess.run(
+                        [board_sh, "--as", "dispatcher", "send", member, digest],
+                        capture_output=True,
+                        timeout=10,
+                    )
+                    sent += 1
+                except Exception:
+                    print(f"ERROR: 发送到 {member} 失败")
+            else:
+                print(f"  {member}: 通道 {channel} 尚未实现")
+        print(f"\nOK 已发送到 {sent}/{len(subscribers)} 订阅者")
+
+
+def cmd_log(limit: int = 20) -> None:
+    env = _env()
+    db_path = Path(env.claudes_dir) / "board.db"
+    if not db_path.exists():
+        print("ERROR: board.db 不存在")
+        raise SystemExit(1)
+
+    board = BoardDB(db_path)
+    try:
+        rows = board.query(
+            "SELECT sent_at, notif_type, recipient, channel, ref_id FROM notification_log ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+    except Exception:
+        print("notification_log 表不存在，请运行 migration")
+        raise SystemExit(1)
+
+    if not rows:
+        print("通知记录为空")
+        return
+
+    print(f"最近 {len(rows)} 条通知记录:")
+    for row in rows:
+        sent_at, ntype, recipient, channel, ref_id = row
+        print(f"  {sent_at} | {ntype:16s} | {recipient:12s} | {channel:12s} | {ref_id}")
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    if not args:
+        print(__doc__.strip())
+        raise SystemExit(1)
+
+    cmd = args[0]
+
+    if cmd == "status":
+        cmd_status()
+    elif cmd == "subscriptions":
+        member = args[1] if len(args) > 1 else None
+        cmd_subscriptions(member)
+    elif cmd == "test":
+        if len(args) < 3:
+            print("Usage: notify test <member> <type>")
+            raise SystemExit(1)
+        cmd_test(args[1], args[2])
+    elif cmd == "digest":
+        send = "--send" in args
+        cmd_digest(send=send)
+    elif cmd == "log":
+        limit = 20
+        if "--limit" in args:
+            idx = args.index("--limit")
+            if idx + 1 < len(args):
+                try:
+                    limit = int(args[idx + 1])
+                except ValueError:
+                    pass
+        cmd_log(limit=limit)
+    else:
+        print(f"ERROR: 未知命令 '{cmd}'")
+        print(__doc__.strip())
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
