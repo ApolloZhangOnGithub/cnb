@@ -34,3 +34,4 @@ instances/
 !.claude/commands/
 !.claude/settings.json
 !.claude/settings.local.json
+npm_recovery_codes.txt

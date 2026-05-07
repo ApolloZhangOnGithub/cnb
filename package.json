@@ -1,6 +1,6 @@
 {
   "name": "claude-nb",
-  "version": "0.5.7-dev",
+  "version": "0.5.8-dev",
   "description": "Multi-agent coordination framework for Claude Code sessions",
   "bin": {
     "cnb": "./bin/cnb.js"
