@@ -6,6 +6,7 @@ Usage:
   notify subscriptions [member]   Show subscriptions for member (or all)
   notify test <member> <type>     Send a test notification
   notify digest [--send]          Generate daily digest (--send to deliver)
+  notify weekly [--send]          Generate weekly report (--send to deliver)
   notify log [--limit N]          Show recent notification log
 """
 
@@ -17,7 +18,7 @@ sys.path.insert(0, str(CLAUDES_HOME))
 
 from lib.board_db import BoardDB
 from lib.common import ClaudesEnv
-from lib.digest import generate_daily_digest
+from lib.digest import generate_daily_digest, generate_weekly_report
 from lib.notification_config import BUILTIN_DEFAULTS, NOTIFICATION_TYPES, load
 
 
@@ -156,6 +157,47 @@ def cmd_digest(send: bool = False) -> None:
         print(f"\nOK 已发送到 {sent}/{len(subscribers)} 订阅者")
 
 
+def cmd_weekly(send: bool = False) -> None:
+    env = _env()
+    db_path = Path(env.claudes_dir) / "board.db"
+    if not db_path.exists():
+        print("ERROR: board.db 不存在")
+        raise SystemExit(1)
+
+    board = BoardDB(db_path)
+    report = generate_weekly_report(board)
+    print(report)
+
+    if send:
+        config = load(_config_path(env))
+        sessions = board.query("SELECT name FROM sessions ORDER BY name")
+        members = [r[0] for r in (sessions or [])]
+        subscribers = config.subscribers_for("weekly-report", members)
+        if not subscribers:
+            print("\n无订阅者")
+            return
+
+        import subprocess
+
+        board_sh = str(CLAUDES_HOME / "bin" / "board")
+        sent = 0
+        for member in subscribers:
+            channel = config.channel_for(member)
+            if channel == "board-inbox":
+                try:
+                    subprocess.run(
+                        [board_sh, "--as", "dispatcher", "send", member, report],
+                        capture_output=True,
+                        timeout=10,
+                    )
+                    sent += 1
+                except Exception:
+                    print(f"ERROR: 发送到 {member} 失败")
+            else:
+                print(f"  {member}: 通道 {channel} 尚未实现")
+        print(f"\nOK 已发送到 {sent}/{len(subscribers)} 订阅者")
+
+
 def cmd_log(limit: int = 20) -> None:
     env = _env()
     db_path = Path(env.claudes_dir) / "board.db"
@@ -204,6 +246,9 @@ def main() -> None:
     elif cmd == "digest":
         send = "--send" in args
         cmd_digest(send=send)
+    elif cmd == "weekly":
+        send = "--send" in args
+        cmd_weekly(send=send)
     elif cmd == "log":
         limit = 20
         if "--limit" in args:

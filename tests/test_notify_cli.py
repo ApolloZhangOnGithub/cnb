@@ -254,6 +254,38 @@ class TestCmdLog:
         assert "最近 2 条" in out
 
 
+class TestCmdWeekly:
+    def test_generates_weekly(self, env, capsys):
+        notify_mod.cmd_weekly(send=False)
+        out = capsys.readouterr().out
+        assert "[Weekly Report]" in out
+
+    def test_weekly_with_activity(self, env, capsys):
+        from datetime import datetime
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        conn = sqlite3.connect(str(env.board_db))
+        conn.execute("INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'alice', 'bob', 'hello')", (now,))
+        conn.commit()
+        conn.close()
+        notify_mod.cmd_weekly(send=False)
+        out = capsys.readouterr().out
+        assert "消息总计:" in out
+
+    def test_weekly_send_no_subscribers(self, env, capsys):
+        config_path = env.claudes_dir / "notifications.toml"
+        config_path.write_text("[defaults]\nweekly-report = false\n")
+        notify_mod.cmd_weekly(send=True)
+        out = capsys.readouterr().out
+        assert "无订阅者" in out
+
+    def test_missing_db_exits(self, env):
+        env.board_db.unlink()
+        with pytest.raises(SystemExit) as exc:
+            notify_mod.cmd_weekly()
+        assert exc.value.code == 1
+
+
 class TestMainRouting:
     def test_routes_status(self, env, monkeypatch, capsys):
         monkeypatch.setattr(sys, "argv", ["notify", "status"])
@@ -272,6 +304,12 @@ class TestMainRouting:
         notify_mod.main()
         out = capsys.readouterr().out
         assert "[Daily Digest]" in out
+
+    def test_routes_weekly(self, env, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["notify", "weekly"])
+        notify_mod.main()
+        out = capsys.readouterr().out
+        assert "[Weekly Report]" in out
 
     def test_log_limit_parsing(self, env, monkeypatch, capsys):
         conn = sqlite3.connect(str(env.board_db))
