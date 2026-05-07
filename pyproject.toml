@@ -28,6 +28,7 @@ addopts = "-v --tb=short"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests that may need external services",
+    "security: marks security/isolation vulnerability tests (Issue #31)",
 ]
 
 # ---------- ruff ----------
