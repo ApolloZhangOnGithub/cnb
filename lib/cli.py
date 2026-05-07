@@ -16,19 +16,19 @@ def main() -> None:
     entrypoint = claudes_home / "bin" / "cnb"
 
     if entrypoint.exists():
-        os.execvp("bash", ["bash", str(entrypoint)] + sys.argv[1:])
+        os.execvp("bash", ["bash", str(entrypoint), *sys.argv[1:]])
 
     # Fallback for editable installs: try the npm global bin wrapper
     npm_bin = Path("/opt/homebrew/bin/cnb")
     if npm_bin.exists():
-        os.execvp(str(npm_bin), [str(npm_bin)] + sys.argv[1:])
+        os.execvp(str(npm_bin), [str(npm_bin), *sys.argv[1:]])
 
     # Last resort: search PATH
     import shutil
 
     found = shutil.which("cnb")
     if found and Path(found).resolve() != Path(__file__).resolve():
-        os.execvp(found, [found] + sys.argv[1:])
+        os.execvp(found, [found, *sys.argv[1:]])
 
     print(f"FATAL: entrypoint not found at {entrypoint}", file=sys.stderr)
     raise SystemExit(1)

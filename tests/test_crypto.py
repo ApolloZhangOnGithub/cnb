@@ -52,7 +52,7 @@ class TestKeypair:
 
 class TestSealUnseal:
     def test_roundtrip_bytes(self):
-        _, sender_pub = generate_keypair()
+        _, _sender_pub = generate_keypair()
         recv_priv, recv_pub = generate_keypair()
         plaintext = b"hello encrypted world"
         ct = seal(plaintext, recv_pub)

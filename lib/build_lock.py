@@ -64,7 +64,7 @@ class BuildLock:
 
     def _force_release_stale(self) -> bool:
         """Remove a stale lock (>10 min). Returns True if removed."""
-        holder, locked_at, target = self.read_info()
+        holder, locked_at, _target = self.read_info()
         now = int(time.time())
         if locked_at > 0 and (now - locked_at) > STALE_THRESHOLD:
             print(f"Stale lock from {holder} (>10min), forcing release")
@@ -133,7 +133,7 @@ class BuildLock:
         waited = 0
         while not self._try_mkdir():
             if self.lock_dir.is_dir():
-                holder, locked_at, lock_target = self.read_info()
+                holder, locked_at, _lock_target = self.read_info()
                 now = int(time.time())
 
                 # Stale check

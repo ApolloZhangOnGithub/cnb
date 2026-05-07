@@ -31,7 +31,7 @@ def cmd_pending(db: BoardDB, identity: str, args: list[str]) -> None:
 
 def _pending_add(db: BoardDB, identity: str, args: list[str]) -> None:
     name = identity.lower()
-    flags, positional = parse_flags(
+    flags, _positional = parse_flags(
         args,
         value_flags={
             "type": ["--type", "-t"],
@@ -91,7 +91,7 @@ def _pending_list(db: BoardDB, identity: str, args: list[str]) -> None:
     print("=== 待处理操作 ===" if not show_all else "=== 所有操作 ===")
     print()
     for row in rows:
-        aid, atype, cmd, reason, verify, retry, status, creator, created, resolved = row
+        aid, atype, cmd, reason, verify, retry, status, creator, _created, resolved = row
         status_icon = {"pending": "⏳", "reminded": "🔔", "done": "✓", "retried": "✓✓", "failed": "✗"}.get(status, "?")
         print(f"  #{aid} [{status_icon} {status}] ({atype}) by {creator}")
         print(f"    用户需执行: ! {cmd}")

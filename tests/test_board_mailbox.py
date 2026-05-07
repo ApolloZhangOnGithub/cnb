@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.board_mailbox import cmd_keygen, cmd_mailbox_log, cmd_seal, cmd_unseal
+from lib.board_mailbox import cmd_keygen, cmd_keygen_all, cmd_mailbox_log, cmd_seal, cmd_unseal
 
 
 def _mock_registry(pubkeys_file):
@@ -74,6 +74,47 @@ class TestKeygen:
                 cmd_keygen(mailbox_db, "alice")
 
 
+class TestKeygenAll:
+    def test_generates_keys_for_all_sessions(self, mailbox_db, pubkeys_file, capsys):
+        with _mock_registry(pubkeys_file):
+            cmd_keygen_all(mailbox_db)
+        output = capsys.readouterr().out
+        assert "OK keygen-all" in output
+        keys_dir = mailbox_db.env.claudes_dir / "keys"
+        sessions = [r[0] for r in mailbox_db.query("SELECT name FROM sessions WHERE name != 'all'")]
+        for s in sessions:
+            assert (keys_dir / f"{s}.pem").exists(), f"Missing key for {s}"
+        data = json.loads(pubkeys_file.read_text())
+        for s in sessions:
+            assert s in data
+
+    def test_skips_existing_keys(self, mailbox_db, pubkeys_file, capsys):
+        with _mock_registry(pubkeys_file):
+            cmd_keygen(mailbox_db, "alice")
+            capsys.readouterr()
+            cmd_keygen_all(mailbox_db)
+        output = capsys.readouterr().out
+        assert "跳过" in output
+
+    def test_idempotent(self, mailbox_db, pubkeys_file, capsys):
+        with _mock_registry(pubkeys_file):
+            cmd_keygen_all(mailbox_db)
+            capsys.readouterr()
+            cmd_keygen_all(mailbox_db)
+        output = capsys.readouterr().out
+        assert "0 生成" in output
+
+    def test_generated_keys_work_for_seal_unseal(self, mailbox_db, pubkeys_file, capsys):
+        with _mock_registry(pubkeys_file):
+            cmd_keygen_all(mailbox_db)
+            capsys.readouterr()
+            cmd_seal(mailbox_db, "alice", ["bob", "auto-keygen test"])
+            capsys.readouterr()
+        cmd_unseal(mailbox_db, "bob")
+        output = capsys.readouterr().out
+        assert "auto-keygen test" in output
+
+
 class TestSeal:
     def test_seal_stores_encrypted_message(self, keyed_pair):
         db, pubkeys_file = keyed_pair
@@ -101,7 +142,7 @@ class TestSeal:
             cmd_seal(db, "alice", ["bob", ""])
 
     def test_seal_too_few_args_exits(self, keyed_pair):
-        db, pubkeys_file = keyed_pair
+        db, _pubkeys_file = keyed_pair
         with pytest.raises(SystemExit):
             cmd_seal(db, "alice", ["bob"])
 

@@ -92,28 +92,28 @@ class TestHeartbeatStatus:
         assert "h ago" in ago
 
     def test_no_heartbeat_tmux_fallback_offline(self):
-        with patch("lib.board_view._tmux_has_session", return_value=False):
+        with patch("lib.board_view.has_session", return_value=False):
             status, ago = _heartbeat_status(None, "cc", "alice")
         assert status == "· offline"
         assert ago == ""
 
     def test_no_heartbeat_tmux_running(self):
         with (
-            patch("lib.board_view._tmux_has_session", return_value=True),
-            patch("lib.board_view._tmux_pane_command", return_value="claude"),
+            patch("lib.board_view.has_session", return_value=True),
+            patch("lib.board_view.pane_command", return_value="claude"),
         ):
-            status, ago = _heartbeat_status(None, "cc", "alice")
+            status, _ago = _heartbeat_status(None, "cc", "alice")
         assert status == "● running"
 
     def test_no_heartbeat_tmux_dead_shell(self):
         with (
-            patch("lib.board_view._tmux_has_session", return_value=True),
-            patch("lib.board_view._tmux_pane_command", return_value="zsh"),
+            patch("lib.board_view.has_session", return_value=True),
+            patch("lib.board_view.pane_command", return_value="zsh"),
         ):
-            status, ago = _heartbeat_status(None, "cc", "alice")
+            status, _ago = _heartbeat_status(None, "cc", "alice")
         assert status == "○ dead"
 
     def test_malformed_heartbeat_falls_back(self):
-        with patch("lib.board_view._tmux_has_session", return_value=False):
+        with patch("lib.board_view.has_session", return_value=False):
             status, _ = _heartbeat_status("not-a-date", "cc", "alice")
         assert status == "· offline"

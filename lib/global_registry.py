@@ -110,9 +110,10 @@ def register_project(project_path: str | Path, name: str, *, registry_path: Path
     _write_projects(data, registry_path)
 
 
-def list_projects(*, registry_path: Path | None = None) -> list[dict]:
+def list_projects(*, registry_path: Path | None = None) -> list[dict[str, str]]:
     """Return the list of registered project dicts."""
-    return _read_projects(registry_path).get("projects", [])
+    projects: list[dict[str, str]] = _read_projects(registry_path).get("projects", [])
+    return projects
 
 
 def remove_project(project_path: str | Path, *, registry_path: Path | None = None) -> bool:

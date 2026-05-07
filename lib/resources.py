@@ -151,7 +151,7 @@ def check_cpu() -> CPUInfo:
                 m = re.search(r"([\d.]+)%\s*idle", line)
                 if m:
                     idle = float(m.group(1))
-                    usage = int(round(100 - idle))
+                    usage = round(100 - idle)
                 break
 
     if usage >= CPU_SATURATED:

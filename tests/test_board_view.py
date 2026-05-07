@@ -30,45 +30,45 @@ class TestHeartbeatStatus:
     def _hb(self, seconds_ago: int) -> str:
         return (datetime.now() - timedelta(seconds=seconds_ago)).strftime("%Y-%m-%d %H:%M:%S")
 
-    @patch("lib.board_view._tmux_has_session", return_value=False)
+    @patch("lib.board_view.has_session", return_value=False)
     def test_active(self, _mock):
-        status, ago = _heartbeat_status(self._hb(30), "cc", "alice")
+        status, _ago = _heartbeat_status(self._hb(30), "cc", "alice")
         assert "active" in status
 
-    @patch("lib.board_view._tmux_has_session", return_value=False)
+    @patch("lib.board_view.has_session", return_value=False)
     def test_thinking(self, _mock):
-        status, ago = _heartbeat_status(self._hb(150), "cc", "alice")
+        status, _ago = _heartbeat_status(self._hb(150), "cc", "alice")
         assert "thinking" in status
 
-    @patch("lib.board_view._tmux_has_session", return_value=False)
+    @patch("lib.board_view.has_session", return_value=False)
     def test_stale(self, _mock):
-        status, ago = _heartbeat_status(self._hb(300), "cc", "alice")
+        status, _ago = _heartbeat_status(self._hb(300), "cc", "alice")
         assert "stale" in status
 
-    @patch("lib.board_view._tmux_has_session", return_value=False)
+    @patch("lib.board_view.has_session", return_value=False)
     def test_offline_old_heartbeat(self, _mock):
         status, ago = _heartbeat_status(self._hb(3600), "cc", "alice")
         assert "offline" in status
         assert "h ago" in ago
 
-    @patch("lib.board_view._tmux_has_session", return_value=False)
+    @patch("lib.board_view.has_session", return_value=False)
     def test_no_heartbeat_no_tmux(self, _mock):
         status, _ = _heartbeat_status(None, "cc", "alice")
         assert "offline" in status
 
-    @patch("lib.board_view._tmux_pane_command", return_value="node")
-    @patch("lib.board_view._tmux_has_session", return_value=True)
+    @patch("lib.board_view.pane_command", return_value="node")
+    @patch("lib.board_view.has_session", return_value=True)
     def test_no_heartbeat_tmux_running(self, _has, _cmd):
         status, _ = _heartbeat_status(None, "cc", "alice")
         assert "running" in status
 
-    @patch("lib.board_view._tmux_pane_command", return_value="zsh")
-    @patch("lib.board_view._tmux_has_session", return_value=True)
+    @patch("lib.board_view.pane_command", return_value="zsh")
+    @patch("lib.board_view.has_session", return_value=True)
     def test_no_heartbeat_tmux_dead(self, _has, _cmd):
         status, _ = _heartbeat_status(None, "cc", "alice")
         assert "dead" in status
 
-    @patch("lib.board_view._tmux_has_session", return_value=False)
+    @patch("lib.board_view.has_session", return_value=False)
     def test_invalid_heartbeat_format(self, _mock):
         status, _ = _heartbeat_status("not-a-date", "cc", "alice")
         assert "offline" in status
@@ -215,7 +215,7 @@ class TestCmdPrebuild:
     def test_ignores_board_and_untracked(self, db, capsys):
         with patch(
             "lib.board_view._git",
-            side_effect=lambda pr, *a: ("?? newfile.py\n M board/something" if "status" in a else "abc1234 commit"),
+            side_effect=lambda pr, *a: "?? newfile.py\n M board/something" if "status" in a else "abc1234 commit",
         ):
             cmd_prebuild(db)
         out = capsys.readouterr().out
