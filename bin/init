@@ -118,8 +118,7 @@ def _hook_command(claudes_home: Path) -> str:
     board = f"{claudes_home}/bin/board"
     return (
         f'if [ -n "$CLAUDE_SESSION_NAME" ]; then '
-        f"unread=$({board} --as $CLAUDE_SESSION_NAME inbox 2>/dev/null "
-        f"| grep -oE '[0-9]+ 条未读' | head -1); "
+        f"unread=$({board} --as $CLAUDE_SESSION_NAME pulse 2>/dev/null); "
         f'[ -n "$unread" ] && echo "[inbox] $unread" || true; fi'
     )
 
@@ -264,7 +263,7 @@ def main() -> None:
         print(f"Applied {applied} schema migration(s).")
 
     # .gitignore for generated stuff
-    gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\n"
+    gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\ndispatcher.pid\n"
     (claudes_dir / ".gitignore").write_text(gitignore_content)
 
     # Update .claude/settings.json (merge hooks if exists, create if not)

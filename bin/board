@@ -33,14 +33,15 @@ class Command:
     needs_identity: bool = True
     takes_rest: bool = True
     aliases: list[str] = field(default_factory=list)
+    hidden: bool = False
 
 
 COMMANDS: list[Command] = [
     # ── messaging ──
-    Command("send", "lib.board_msg", "cmd_send", "send a message", "send <to> <msg> [--attach <f>]"),
-    Command("status", "lib.board_msg", "cmd_status", "update your current task", "status <description>"),
-    Command("inbox", "lib.board_msg", "cmd_inbox", "check unread messages", "inbox", takes_rest=False),
-    Command("ack", "lib.board_msg", "cmd_ack", "clear inbox", "ack", takes_rest=False),
+    Command("send", "lib.board_msg", "cmd_send", "send a message", "send <to> <msg> [--attach <f>]", hidden=True),
+    Command("status", "lib.board_msg", "cmd_status", "update your current task", "status <description>", hidden=True),
+    Command("inbox", "lib.board_msg", "cmd_inbox", "check unread messages", "inbox", takes_rest=False, hidden=True),
+    Command("ack", "lib.board_msg", "cmd_ack", "clear inbox", "ack", takes_rest=False, hidden=True),
     Command("log", "lib.board_msg", "cmd_log", "message history", "log [n] [--mine]"),
     # ── views ──
     Command("view", "lib.board_view", "cmd_view", "session dashboard", "view", takes_rest=False),
@@ -72,6 +73,7 @@ COMMANDS: list[Command] = [
         "pre-build",
         needs_identity=False,
         takes_rest=False,
+        hidden=True,
     ),
     Command(
         "dirty",
@@ -81,12 +83,13 @@ COMMANDS: list[Command] = [
         "dirty",
         needs_identity=False,
         takes_rest=False,
+        hidden=True,
     ),
     Command(
-        "files", "lib.board_view", "cmd_files", "list shared files", "files", needs_identity=False, takes_rest=False
+        "files", "lib.board_view", "cmd_files", "list shared files", "files", needs_identity=False, takes_rest=False, hidden=True
     ),
-    Command("get", "lib.board_view", "cmd_get", "view shared file content", "get <hash|name>", needs_identity=False),
-    Command("roster", "lib.board_view", "cmd_roster", "team roster", "roster", needs_identity=False, takes_rest=False),
+    Command("get", "lib.board_view", "cmd_get", "view shared file content", "get <hash|name>", needs_identity=False, hidden=True),
+    Command("roster", "lib.board_view", "cmd_roster", "team roster", "roster", needs_identity=False, takes_rest=False, hidden=True),
     Command(
         "history",
         "lib.board_view",
@@ -94,6 +97,7 @@ COMMANDS: list[Command] = [
         "session message history",
         "history <session> [limit]",
         needs_identity=False,
+        hidden=True,
     ),
     Command(
         "freshness",
@@ -103,6 +107,7 @@ COMMANDS: list[Command] = [
         "freshness",
         needs_identity=False,
         takes_rest=False,
+        hidden=True,
     ),
     Command(
         "relations",
@@ -112,11 +117,12 @@ COMMANDS: list[Command] = [
         "relations",
         needs_identity=False,
         takes_rest=False,
+        hidden=True,
     ),
     # ── BBS ──
-    Command("post", "lib.board_bbs", "cmd_post", "BBS: create new thread", "post <标题> <内容>"),
-    Command("reply", "lib.board_bbs", "cmd_reply", "BBS: reply to thread", "reply <帖子ID> <内容>"),
-    Command("thread", "lib.board_bbs", "cmd_thread", "BBS: view thread", "thread <帖子ID>", needs_identity=False),
+    Command("post", "lib.board_bbs", "cmd_post", "BBS: create new thread", "post <标题> <内容>", hidden=True),
+    Command("reply", "lib.board_bbs", "cmd_reply", "BBS: reply to thread", "reply <帖子ID> <内容>", hidden=True),
+    Command("thread", "lib.board_bbs", "cmd_thread", "BBS: view thread", "thread <帖子ID>", needs_identity=False, hidden=True),
     Command(
         "threads",
         "lib.board_bbs",
@@ -125,19 +131,22 @@ COMMANDS: list[Command] = [
         "threads",
         needs_identity=False,
         takes_rest=False,
+        hidden=True,
     ),
     # ── bug ──
-    Command("bug", "lib.board_bug", "cmd_bug", "bug tracker", "bug {report|assign|fix|list|overdue}"),
+    Command("bug", "lib.board_bug", "cmd_bug", "bug tracker", "bug {report|assign|fix|list|overdue}", hidden=True),
     # ── task ──
-    Command("task", "lib.board_task", "cmd_task", "task queue management", "task {add|done|list|next}"),
+    Command("task", "lib.board_task", "cmd_task", "task queue management", "task {add|done|list|next}", hidden=True),
+    # ── heartbeat ──
+    Command("pulse", "lib.board_pulse", "cmd_pulse", "heartbeat + unread count", "pulse", takes_rest=False, hidden=True),
     # ── voting ──
-    Command("propose", "lib.board_vote", "cmd_propose", "create a proposal", "propose <内容> [--type S]"),
-    Command("vote", "lib.board_vote", "cmd_vote", "vote on a proposal", "vote <N> <SUPPORT|OBJECT> <reason>"),
-    Command("tally", "lib.board_vote", "cmd_tally", "recount votes", "tally <N>", needs_identity=False),
+    Command("propose", "lib.board_vote", "cmd_propose", "create a proposal", "propose <内容> [--type S]", hidden=True),
+    Command("vote", "lib.board_vote", "cmd_vote", "vote on a proposal", "vote <N> <SUPPORT|OBJECT> <reason>", hidden=True),
+    Command("tally", "lib.board_vote", "cmd_tally", "recount votes", "tally <N>", needs_identity=False, hidden=True),
     # ── mailbox (encrypted) ──
-    Command("keygen", "lib.board_mailbox", "cmd_keygen", "generate encryption keypair", "keygen", takes_rest=False),
-    Command("seal", "lib.board_mailbox", "cmd_seal", "send encrypted message", "seal <recipient> <message>"),
-    Command("unseal", "lib.board_mailbox", "cmd_unseal", "read encrypted inbox", "unseal", takes_rest=False),
+    Command("keygen", "lib.board_mailbox", "cmd_keygen", "generate encryption keypair", "keygen", takes_rest=False, hidden=True),
+    Command("seal", "lib.board_mailbox", "cmd_seal", "send encrypted message", "seal <recipient> <message>", hidden=True),
+    Command("unseal", "lib.board_mailbox", "cmd_unseal", "read encrypted inbox", "unseal", takes_rest=False, hidden=True),
     Command(
         "mailbox-log",
         "lib.board_mailbox",
@@ -145,9 +154,10 @@ COMMANDS: list[Command] = [
         "encrypted message history",
         "mailbox-log",
         takes_rest=False,
+        hidden=True,
     ),
     # ── admin ──
-    Command("kudos", "lib.board_admin", "cmd_kudos", "give public recognition", "kudos <target> <reason>"),
+    Command("kudos", "lib.board_admin", "cmd_kudos", "give public recognition", "kudos <target> <reason>", hidden=True),
     Command(
         "kudos-list",
         "lib.board_admin",
@@ -157,12 +167,13 @@ COMMANDS: list[Command] = [
         needs_identity=False,
         takes_rest=False,
         aliases=["kudos-board"],
+        hidden=True,
     ),
-    Command("suspend", "lib.board_admin", "cmd_suspend", "suspend a session", "suspend <session>"),
-    Command("resume", "lib.board_admin", "cmd_resume", "resume a session", "resume <session>"),
+    Command("suspend", "lib.board_admin", "cmd_suspend", "suspend a session", "suspend <session>", hidden=True),
+    Command("resume", "lib.board_admin", "cmd_resume", "resume a session", "resume <session>", hidden=True),
     # ── git lock ──
-    Command("git-lock", "lib.board_lock", "cmd_git_lock", "acquire git index lock", "git-lock [reason]"),
-    Command("git-unlock", "lib.board_lock", "cmd_git_unlock", "release git index lock", "git-unlock"),
+    Command("git-lock", "lib.board_lock", "cmd_git_lock", "acquire git index lock", "git-lock [reason]", hidden=True),
+    Command("git-unlock", "lib.board_lock", "cmd_git_unlock", "release git index lock", "git-unlock", hidden=True),
     Command(
         "git-lock-status",
         "lib.board_lock",
@@ -171,6 +182,7 @@ COMMANDS: list[Command] = [
         "git-lock-status",
         needs_identity=False,
         takes_rest=False,
+        hidden=True,
     ),
     # ── tui ──
     Command(
@@ -190,6 +202,7 @@ COMMANDS: list[Command] = [
         "prune old messages",
         "prune [--before DAYS] [--dry-run]",
         needs_identity=False,
+        hidden=True,
     ),
     Command(
         "backup",
@@ -198,6 +211,7 @@ COMMANDS: list[Command] = [
         "backup database",
         "backup [--output <path>]",
         needs_identity=False,
+        hidden=True,
     ),
     Command(
         "restore",
@@ -206,6 +220,7 @@ COMMANDS: list[Command] = [
         "restore from backup",
         "restore <file> [--force]",
         needs_identity=False,
+        hidden=True,
     ),
 ]
 
@@ -246,18 +261,12 @@ def _fmt_command(cmd: Command, width: int) -> str:
 
 
 def print_help() -> None:
-    max_name = max(len(c.name) + (2 + len(", ".join(c.aliases)) if c.aliases else 0) for c in COMMANDS) + 2
-    print("board v2 — agent coordination tool (SQLite backend, Python)\n")
+    visible = [c for c in COMMANDS if not c.hidden]
+    max_name = max(len(c.name) + (2 + len(", ".join(c.aliases)) if c.aliases else 0) for c in visible) + 2
+    print("board — agent coordination tool\n")
     print("Usage: board --as <name> <command> [args...]\n")
     print("Commands:")
-    last_module = ""
-    for c in COMMANDS:
-        mod = c.module.rsplit(".", 1)[-1]  # board_msg, board_view, etc.
-        if mod != last_module:
-            if last_module:
-                print()
-            print(f"  [{mod}]")
-            last_module = mod
+    for c in visible:
         print(_fmt_command(c, max_name))
     print()
 
@@ -289,6 +298,9 @@ def main() -> None:
     if cmd.needs_identity and not identity:
         print("ERROR: identity required. Use: board --as <name> <command>", file=sys.stderr)
         raise SystemExit(1)
+
+    if identity:
+        db.ensure_session(identity.lower())
 
     _dispatch(cmd, db, identity, rest)
 

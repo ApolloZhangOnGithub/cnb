@@ -41,6 +41,34 @@ def _tmux_pane_command(name: str) -> str:
         return ""
 
 
+def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tuple[str, str]:
+    """Derive agent liveness from heartbeat timestamp, with tmux fallback."""
+    if last_heartbeat:
+        try:
+            hb_time = datetime.strptime(last_heartbeat, "%Y-%m-%d %H:%M:%S")
+            delta = (datetime.now() - hb_time).total_seconds()
+            if delta < 120:
+                ago = f"[{int(delta)}s ago]"
+                return "● active", ago
+            elif delta < 300:
+                return "◐ thinking", f"[{int(delta / 60)}m ago]"
+            elif delta < 900:
+                return "○ stale", f"[{int(delta / 60)}m ago]"
+            else:
+                hours = delta / 3600
+                ago = f"[{int(hours)}h ago]" if hours >= 1 else f"[{int(delta / 60)}m ago]"
+                return "· offline", ago
+        except ValueError:
+            pass
+    sess = f"{prefix}-{name}"
+    if _tmux_has_session(sess):
+        cmd = _tmux_pane_command(sess)
+        if cmd not in ("zsh", "bash", "sh", "-zsh", "-bash"):
+            return "● running", ""
+        return "○ dead", ""
+    return "· offline", ""
+
+
 def cmd_overview(db: BoardDB) -> None:
     """Default view when running cnb with no args."""
     prefix = db.env.prefix
@@ -49,23 +77,20 @@ def cmd_overview(db: BoardDB) -> None:
     print()
 
     # ── sessions ──
-    for (name,) in db.query("SELECT name FROM sessions WHERE name != 'all' ORDER BY name"):
-        sess = f"{prefix}-{name}"
-        if _tmux_has_session(sess):
-            cmd = _tmux_pane_command(sess)
-            status = "● running" if cmd not in ("zsh", "bash", "sh", "-zsh", "-bash") else "○ dead"
-        else:
-            status = "· offline"
+    for row in db.query("SELECT name, status, last_heartbeat FROM sessions WHERE name != 'all' ORDER BY name"):
+        name, task, last_hb = row[0], row[1], row[2]
+        status, ago = _heartbeat_status(last_hb, prefix, name)
 
         inbox = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,)) or 0
         inbox_str = f"  [{inbox} msg]" if inbox else ""
-        task = db.scalar("SELECT status FROM sessions WHERE name=?", (name,)) or ""
         if task:
             task = task[:60]
         else:
             task = "(no status)"
 
         line = f"  {status:12s} {name:<10s} {task}"
+        if ago:
+            line += f"  {ago}"
         if inbox:
             line += f"{inbox_str}"
         print(line)
@@ -230,20 +255,15 @@ def cmd_dirty(db: BoardDB) -> None:
 def cmd_dashboard(db: BoardDB) -> None:
     prefix = db.env.prefix
     print(f"=== Team Dashboard {datetime.now().strftime('%H:%M')} ===\n")
-    for (name,) in db.query("SELECT name FROM sessions ORDER BY name"):
-        session_name = f"{prefix}-{name}"
-        status = "offline"
-        if _tmux_has_session(session_name):
-            cmd = _tmux_pane_command(session_name)
-            if cmd in ("zsh", "bash", "sh", "-zsh", "-bash"):
-                status = "DEAD"
-            else:
-                status = "running"
+    for row in db.query("SELECT name, status, last_heartbeat FROM sessions ORDER BY name"):
+        name, task, last_hb = row[0], row[1], row[2]
+        status, ago = _heartbeat_status(last_hb, prefix, name)
 
         inbox_count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
         inbox_str = f" [{inbox_count}msg]" if inbox_count else ""
-        task = db.scalar("SELECT substr(status, 1, 50) FROM sessions WHERE name=?", (name,)) or "-"
-        print(f"  {name:<7s} {status:<8s}{inbox_str}")
+        task = task[:50] if task else "-"
+        ago_str = f"  {ago}" if ago else ""
+        print(f"  {name:<7s} {status:<12s}{inbox_str}{ago_str}")
         print(f"         {task}")
     print()
     dispatcher_sess = f"{prefix}-dispatcher"
@@ -298,15 +318,15 @@ def cmd_get(db: BoardDB, args: list[str]) -> None:
 
 def cmd_freshness(db: BoardDB) -> None:
     print("=== 数据新鲜度 ===\n")
-    print(f"  {'Session':<8s}  {'Last status update':<20s}  {'Unread inbox'}")
-    print(f"  {'-------':<8s}  {'------------------':<20s}  {'------------'}")
+    print(f"  {'Session':<8s}  {'Last status':<20s}  {'Last heartbeat':<20s}  {'Unread'}")
+    print(f"  {'-------':<8s}  {'-----------':<20s}  {'--------------':<20s}  {'------'}")
     rows = db.query(
-        "SELECT s.name, s.updated_at, "
+        "SELECT s.name, s.updated_at, s.last_heartbeat, "
         "(SELECT COUNT(*) FROM inbox i WHERE i.session=s.name AND i.read=0) "
         "FROM sessions s ORDER BY s.name"
     )
-    for name, updated, inbox_count in rows:
-        print(f"  {name:<8s}  {updated or '(never)':<20s}  {inbox_count}")
+    for name, updated, heartbeat, inbox_count in rows:
+        print(f"  {name:<8s}  {updated or '(never)':<20s}  {heartbeat or '(never)':<20s}  {inbox_count}")
 
 
 def cmd_relations(db: BoardDB) -> None:
