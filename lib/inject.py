@@ -80,8 +80,12 @@ def send_tmux(prefix: str, name: str, message: str) -> bool:
         return False
 
     oneline = message.replace("\n", " ")
-    subprocess.run(["tmux", "send-keys", "-t", sess, "-l", oneline], timeout=5)
-    subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=5)
+    try:
+        subprocess.run(["tmux", "send-keys", "-t", sess, "-l", oneline], timeout=5)
+        subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=5)
+    except (subprocess.TimeoutExpired, OSError):
+        print(f"  {name}: send failed")
+        return False
     print(f"  {name}: injected (tmux)")
     return True
 
@@ -104,17 +108,21 @@ def send_screen(prefix: str, name: str, message: str) -> bool:
         return False
 
     oneline = message.replace("\n", " ")
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", oneline],
-        timeout=5,
-    )
-    import time
+    try:
+        subprocess.run(
+            ["screen", "-S", sess, "-p", "0", "-X", "stuff", oneline],
+            timeout=5,
+        )
+        import time
 
-    time.sleep(0.3)
-    subprocess.run(
-        ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"],
-        timeout=5,
-    )
+        time.sleep(0.3)
+        subprocess.run(
+            ["screen", "-S", sess, "-p", "0", "-X", "stuff", "\r"],
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        print(f"  {name}: send failed")
+        return False
     print(f"  {name}: injected (screen)")
     return True
 

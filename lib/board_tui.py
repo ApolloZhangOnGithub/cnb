@@ -14,12 +14,18 @@ UI_SESSION = "cnb-ui"
 
 
 def _tmux(*args: str) -> int:
-    return subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=5).returncode
+    try:
+        return subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=5).returncode
+    except (subprocess.TimeoutExpired, OSError):
+        return 1
 
 
 def _tmux_out(*args: str) -> str:
-    r = subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=5)
-    return r.stdout.strip() if r.returncode == 0 else ""
+    try:
+        r = subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
 
 
 def _session_exists(name: str) -> bool:

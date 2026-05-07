@@ -13,13 +13,16 @@ from lib.tmux_utils import has_session, pane_command
 
 
 def _git(project_root: Path, *args: str) -> str:
-    r = subprocess.run(
-        ["git", "-C", str(project_root), *args],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    return r.stdout
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(project_root), *args],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return r.stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
 
 
 def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tuple[str, str]:
