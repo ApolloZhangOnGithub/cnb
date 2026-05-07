@@ -2,9 +2,23 @@
 
 ## 0.4.2-dev (unreleased)
 
-_Current development version._
+### Features
 
-## 0.4.1 (2026-05-08 03:40)
+- **NudgeCoordinator** — Unified nudge concern replacing separate InboxNudger/QueuedMessageFlusher/IdleNudger. Enforces per-session cooldown across all nudge types, priority ordering (inbox > queued flush > idle), effectiveness tracking with exponential backoff, and cached session status checks.
+- **Stale session detection** — `swarm start` now detects sessions where agent exited but tmux lingers, auto-cleans and restarts them. `swarm status` shows "stale" state.
+
+### Bug Fixes
+
+- **Dispatcher pid lock cleanup** — Pidfile removed on graceful shutdown, preventing stale locks.
+- **TimeAnnouncer restart safety** — Initializes `last_hour` to current hour on startup, preventing duplicate announcements.
+
+### Tests
+
+- 336 tests total (up from 314)
+- 16 NudgeCoordinator tests: cooldown, backoff, priority, offline sessions, structure
+- 6 dispatcher tests: pid lock, TimeAnnouncer init
+
+## 0.4.1 (2026-05-08 03:25)
 
 ### Bug Fixes
 
