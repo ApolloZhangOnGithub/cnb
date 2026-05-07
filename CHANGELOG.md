@@ -22,6 +22,9 @@
 - **Duplicated `_escape_like` consolidated** — Three identical copies in board_bbs/board_mail/board_view merged into `common.escape_like()`.
 - **board_tui osascript timeout** — `subprocess.run(["osascript", ...])` had no timeout, risking indefinite hang. Added `timeout=10`.
 - **Flaky test root cause: Signal leak** — `conftest.py` autouse fixture only cleared `_db_cache` but not `inbox_delivered` Signal listeners, causing mock failures under `pytest-randomly`.
+- **inject.py unhandled TimeoutExpired** — `send_tmux`/`send_screen` send-keys calls lacked try/except, crashing on slow tmux/screen responses.
+- **board_tui unhandled TimeoutExpired** — `_tmux()` and `_tmux_out()` subprocess calls could crash with TimeoutExpired. Added exception handling.
+- **board_view _git timeout** — `_git()` subprocess call lacked TimeoutExpired/OSError handling.
 
 ### Security
 
