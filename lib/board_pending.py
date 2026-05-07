@@ -3,14 +3,14 @@
 import subprocess
 
 from lib.board_db import BoardDB, ts
-from lib.common import parse_flags
-
+from lib.common import parse_flags, validate_identity
 
 VALID_TYPES = ("auth", "approve", "confirm")
 PENDING_STATUSES = ("pending", "reminded")
 
 
 def cmd_pending(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     subcmd = args[0] if args else "list"
     rest = args[1:] if len(args) > 1 else []
 
@@ -49,7 +49,9 @@ def _pending_add(db: BoardDB, identity: str, args: list[str]) -> None:
     retry_cmd = str(flags.get("retry", "")) or None
 
     if not action_type or not command or not reason:
-        print("Usage: ./board --as <name> pending add --type <auth|approve|confirm> --command <cmd> --reason <why> [--verify <cmd>] [--retry <cmd>]")
+        print(
+            "Usage: ./board --as <name> pending add --type <auth|approve|confirm> --command <cmd> --reason <why> [--verify <cmd>] [--retry <cmd>]"
+        )
         raise SystemExit(1)
 
     if action_type not in VALID_TYPES:

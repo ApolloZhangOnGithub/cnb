@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from lib.board_db import BoardDB
+from lib.common import validate_identity
 
 
 def _git(project_root: Path, *args: str) -> str:
@@ -126,6 +127,8 @@ def cmd_overview(db: BoardDB) -> None:
 
 
 def cmd_view(db: BoardDB, identity: str) -> None:
+    if identity:
+        validate_identity(db, identity)
     assert db.env is not None
     print("=== Board ===\n")
 

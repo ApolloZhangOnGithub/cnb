@@ -241,6 +241,8 @@ def cmd_ack(db: BoardDB, identity: str) -> None:
 
 
 def cmd_log(db: BoardDB, identity: str, args: list[str]) -> None:
+    if identity:
+        validate_identity(db, identity)
     flags, positional = parse_flags(args, bool_flags={"mine": ["--mine"]})
     filter_name = identity.lower() if flags.get("mine") and identity else ""
     n = 20

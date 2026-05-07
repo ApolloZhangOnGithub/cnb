@@ -7,6 +7,7 @@ from pathlib import Path
 from cryptography.exceptions import InvalidTag
 
 from lib.board_db import BoardDB, ts
+from lib.common import validate_identity
 from lib.crypto import (
     generate_keypair,
     load_private_key,
@@ -43,6 +44,7 @@ def _find_pubkey(name: str) -> str | None:
 
 
 def cmd_keygen(db: BoardDB, identity: str) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     kd = _keys_dir(db)
 
@@ -65,6 +67,7 @@ def cmd_keygen(db: BoardDB, identity: str) -> None:
 
 
 def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     if len(args) < 2:
         print("Usage: ./board --as <name> seal <recipient> <message>")
@@ -94,6 +97,7 @@ def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_unseal(db: BoardDB, identity: str) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     kd = _keys_dir(db)
 
@@ -130,6 +134,7 @@ def cmd_unseal(db: BoardDB, identity: str) -> None:
 
 
 def cmd_mailbox_log(db: BoardDB, identity: str) -> None:
+    validate_identity(db, identity)
     name = identity.lower()
     kd = _keys_dir(db)
 
