@@ -103,7 +103,7 @@ def _open_terminal() -> None:
             )
         else:
             script = f'tell application "Terminal"\n  do script "{attach_cmd}"\n  activate\nend tell'
-        r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=10)
         if r.returncode != 0:
             print(f"ERROR: 无法打开终端: {r.stderr.strip()}")
             raise SystemExit(1)
