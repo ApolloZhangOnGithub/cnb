@@ -27,7 +27,7 @@ def read_pyproject() -> tuple[str, str]:
     """Return (version, license) from pyproject.toml."""
     text = (ROOT / "pyproject.toml").read_text()
     ver_m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
-    lic_m = re.search(r'^license\s*=\s*\{text\s*=\s*"([^"]+)"\}', text, re.MULTILINE)
+    lic_m = re.search(r'^license\s*=\s*"([^"]+)"', text, re.MULTILINE)
     return (ver_m.group(1) if ver_m else ""), (lic_m.group(1) if lic_m else "")
 
 

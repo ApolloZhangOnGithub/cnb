@@ -184,22 +184,22 @@ def main() -> None:
     if cmd == "acquire":
         if len(args) < 2:
             print("Usage: build_lock.py acquire <session> <target>", file=sys.stderr)
-            sys.exit(1)
+            raise SystemExit(1)
         session = args[1]
         target = args[2] if len(args) > 2 else "unknown"
         ok, msg = lock.acquire(session, target)
         print(msg)
         if not ok:
-            sys.exit(1)
+            raise SystemExit(1)
 
     elif cmd == "release":
         if len(args) < 2:
             print("Usage: build_lock.py release <session>", file=sys.stderr)
-            sys.exit(1)
+            raise SystemExit(1)
         ok, msg = lock.release(args[1])
         print(msg)
         if not ok:
-            sys.exit(1)
+            raise SystemExit(1)
 
     elif cmd == "status":
         print(lock.status())
@@ -207,14 +207,14 @@ def main() -> None:
     elif cmd == "wrap":
         if len(args) < 3:
             print("Usage: build_lock.py wrap <session> <command...>", file=sys.stderr)
-            sys.exit(1)
+            raise SystemExit(1)
         session = args[1]
         command = args[2:]
-        sys.exit(lock.wrap(session, command))
+        raise SystemExit(lock.wrap(session, command))
 
     else:
         print("Usage: build_lock.py {acquire|release|status|wrap} [args...]", file=sys.stderr)
-        sys.exit(1)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -19,10 +19,10 @@ def project(tmp_path, monkeypatch):
     """Create minimal VERSION, package.json, pyproject.toml in tmp_path."""
     (tmp_path / "VERSION").write_text("1.2.3-dev\n")
     (tmp_path / "package.json").write_text(
-        json.dumps({"name": "test", "version": "1.2.3-dev", "license": "OpenAll-1.0"}, indent=2) + "\n"
+        json.dumps({"name": "test", "version": "1.2.3-dev", "license": "LicenseRef-OpenAll-1.0"}, indent=2) + "\n"
     )
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "test"\nversion = "1.2.3.dev0"\nlicense = {text = "OpenAll-1.0"}\n'
+        '[project]\nname = "test"\nversion = "1.2.3.dev0"\nlicense = "LicenseRef-OpenAll-1.0"\n'
     )
     monkeypatch.setattr(sync_mod, "ROOT", tmp_path)
     return tmp_path
@@ -88,7 +88,7 @@ class TestSync:
 
         sync_mod.sync()
         pkg_after = json.loads((project / "package.json").read_text())
-        assert pkg_after["license"] == "OpenAll-1.0"
+        assert pkg_after["license"] == "LicenseRef-OpenAll-1.0"
 
     def test_fixes_pyproject_version(self, project):
         text = (project / "pyproject.toml").read_text()

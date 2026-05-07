@@ -129,7 +129,7 @@ def inject(target: str, message: str, prefix: str | None = None, sessions: list 
     mode = detect_mode(prefix)
     if mode == "none":
         print("ERROR: neither tmux nor screen found", file=sys.stderr)
-        sys.exit(1)
+        raise SystemExit(1)
 
     send_fn = send_tmux if mode == "tmux" else send_screen
     target_lower = target.lower()
@@ -153,7 +153,7 @@ def main() -> None:
             '  ./inject.py alice "what\'s blocking P0?"\n'
             '  ./inject.py all "everyone check inbox"',
         )
-        sys.exit(1)
+        raise SystemExit(1)
 
     target = sys.argv[1]
     message = " ".join(sys.argv[2:])

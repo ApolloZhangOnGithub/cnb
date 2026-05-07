@@ -1,13 +1,9 @@
 """Security tests for Issue #31 — project-level isolation.
 
-Documents the CURRENT (broken) behavior where:
-- Any identity is auto-registered without verification
-- Any identity can read/write any other session's messages
-- Cross-project access is trivially possible via CNB_PROJECT
-
-When project isolation is implemented, these tests should be UPDATED
-to verify the fix: currently-passing tests that demonstrate vulnerabilities
-should start FAILING, and new tests verifying proper rejection should PASS.
+Verifies that:
+- Unregistered identities are rejected by ensure_session (fixed)
+- Cross-session impersonation is still possible (known limitation, needs auth layer)
+- Cross-project DB isolation exists at the SQLite level
 
 Marked with 'security' pytest marker for selective runs.
 """
@@ -73,43 +69,27 @@ def _make_project(tmp_path: Path, name: str, sessions: list[str]) -> BoardDB:
 
 
 class TestAutoRegistration:
-    """Any --as <name> auto-registers the session. No authentication."""
+    """ensure_session rejects unregistered identities."""
 
-    def test_unknown_identity_auto_registers(self, db):
-        """An unregistered name gets silently created in the sessions table.
-        EXPECTED AFTER FIX: should raise SystemExit or return error.
-        """
-        count_before = db.scalar("SELECT COUNT(*) FROM sessions WHERE name='attacker'")
-        assert count_before == 0
+    def test_unknown_identity_rejected(self, db):
+        """Unregistered names are rejected by ensure_session."""
+        assert db.scalar("SELECT COUNT(*) FROM sessions WHERE name='attacker'") == 0
+        with pytest.raises(SystemExit):
+            db.ensure_session("attacker")
+        assert db.scalar("SELECT COUNT(*) FROM sessions WHERE name='attacker'") == 0
 
-        db.ensure_session("attacker")
-
-        count_after = db.scalar("SELECT COUNT(*) FROM sessions WHERE name='attacker'")
-        # BUG: attacker is now a registered session
-        assert count_after == 1
-
-    def test_unknown_identity_can_send_messages(self, db, capsys):
-        """An unregistered identity can send messages to registered agents.
-        EXPECTED AFTER FIX: should reject unregistered sender.
-        """
-        cmd_send(db, "intruder", ["alice", "you've been compromised"])
-        out = capsys.readouterr().out
-        # BUG: message sent successfully
-        assert "OK" in out
-
+    def test_unknown_identity_cannot_send_messages(self, db, capsys):
+        """Unregistered identity is rejected when trying to send messages."""
+        with pytest.raises(SystemExit):
+            cmd_send(db, "intruder", ["alice", "you've been compromised"])
         msgs = db.query("SELECT sender, body FROM messages WHERE sender='intruder'")
-        assert len(msgs) == 1
-        assert "compromised" in msgs[0][1]
+        assert len(msgs) == 0
 
-    def test_unknown_identity_can_read_inbox(self, db, capsys):
-        """An unregistered identity can check inbox (gets auto-registered).
-        EXPECTED AFTER FIX: should reject unregistered caller.
-        """
-        cmd_inbox(db, "spy")
-        out = capsys.readouterr().out
-        # BUG: no error, spy is now registered
-        assert "收件箱为空" in out
-        assert db.scalar("SELECT COUNT(*) FROM sessions WHERE name='spy'") == 1
+    def test_unknown_identity_cannot_read_inbox(self, db, capsys):
+        """Unregistered identity is rejected when trying to read inbox."""
+        with pytest.raises(SystemExit):
+            cmd_inbox(db, "spy")
+        assert db.scalar("SELECT COUNT(*) FROM sessions WHERE name='spy'") == 0
 
 
 # ---------------------------------------------------------------------------
@@ -188,19 +168,15 @@ class TestCrossProjectAccess:
         assert len(msgs) >= 1
         assert any("secret" in m[1] for m in msgs)
 
-    def test_inject_messages_into_other_project(self, tmp_path, capsys):
-        """An outsider can inject messages into another project.
-        EXPECTED AFTER FIX: should require project-scoped token.
-        """
+    def test_inject_messages_blocked_for_outsider(self, tmp_path, capsys):
+        """Outsider identity is rejected when trying to inject messages."""
         db_target = _make_project(tmp_path, "target-project", ["alice", "bob"])
 
-        cmd_send(db_target, "outsider", ["alice", "phishing message from outside"])
-        out = capsys.readouterr().out
-        # BUG: message injected successfully
-        assert "OK" in out
+        with pytest.raises(SystemExit):
+            cmd_send(db_target, "outsider", ["alice", "phishing message from outside"])
 
         msgs = db_target.query("SELECT body FROM messages WHERE sender='outsider'")
-        assert len(msgs) == 1
+        assert len(msgs) == 0
 
     def test_projects_share_no_state(self, tmp_path, capsys):
         """Verify that two projects have independent databases (baseline)."""
@@ -221,40 +197,29 @@ class TestCrossProjectAccess:
 
 
 class TestSessionCreationAbuse:
-    """ensure_session can be used to pollute the sessions table."""
+    """ensure_session rejects names not in the configured sessions list."""
 
-    def test_bulk_session_creation(self, db):
-        """Creating many fake sessions pollutes the board view.
-        EXPECTED AFTER FIX: should reject names not in config.toml.
-        """
+    def test_bulk_session_creation_blocked(self, db):
+        """Fake session names are rejected — no table pollution."""
+        count_before = db.scalar("SELECT COUNT(*) FROM sessions")
         for i in range(10):
-            db.ensure_session(f"fake-agent-{i}")
+            with pytest.raises(SystemExit):
+                db.ensure_session(f"fake-agent-{i}")
+        count_after = db.scalar("SELECT COUNT(*) FROM sessions")
+        assert count_after == count_before
 
-        count = db.scalar("SELECT COUNT(*) FROM sessions")
-        # BUG: 10 fake sessions added (plus the 3 defaults)
-        assert count >= 13
+    def test_unregistered_name_rejected(self, db):
+        """Names not in the sessions table are rejected."""
+        with pytest.raises(SystemExit):
+            db.ensure_session("normal-name")
+        assert db.scalar("SELECT COUNT(*) FROM sessions WHERE name='normal-name'") == 0
 
-    def test_session_name_with_special_chars(self, db):
-        """Session names with special characters are accepted.
-        EXPECTED AFTER FIX: should validate name format.
-        """
-        db.ensure_session("normal-name")
-        assert db.scalar("SELECT COUNT(*) FROM sessions WHERE name='normal-name'") == 1
-
-    def test_registered_sessions_should_match_config(self, db):
-        """Only sessions listed in config.toml should be valid.
-        EXPECTED AFTER FIX: ensure_session should check config.
-        """
+    def test_registered_sessions_match_config(self, db):
+        """Only sessions pre-registered in the DB are accepted."""
         config_sessions = db.env.sessions if db.env else []
-        all_sessions = [r[0] for r in db.query("SELECT name FROM sessions")]
-
-        # Currently all config sessions exist in DB (they were pre-inserted)
         for s in config_sessions:
-            assert s in all_sessions
+            db.ensure_session(s)
 
-        # But the inverse is not enforced — DB can have extras
-        db.ensure_session("not-in-config")
-        all_sessions_after = [r[0] for r in db.query("SELECT name FROM sessions")]
-        # BUG: "not-in-config" is in DB but not in config.toml
-        assert "not-in-config" in all_sessions_after
-        assert "not-in-config" not in config_sessions
+        with pytest.raises(SystemExit):
+            db.ensure_session("not-in-config")
+        assert db.scalar("SELECT COUNT(*) FROM sessions WHERE name='not-in-config'") == 0

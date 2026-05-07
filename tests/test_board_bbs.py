@@ -251,6 +251,14 @@ class TestCmdPost:
         assert len(msgs) == 1
         assert "Bug Report" in msgs[0][0]
 
+    def test_post_stores_body_as_first_reply(self, db, capsys):
+        cmd_post(db, "alice", ["Design Review", "Let's", "discuss", "the", "new", "API"])
+        tid = db.scalar("SELECT id FROM threads LIMIT 1")
+        reply = db.query_one("SELECT author, body FROM thread_replies WHERE thread_id=?", (tid,))
+        assert reply is not None
+        assert reply[0] == "alice"
+        assert reply[1] == "Let's discuss the new API"
+
     def test_post_output_includes_tid(self, db, capsys):
         cmd_post(db, "alice", ["Test Title", "Test Body"])
         out = capsys.readouterr().out

@@ -286,7 +286,7 @@ def main() -> None:
         check_git()
         check_claude_cli()
         print("\nResult: project not initialized — run 'cnb init' first")
-        sys.exit(1)
+        raise SystemExit(1)
 
     print("=== cnb Doctor ===\n")
 
@@ -319,7 +319,7 @@ def main() -> None:
         print("✓ All checks passed.")
     else:
         print("⚠ Some checks failed — review warnings above.")
-        sys.exit(1)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

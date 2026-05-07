@@ -11,17 +11,26 @@ def cmd_post(db: BoardDB, identity: str, args: list[str]) -> None:
         print("Usage: ./board --as <name> post <标题> <内容>")
         raise SystemExit(1)
     title = args[0]
+    body = " ".join(args[1:])
     now = ts()
     tid = hashlib.sha256(f"{title}{now}{identity}".encode()).hexdigest()[:6]
 
-    db.execute(
-        "INSERT INTO threads(id, title, author) VALUES (?, ?, ?)",
-        (tid, title, name),
-    )
-    db.execute(
-        "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-        (now, name, f"[BBS] 新帖「{title}」({tid})"),
-    )
+    with db.conn() as c:
+        db.execute(
+            "INSERT INTO threads(id, title, author) VALUES (?, ?, ?)",
+            (tid, title, name),
+            c=c,
+        )
+        db.execute(
+            "INSERT INTO thread_replies(thread_id, author, body) VALUES (?, ?, ?)",
+            (tid, name, body),
+            c=c,
+        )
+        db.execute(
+            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
+            (now, name, f"[BBS] 新帖「{title}」({tid})"),
+            c=c,
+        )
     print(f"OK 帖子已创建: {tid}")
     print(f"  标题: {title}")
     print(f"  查看: ./board --as <name> thread {tid}")

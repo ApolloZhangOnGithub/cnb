@@ -353,7 +353,7 @@ def main() -> None:
         print("  --benchmark  Compare event vs polling")
     else:
         print(f"Unknown: {arg}", file=sys.stderr)
-        sys.exit(1)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
