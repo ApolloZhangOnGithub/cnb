@@ -115,11 +115,11 @@ def _update_claude_md(project_dir: Path, snippet: str) -> None:
 
 
 def _hook_command(claudes_home: Path) -> str:
-    board = f"{claudes_home}/bin/board"
     return (
-        f'if [ -n "$CLAUDE_SESSION_NAME" ]; then '
-        f"unread=$({board} --as $CLAUDE_SESSION_NAME pulse 2>/dev/null); "
-        f'[ -n "$unread" ] && echo "[inbox] $unread" || true; fi'
+        'if [ -n "$CLAUDE_SESSION_NAME" ] && [ -n "$CNB_PROJECT" ]; then '
+        "BOARD=$(grep '^claudes_home' \"$CNB_PROJECT/.claudes/config.toml\" 2>/dev/null "
+        "| cut -d'\"' -f2)/bin/board; "
+        '[ -x "$BOARD" ] && $BOARD --as $CLAUDE_SESSION_NAME pulse 2>/dev/null; fi'
     )
 
 
@@ -147,7 +147,7 @@ def _update_settings(project_dir: Path, claudes_home: Path) -> None:
     already = any(
         isinstance(h, dict)
         and any(
-            "board" in sub.get("command", "") and "inbox" in sub.get("command", "")
+            "board" in sub.get("command", "") and ("pulse" in sub.get("command", "") or "inbox" in sub.get("command", ""))
             for sub in h.get("hooks", [])
             if isinstance(sub, dict)
         )

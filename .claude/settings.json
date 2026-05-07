@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolBatch": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -n \"$CLAUDE_SESSION_NAME\" ] && [ -n \"$CNB_PROJECT\" ]; then BOARD=$(grep '^claudes_home' \"$CNB_PROJECT/.claudes/config.toml\" 2>/dev/null | cut -d'\"' -f2)/bin/board; [ -x \"$BOARD\" ] && $BOARD --as $CLAUDE_SESSION_NAME pulse 2>/dev/null; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
