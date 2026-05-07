@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.1-dev (unreleased)
+## 0.5.1 (2026-05-08)
 
 ### Features
 

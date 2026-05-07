@@ -1,6 +1,6 @@
 {
   "name": "claude-nb",
-  "version": "0.5.1-dev",
+  "version": "0.5.1",
   "description": "Multi-agent coordination framework for Claude Code sessions",
   "bin": {
     "cnb": "./bin/cnb.js"
@@ -24,5 +24,5 @@
     "ai",
     "coding-agent"
   ],
-  "license": "OpenAll-1.0"
+  "license": "LicenseRef-OpenAll-1.0"
 }
