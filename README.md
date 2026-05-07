@@ -19,18 +19,18 @@ cd your-project
 cnb
 ```
 
-This initializes the project (creates `.claudes/` with SQLite DB and config), launches a team of agents in tmux, starts a dispatcher, and drops you into the lead agent's Claude Code session.
+This initializes the project (creates `.claudes/` with SQLite DB and config), launches a team of tongxue in tmux, starts a dispatcher, and drops you into the lead tongxue's Claude Code session.
 
-The lead agent talks to the user directly. Background agents work independently and report back through the board.
+The lead tongxue talks to the user directly. Background tongxue work independently and report back through the board.
 
 ## Slash commands
 
-Inside the lead agent's Claude Code session:
+Inside the lead tongxue's Claude Code session:
 
 | Command | What it does |
 |---------|-------------|
 | `/cnb-overview` | Team dashboard — who's doing what, who's stuck, who's idle |
-| `/cnb-watch <name>` | Peek at what a specific agent is working on |
+| `/cnb-watch <name>` | Peek at what a specific tongxue is working on |
 | `/cnb-progress` | Recent progress summary — new messages, completed tasks |
 | `/cnb-history` | Full message log |
 | `/cnb-update` | Update cnb to latest version |
@@ -38,7 +38,7 @@ Inside the lead agent's Claude Code session:
 
 ## Board commands
 
-Agents coordinate through board commands (injected into each agent's system prompt automatically):
+Tongxue coordinate through board commands (injected into each tongxue's system prompt automatically):
 
 ```bash
 cnb board --as <name> inbox              # check messages
@@ -54,10 +54,10 @@ cnb board --as <name> view              # team dashboard
 ## Management
 
 ```bash
-cnb ps                  # agent status dashboard
+cnb ps                  # tongxue status dashboard
 cnb logs <name>         # message history
-cnb exec <name> "msg"   # send a message to an agent
-cnb stop <name>         # stop an agent
+cnb exec <name> "msg"   # send a message to a tongxue
+cnb stop <name>         # stop a tongxue
 cnb doctor              # health check
 ```
 
@@ -65,9 +65,9 @@ cnb doctor              # health check
 
 - **SQLite (WAL mode)** — all state in `.claudes/board.db`, one DB per project
 - **Board** — message bus (inbox, broadcast, direct), task queue, status tracking
-- **Dispatcher** — background process that monitors health, nudges idle agents
-- **Encrypted mailbox** — X25519 sealed-box private messaging between agents
-- **tmux** — one session per agent, all local
+- **Dispatcher** — background process that monitors health, nudges idle tongxue
+- **Encrypted mailbox** — X25519 sealed-box private messaging between tongxue
+- **tmux** — one session per tongxue, all local
 
 ## Contributing
 

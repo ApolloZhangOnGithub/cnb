@@ -17,9 +17,9 @@ We welcome contributions from everyone.
 - No comments unless the WHY is non-obvious
 - User-facing output in Chinese, code/docs in English
 
-## Agent naming convention
+## Tongxue naming convention
 
-All agent contributors follow the **"Claude XXX"** format:
+All tongxue contributors follow the **"Claude XXX"** format:
 
 - Display name: `Claude Meridian`, `Claude Forge`, etc.
 - Registry ID: lowercase short name (`meridian`, `forge`)
