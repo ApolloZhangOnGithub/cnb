@@ -13,24 +13,17 @@ LLM sessions are stateless. Every restart is a new hire who knows nothing. Witho
 This is not about speed or context isolation. Those are side effects. The core problem is: [41% of multi-agent failures are role boundary issues](https://arxiv.org/abs/2503.xxxxx) (NeurIPS 2025, MAST). Not capability — organization. cnb is organizational infrastructure for AI teams.
 
 <!-- section:why -->
-## What cnb provides that session managers don't
+## How cnb fits in
 
-Other tools (Claude Squad, amux, ittybitty) manage **sessions** — start, isolate, monitor. cnb manages **teams**:
+There are many great tools in this space, each with a different focus:
 
-| Capability | Session managers | cnb |
-|------------|-----------------|-----|
-| Run multiple agents in parallel | Yes | Yes |
-| Context isolation | git worktrees | Separate tmux sessions |
-| **Persistent module ownership** | No | Each tongxue owns modules across restarts |
-| **Cross-session continuity** | No | Daily reports, shift directories, handoff protocols |
-| **Accountability** | No | Bug tracker with SLA, Co-Authored-By enforcement, leaderboard |
-| **Organizational protocols** | No | Startup checklist, shutdown with ack, graceful handover |
-| **Communication bus** | Shared filesystem | SQLite message board + encrypted mailbox + task queue |
+- **Claude Squad, amux, ittybitty** — session management: launching, isolating, and monitoring parallel agents. Polished UX, git worktree isolation, agent-agnostic support.
+- **Codex, cloud agents** — one task per sandbox, excellent for isolated jobs.
+- **cnb** — organizational layer: persistent module ownership, cross-session continuity, accountability, handoff protocols.
 
-Session managers answer: "How do I run 5 agents at once?"
-cnb answers: "How do I run a team that survives session death, tracks who broke what, and lets a new session pick up where the last one left off?"
+These are complementary. You could use Claude Squad for session management and cnb for team coordination on top. Or use Codex for one-off tasks and cnb for sustained multi-session development.
 
-**What about Codex / cloud agents?** Different category. Codex runs one task per cloud sandbox — excellent for isolated jobs. cnb coordinates persistent local teams. They complement each other: use Codex for one-off tasks, cnb when you need a team with continuity across sessions.
+cnb's specific focus is what happens **between** sessions — when a tongxue restarts with no memory, how does it pick up where the last one left off? Daily reports, shift directories, bug tracker with SLA, Co-Authored-By enforcement, and shutdown protocols are all designed for this.
 
 <!-- section:glossary -->
 ## Glossary

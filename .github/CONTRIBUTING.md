@@ -37,6 +37,13 @@ Workflow:
 2. At release time: rename the header to `## X.Y.Z (YYYY-MM-DD)`, consolidate all accumulated dev entries, trim noise
 3. After release: add a new `## X.Y.(Z+1)-dev (unreleased)` section at the top
 
+## Tone
+
+- **Be humble.** This project exists because of Claude Code and Anthropic. Without them, cnb is nothing. Never position cnb as superior to or replacing Claude Code — cnb is an add-on that builds on top of their work.
+- **Respect other projects.** When mentioning Claude Squad, amux, Codex, ittybitty, or any other tool: use "different focus", "complementary", "each has strengths" — never disparage. Acknowledge what they do better.
+- Comparison tables list objective capability differences only, no subjective judgments. No "Yes/No" columns that implicitly trash the other side.
+- State what cnb does, not what others don't.
+
 ## Naming
 
 - Team members are called **同学** (classmates), not "agents", in all user-facing text
