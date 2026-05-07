@@ -75,6 +75,7 @@ class KqueueWatcher:
             path = os.path.join(self.watch_dir, f)
             if path in self.file_fds:
                 continue
+            fd = -1
             try:
                 fd = os.open(path, os.O_RDONLY)
                 ev = select.kevent(
@@ -86,7 +87,8 @@ class KqueueWatcher:
                 self.kq.control([ev], 0)
                 self.file_fds[path] = fd
             except OSError:
-                pass
+                if fd >= 0:
+                    os.close(fd)
 
     def poll(self, timeout: float = 5.0) -> set:
         """Block up to *timeout* seconds, return set of changed file paths."""

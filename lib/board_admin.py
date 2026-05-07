@@ -35,15 +35,19 @@ def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
 
     prefix = db.env.prefix
     sess = f"{prefix}-{target}"
-    r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True)
-    if r.returncode == 0:
-        subprocess.run(
-            ["tmux", "send-keys", "-t", sess, "/exit", "Enter"],
-            capture_output=True,
-        )
-        time.sleep(2)
-        subprocess.run(["tmux", "kill-session", "-t", sess], capture_output=True)
-        print(f"{target}: tmux session 已关闭")
+    try:
+        r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True, timeout=5)
+        if r.returncode == 0:
+            subprocess.run(
+                ["tmux", "send-keys", "-t", sess, "/exit", "Enter"],
+                capture_output=True,
+                timeout=5,
+            )
+            time.sleep(2)
+            subprocess.run(["tmux", "kill-session", "-t", sess], capture_output=True, timeout=5)
+            print(f"{target}: tmux session 已关闭")
+    except (subprocess.TimeoutExpired, OSError):
+        pass
 
     now = ts()
     db.execute(

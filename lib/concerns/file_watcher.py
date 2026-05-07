@@ -41,77 +41,82 @@ class FileWatcher(Concern):
         import select as sel
 
         kq = sel.kqueue()
-        watch_dir = str(self.cfg.sessions_dir)
-        dir_fd = os.open(watch_dir, os.O_RDONLY)
-        kq.control(
-            [
-                sel.kevent(
-                    dir_fd,
-                    filter=sel.KQ_FILTER_VNODE,
-                    flags=sel.KQ_EV_ADD | sel.KQ_EV_CLEAR,
-                    fflags=sel.KQ_NOTE_WRITE,
-                )
-            ],
-            0,
-        )
+        dir_fd = -1
         file_fds: dict[str, int] = {}
-
-        def refresh() -> None:
-            for f in os.listdir(watch_dir):
-                if not f.endswith(".md"):
-                    continue
-                path = os.path.join(watch_dir, f)
-                if path in file_fds:
-                    continue
-                try:
-                    fd = os.open(path, os.O_RDONLY)
-                    kq.control(
-                        [
-                            sel.kevent(
-                                fd,
-                                filter=sel.KQ_FILTER_VNODE,
-                                flags=sel.KQ_EV_ADD | sel.KQ_EV_CLEAR,
-                                fflags=sel.KQ_NOTE_WRITE | sel.KQ_NOTE_EXTEND,
-                            )
-                        ],
-                        0,
+        try:
+            watch_dir = str(self.cfg.sessions_dir)
+            dir_fd = os.open(watch_dir, os.O_RDONLY)
+            kq.control(
+                [
+                    sel.kevent(
+                        dir_fd,
+                        filter=sel.KQ_FILTER_VNODE,
+                        flags=sel.KQ_EV_ADD | sel.KQ_EV_CLEAR,
+                        fflags=sel.KQ_NOTE_WRITE,
                     )
-                    file_fds[path] = fd
+                ],
+                0,
+            )
+
+            def refresh() -> None:
+                for f in os.listdir(watch_dir):
+                    if not f.endswith(".md"):
+                        continue
+                    path = os.path.join(watch_dir, f)
+                    if path in file_fds:
+                        continue
+                    fd = -1
+                    try:
+                        fd = os.open(path, os.O_RDONLY)
+                        kq.control(
+                            [
+                                sel.kevent(
+                                    fd,
+                                    filter=sel.KQ_FILTER_VNODE,
+                                    flags=sel.KQ_EV_ADD | sel.KQ_EV_CLEAR,
+                                    fflags=sel.KQ_NOTE_WRITE | sel.KQ_NOTE_EXTEND,
+                                )
+                            ],
+                            0,
+                        )
+                        file_fds[path] = fd
+                    except OSError:
+                        if fd >= 0:
+                            os.close(fd)
+
+            refresh()
+            while not self._stop.is_set():
+                fd_to_path = {fd: p for p, fd in file_fds.items()}
+                try:
+                    events = kq.control(None, 8, 2.0)
+                except (InterruptedError, OSError):
+                    if self._stop.is_set():
+                        break
+                    continue
+                if not events:
+                    refresh()
+                    continue
+                changed: set[str] = set()
+                for ev in events:
+                    if ev.ident == dir_fd:
+                        refresh()
+                    elif ev.ident in fd_to_path:
+                        changed.add(os.path.basename(fd_to_path[ev.ident]).replace(".md", ""))
+                if changed:
+                    with self._lock:
+                        self._queue.extend(changed)
+        finally:
+            for fd in file_fds.values():
+                try:
+                    os.close(fd)
                 except OSError:
                     pass
-
-        refresh()
-        while not self._stop.is_set():
-            fd_to_path = {fd: p for p, fd in file_fds.items()}
-            try:
-                events = kq.control(None, 8, 2.0)
-            except (InterruptedError, OSError):
-                if self._stop.is_set():
-                    break
-                continue
-            if not events:
-                refresh()
-                continue
-            changed: set[str] = set()
-            for ev in events:
-                if ev.ident == dir_fd:
-                    refresh()
-                elif ev.ident in fd_to_path:
-                    changed.add(os.path.basename(fd_to_path[ev.ident]).replace(".md", ""))
-            if changed:
-                with self._lock:
-                    self._queue.extend(changed)
-
-        for fd in file_fds.values():
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-        try:
-            os.close(dir_fd)
-        except OSError:
-            pass
-        kq.close()
+            if dir_fd >= 0:
+                try:
+                    os.close(dir_fd)
+                except OSError:
+                    pass
+            kq.close()
 
     def stop(self) -> None:
         self._stop.set()

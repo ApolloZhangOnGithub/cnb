@@ -63,14 +63,17 @@ def _nudge_session(db: BoardDB, recipient: str) -> None:
         if not re.match(r"^[a-z0-9][a-z0-9_-]*$", name):
             continue
         sess = f"{prefix}-{name}"
-        r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True)
-        if r.returncode != 0:
+        try:
+            r = subprocess.run(["tmux", "has-session", "-t", sess], capture_output=True, timeout=5)
+            if r.returncode != 0:
+                continue
+            if not _is_idle(sess):
+                continue
+            cmd = f"{board} --as {name} inbox"
+            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", cmd], capture_output=True, timeout=5)
+            subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], capture_output=True, timeout=5)
+        except (subprocess.TimeoutExpired, OSError):
             continue
-        if not _is_idle(sess):
-            continue
-        cmd = f"{board} --as {name} inbox"
-        subprocess.run(["tmux", "send-keys", "-t", sess, "-l", cmd], capture_output=True)
-        subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], capture_output=True)
 
 
 def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
