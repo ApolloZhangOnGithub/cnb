@@ -8,16 +8,16 @@ from lib.common import is_suspended
 from .base import Concern
 from .config import DispatcherConfig
 from .helpers import log
-from .notifications import InboxNudger
+from .nudge_coordinator import NudgeCoordinator
 
 
 class FileWatcher(Concern):
     interval = 1
 
-    def __init__(self, cfg: DispatcherConfig, inbox: InboxNudger) -> None:
+    def __init__(self, cfg: DispatcherConfig, nudge: NudgeCoordinator) -> None:
         super().__init__()
         self.cfg = cfg
-        self.inbox = inbox
+        self.nudge = nudge
         self._queue: list[str] = []
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -124,4 +124,4 @@ class FileWatcher(Concern):
             self._queue.clear()
         for name in names:
             if not is_suspended(name, self.cfg.suspended_file):
-                self.inbox.nudge_if_unread(name)
+                self.nudge.check_session(name, now)

@@ -118,25 +118,31 @@ class NudgeCoordinator(Concern):
             "last_nudge_time": rec.time,
         }
 
+    def _process_session(self, name: str, now: int) -> None:
+        if is_suspended(name, self.cfg.suspended_file):
+            return
+        if not self._session_ready(name, now):
+            return
+
+        if name in self._records:
+            self._check_effectiveness(name)
+
+        if not self._can_nudge(name, now):
+            return
+
+        for nudge_type, try_fn in [
+            ("inbox", self._try_inbox),
+            ("flush", self._try_queued_flush),
+            ("idle", self._try_idle),
+        ]:
+            if try_fn(name):
+                self._record(name, nudge_type, now)
+                break
+
+    def check_session(self, name: str, now: int) -> None:
+        """Check and nudge a specific session (used by FileWatcher for instant inbox detection)."""
+        self._process_session(name, now)
+
     def tick(self, now: int) -> None:
         for name in get_dev_sessions(self.cfg):
-            if is_suspended(name, self.cfg.suspended_file):
-                continue
-            if not self._session_ready(name, now):
-                continue
-
-            if name in self._records:
-                self._check_effectiveness(name)
-
-            if not self._can_nudge(name, now):
-                continue
-
-            # Priority: inbox > queued_flush > idle
-            for nudge_type, try_fn in [
-                ("inbox", self._try_inbox),
-                ("flush", self._try_queued_flush),
-                ("idle", self._try_idle),
-            ]:
-                if try_fn(name):
-                    self._record(name, nudge_type, now)
-                    break
+            self._process_session(name, now)

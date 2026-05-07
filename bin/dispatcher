@@ -6,9 +6,7 @@ Concerns (each with independent check intervals):
   SessionKeepAlive   — detect dead dev sessions
   IdleDetector       — batch screen snapshot comparison
   IdleKiller         — kill sessions idle >30min
-  IdleNudger         — nudge idle sessions to continue working
-  InboxNudger        — detect unread inboxes, nudge sessions
-  QueuedMsgFlusher   — auto-Enter when nudged commands queue up
+  NudgeCoordinator   — unified nudge orchestrator (inbox/queued/idle)
   CoralPoker         — periodic heartbeat to dispatcher session
   HealthChecker      — periodic full status report + team idle detection
   BugSLAChecker      — check overdue bugs
@@ -40,9 +38,7 @@ from lib.concerns import (
     HealthChecker,
     IdleDetector,
     IdleKiller,
-    IdleNudger,
-    InboxNudger,
-    QueuedMessageFlusher,
+    NudgeCoordinator,
     ResourceMonitor,
     SessionKeepAlive,
     TimeAnnouncer,
@@ -109,20 +105,18 @@ def main() -> None:
     coral = CoralManager(cfg)
     idle = IdleDetector(cfg)
     poker = CoralPoker(cfg)
-    inbox = InboxNudger(cfg)
+    nudge = NudgeCoordinator(cfg, idle)
     throttle = AdaptiveThrottle()
-    file_watcher = FileWatcher(cfg, inbox)
+    file_watcher = FileWatcher(cfg, nudge)
 
-    # Order matters: idle must tick before idle_killer / idle_nudger
+    # Order matters: idle must tick before idle_killer / nudge_coordinator
     concerns: list[Concern] = [
         coral,
         TimeAnnouncer(cfg),
         idle,
         SessionKeepAlive(cfg),
         IdleKiller(cfg, idle, coral),
-        inbox,
-        IdleNudger(cfg, idle),
-        QueuedMessageFlusher(cfg),
+        nudge,
         poker,
         BugSLAChecker(cfg, poker),
         HealthChecker(cfg, poker, coral),
