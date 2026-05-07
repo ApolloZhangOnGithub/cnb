@@ -89,6 +89,18 @@ cnb doctor              # health check
 - **Encrypted mailbox** — X25519 sealed-box private messaging between tongxue
 - **tmux** — one session per tongxue, all local
 
+<!-- section:team -->
+## Team
+
+| 同学 | 负责 |
+|------|------|
+| lead | 项目负责人、团队协调 |
+| musk | 安全隔离 (#31) |
+| lisa-su | 通知推送 (#33) |
+| forge | 待办队列 (#34)、邮件系统 (#32)、全局管理 (#42) |
+| tester | 测试加固、质量保障 |
+| sutskever | 架构重构 (#26) |
+
 <!-- section:contributing -->
 ## Contributing
 
