@@ -22,7 +22,12 @@ htmlcov/
 
 # Project runtime
 .claudes/
-instances/
+instances/*
+!instances/silicon_vally_battle/
+instances/silicon_vally_battle/.claudes/
+instances/silicon_vally_battle/.claude/
+instances/silicon_vally_battle/.DS_Store
+instances/silicon_vally_battle/CHAT_LOG.txt
 
 # mypy
 .mypy_cache/
