@@ -2,7 +2,7 @@
 
 import time
 
-from lib.board_db import BoardDB, ts
+from lib.board_db import BoardDB
 from lib.common import validate_identity
 from lib.tmux_utils import has_session, tmux_run
 
@@ -44,11 +44,7 @@ def cmd_suspend(db: BoardDB, identity: str, args: list[str]) -> None:
         tmux_run("kill-session", "-t", sess)
         print(f"{target}: tmux session 已关闭")
 
-    now = ts()
-    db.execute(
-        "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'SYSTEM', 'all', ?)",
-        (now, f"SUSPEND {target} by {name}"),
-    )
+    db.post_message("SYSTEM", "all", f"SUSPEND {target} by {name}")
 
 
 def cmd_resume(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -73,11 +69,7 @@ def cmd_resume(db: BoardDB, identity: str, args: list[str]) -> None:
         sf.write_text("\n".join(lines) + "\n" if lines else "")
 
     print(f"{target}: 已恢复")
-    now = ts()
-    db.execute(
-        "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'SYSTEM', 'all', ?)",
-        (now, f"RESUME {target} by {name}"),
-    )
+    db.post_message("SYSTEM", "all", f"RESUME {target} by {name}")
 
 
 def cmd_kudos(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -109,11 +101,7 @@ def cmd_kudos(db: BoardDB, identity: str, args: list[str]) -> None:
         "INSERT INTO kudos(sender, target, reason, evidence) VALUES (?, ?, ?, ?)",
         (name, target, reason, evidence or None),
     )
-    now = ts()
-    db.execute(
-        "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-        (now, name, f"[KUDOS] → {target}: {reason}"),
-    )
+    db.post_message(name, "all", f"[KUDOS] → {target}: {reason}")
     print(f"OK kudos sent to {target} (visible to all)")
 
 

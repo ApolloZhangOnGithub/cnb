@@ -37,8 +37,6 @@ def _bug_report(db: BoardDB, identity: str, args: list[str]) -> None:
     desc = " ".join(args[1:])
     sla = {"P0": "immediate", "P1": "4h", "P2": "24h"}[severity]
 
-    now = ts()
-
     with db.conn() as c:
         max_id = db.scalar("SELECT COALESCE(MAX(CAST(SUBSTR(id, 5) AS INTEGER)), 0) FROM bugs", c=c)
         next_id = f"BUG-{max_id + 1:03d}"
@@ -47,12 +45,7 @@ def _bug_report(db: BoardDB, identity: str, args: list[str]) -> None:
             (next_id, severity, sla, name, desc),
             c=c,
         )
-        msg_id = db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-            (now, name, f"[{next_id}/{severity}] {desc}"),
-            c=c,
-        )
-        db.deliver_to_inbox(name, "all", msg_id, c=c)
+        db.post_message(name, "all", f"[{next_id}/{severity}] {desc}", deliver=True, c=c)
     print(f"OK {next_id} ({severity}) created")
 
 
@@ -71,14 +64,9 @@ def _bug_assign(db: BoardDB, identity: str, args: list[str]) -> None:
         print(f"ERROR: {bugid} not found")
         raise SystemExit(1)
 
-    now = ts()
     with db.conn() as c:
         db.execute("UPDATE bugs SET assignee=?, status='ASSIGNED' WHERE id=?", (assignee, bugid), c=c)
-        db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, ?, ?)",
-            (now, name, assignee, f"[{bugid}] assigned to you"),
-            c=c,
-        )
+        db.post_message(name, assignee, f"[{bugid}] assigned to you", c=c)
     print(f"OK {bugid} assigned to {assignee}")
 
 
@@ -101,14 +89,10 @@ def _bug_fix(db: BoardDB, identity: str, args: list[str]) -> None:
         print(f"Bug {bugid} is already {row['status']}.")
         return
 
-    now = ts()
     with db.conn() as c:
+        now = ts()
         db.execute("UPDATE bugs SET status='FIXED', fixed_at=?, evidence=? WHERE id=?", (now, evidence, bugid), c=c)
-        db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-            (now, name, f"[{bugid}] FIXED — {evidence}"),
-            c=c,
-        )
+        db.post_message(name, "all", f"[{bugid}] FIXED — {evidence}", c=c)
     print(f"OK {bugid} marked FIXED")
 
 

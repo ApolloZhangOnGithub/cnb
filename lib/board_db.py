@@ -150,3 +150,22 @@ class BoardDB(BaseDB):
                 c=c,
             )
             inbox_delivered.emit(recipient)
+
+    def post_message(
+        self,
+        sender: str,
+        recipient: str,
+        body: str,
+        *,
+        deliver: bool = False,
+        c: sqlite3.Connection | None = None,
+    ) -> int:
+        now = ts()
+        msg_id = self.execute(
+            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, ?, ?)",
+            (now, sender, recipient, body),
+            c=c,
+        )
+        if deliver:
+            self.deliver_to_inbox(sender, recipient, msg_id, c=c)
+        return msg_id

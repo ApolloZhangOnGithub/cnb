@@ -74,20 +74,14 @@ def cmd_vote(db: BoardDB, identity: str, args: list[str]) -> None:
             (now, prop_id),
         )
         print(f"\n>>> PASSED ({prop_type}级, {s}/{eligible} >= {threshold}) <<<")
-        db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'SYSTEM', 'All', ?)",
-            (now, f"[VOTE] Proposal {padded} PASSED ({s}S/{o}O, threshold {threshold})"),
-        )
+        db.post_message("SYSTEM", "all", f"[VOTE] Proposal {padded} PASSED ({s}S/{o}O, threshold {threshold})")
     elif o > (eligible - threshold):
         db.execute(
             "UPDATE proposals SET status='FAILED', decided_at=? WHERE id=?",
             (now, prop_id),
         )
         print(f"\n>>> FAILED (无法达到 {threshold} 票) <<<")
-        db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'SYSTEM', 'All', ?)",
-            (now, f"[VOTE] Proposal {padded} FAILED ({s}S/{o}O, threshold {threshold})"),
-        )
+        db.post_message("SYSTEM", "all", f"[VOTE] Proposal {padded} FAILED ({s}S/{o}O, threshold {threshold})")
     else:
         print(f"  (待定，还需 {threshold - s} 票 SUPPORT 通过)")
 
@@ -118,10 +112,7 @@ def cmd_propose(db: BoardDB, identity: str, args: list[str]) -> None:
         "INSERT INTO proposals(number, slug, type, content, created_at) VALUES (?, ?, ?, ?, ?)",
         (number, slug, prop_type, content, now),
     )
-    db.execute(
-        "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-        (now, name, f"[PROPOSAL #{number}] {content}"),
-    )
+    db.post_message(name, "all", f"[PROPOSAL #{number}] {content}")
     print(f"OK 提案 #{number} 已创建 (type={prop_type})")
 
 

@@ -3,7 +3,7 @@
 import subprocess
 import time
 
-from lib.board_db import BoardDB, ts
+from lib.board_db import BoardDB
 from lib.common import validate_identity
 
 GIT_LOCK_TTL = 60
@@ -70,12 +70,7 @@ def cmd_git_unlock(db: BoardDB, identity: str, args: list[str]) -> None:
 
     if holder != name and force:
         print(f"WARN: force-releasing git lock held by '{holder}'")
-        now = ts()
-        msg_id = db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'SYSTEM', ?, ?)",
-            (now, holder, f"[GIT-LOCK] {name} force-released your git lock"),
-        )
-        db.execute("INSERT INTO inbox(session, message_id) VALUES (?, ?)", (holder, msg_id))
+        db.post_message("SYSTEM", holder, f"[GIT-LOCK] {name} force-released your git lock", deliver=True)
 
     db.execute("DELETE FROM git_locks WHERE id=1")
     print("OK git-lock released")

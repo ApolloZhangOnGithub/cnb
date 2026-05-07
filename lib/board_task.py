@@ -94,13 +94,7 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
         print(f"OK task #{task_id} added to {target} ({status})")
 
         if target != name:
-            now = ts()
-            msg_id = db.execute(
-                "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, ?, ?)",
-                (now, name, target, f"[TASK #{task_id}] {desc}"),
-                c=c,
-            )
-            db.execute("INSERT INTO inbox(session, message_id) VALUES (?, ?)", (target, msg_id), c=c)
+            db.post_message(name, target, f"[TASK #{task_id}] {desc}", deliver=True, c=c)
             print(f"OK notified {target}")
     _print_queue(db, target)
 

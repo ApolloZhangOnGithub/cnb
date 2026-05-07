@@ -32,11 +32,7 @@ def cmd_post(db: BoardDB, identity: str, args: list[str]) -> None:
             (tid, name, body),
             c=c,
         )
-        db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-            (now, name, f"[BBS] 新帖「{title}」({tid})"),
-            c=c,
-        )
+        db.post_message(name, "all", f"[BBS] 新帖「{title}」({tid})", c=c)
     print(f"OK 帖子已创建: {tid}")
     print(f"  标题: {title}")
     print(f"  查看: ./board --as <name> thread {tid}")
@@ -60,18 +56,13 @@ def cmd_reply(db: BoardDB, identity: str, args: list[str]) -> None:
         raise SystemExit(1)
 
     title = db.scalar("SELECT title FROM threads WHERE id=?", (full_tid,))
-    now = ts()
     with db.conn() as c:
         db.execute(
             "INSERT INTO thread_replies(thread_id, author, body) VALUES (?, ?, ?)",
             (full_tid, name, body),
             c=c,
         )
-        db.execute(
-            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, 'all', ?)",
-            (now, name, f"[BBS] 回帖「{title}」({full_tid})"),
-            c=c,
-        )
+        db.post_message(name, "all", f"[BBS] 回帖「{title}」({full_tid})", c=c)
     print(f"OK 回帖成功 (帖子: {full_tid})")
 
 
