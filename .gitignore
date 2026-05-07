@@ -29,7 +29,8 @@ instances/
 
 # ruff
 .ruff_cache/
-.claude/
+.claude/*
+!.claude/.gitignore
 !.claude/commands/
 !.claude/settings.json
 !.claude/settings.local.json
