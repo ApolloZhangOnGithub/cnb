@@ -17,7 +17,7 @@ def _setup_db(tmp_path: Path) -> BoardDB:
     conn.executescript(schema.read_text())
     conn.execute("INSERT INTO sessions(name) VALUES ('alice')")
     conn.execute("INSERT INTO sessions(name) VALUES ('bob')")
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
     conn.commit()
     conn.close()
     return BoardDB(db_path)

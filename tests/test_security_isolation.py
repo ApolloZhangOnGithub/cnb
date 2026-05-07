@@ -40,7 +40,7 @@ def _make_project(tmp_path: Path, name: str, sessions: list[str]) -> BoardDB:
     conn.executescript(schema.read_text())
     for s in sessions:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (s,))
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '6')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
     conn.commit()
     conn.close()
 
