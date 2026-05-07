@@ -103,6 +103,23 @@ else:
             esac
             exit 0 ;;
         ui)         shift; exec "$CLAUDES_HOME/bin/board" tui ;;
+        leaderboard)
+            echo "${B}${G}◆ 贡献排行榜${N}"
+            echo ""
+            git -C "$CNB_PROJECT" log --format='%aN%n%(trailers:key=Co-Authored-By,valueonly,separator=%x0A)' \
+                | sed '/^$/d' | sed 's/^ *//' | sed 's/ *<[^>]*>//g' \
+                | sort | uniq -c | sort -rn \
+                | awk -v b="$B" -v n="$N" -v g="$G" -v y="$Y" '{
+                    rank++
+                    if (rank == 1) medal = "🥇"
+                    else if (rank == 2) medal = "🥈"
+                    else if (rank == 3) medal = "🥉"
+                    else medal = "  "
+                    name = ""
+                    for (i = 2; i <= NF; i++) name = name (i > 2 ? " " : "") $i
+                    printf "  %s %s%-20s%s %s%d commits%s\n", medal, b, name, n, g, $1, n
+                }'
+            exit 0 ;;
         version|--version|-v) echo "cnb v${VERSION}"; exit 0 ;;
         help|--help|-h)
             printf "${B}${G}◆ cnb${N} ${D}v${VERSION}${N}\n"
@@ -120,6 +137,7 @@ else:
             printf "  cnb stop <name>       停止某个同学\n"
             printf "  cnb projects list     列出所有已注册的项目\n"
             printf "  cnb projects cleanup  清理已失效的项目\n"
+            printf "  cnb leaderboard       贡献排行榜\n"
             printf "  cnb doctor            健康检查\n\n"
             printf "  cnb board [...]       底层消息/任务命令\n"
             printf "  cnb swarm [...]       管理后台同学\n"

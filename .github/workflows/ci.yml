@@ -50,6 +50,14 @@ jobs:
             echo "Use patch versions liberally: 0.5.1 → 0.5.2, not 0.6.0."
             exit 1
           fi
+      - name: Require Co-Authored-By on every commit
+        run: |
+          BODY=$(git log -1 --format='%b' HEAD)
+          if ! echo "$BODY" | grep -qi 'co-authored-by:'; then
+            echo "ERROR: Commit must include a Co-Authored-By trailer."
+            echo "Example: Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+            exit 1
+          fi
       - name: Check npm publish status
         run: |
           LOCAL=$(cat VERSION)

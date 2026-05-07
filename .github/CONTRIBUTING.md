@@ -50,6 +50,22 @@ New features get a **permanent owner** who is responsible for:
 
 Owner self-organizes: pulls in help, splits tasks, makes decisions. Reports results, not process.
 
+## Contributor attribution
+
+Every commit must include a `Co-Authored-By` trailer identifying who wrote it:
+
+```
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: musk
+```
+
+Multiple co-authors are fine — list everyone who contributed. CI rejects commits without at least one `Co-Authored-By` line.
+
+View the contributor leaderboard:
+```bash
+cnb leaderboard
+```
+
 ## npm publishing
 
 After a release commit:
