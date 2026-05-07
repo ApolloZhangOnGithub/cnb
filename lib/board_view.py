@@ -346,7 +346,7 @@ def cmd_history(db: BoardDB, args: list[str]) -> None:
         "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 100) "
         "FROM messages WHERE sender=? OR recipient=? OR (recipient='all' AND sender=?) "
         "OR body LIKE '%' || ? || '%' ESCAPE '\\' ORDER BY id DESC LIMIT ?",
-        (subject, subject, subject, subject, limit),
+        (subject, subject, subject, escape_like(subject), limit),
     )
     for (line,) in reversed(rows):
         print(f"  {line}")

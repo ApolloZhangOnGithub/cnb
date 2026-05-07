@@ -1,5 +1,6 @@
 """board_pending — pending actions queue: add / list / verify / retry / resolve."""
 
+import shlex
 import subprocess
 
 from lib.board_db import BoardDB, ts
@@ -134,7 +135,7 @@ def _pending_verify(db: BoardDB, identity: str, args: list[str]) -> None:
         if not verify_cmd:
             continue
         try:
-            r = subprocess.run(verify_cmd, shell=True, capture_output=True, text=True, timeout=30)
+            r = subprocess.run(shlex.split(verify_cmd), capture_output=True, text=True, timeout=30)
             if r.returncode == 0:
                 now = ts()
                 db.execute(
@@ -186,7 +187,7 @@ def _pending_retry(db: BoardDB, identity: str, args: list[str]) -> None:
         if not retry_cmd:
             continue
         try:
-            r = subprocess.run(retry_cmd, shell=True, capture_output=True, text=True, timeout=60)
+            r = subprocess.run(shlex.split(retry_cmd), capture_output=True, text=True, timeout=60)
             if r.returncode == 0:
                 db.execute("UPDATE pending_actions SET status='retried' WHERE id=?", (aid,))
                 print(f"  #{aid}: 重试成功 ✓")
