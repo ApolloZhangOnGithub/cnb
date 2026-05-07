@@ -1,0 +1,13 @@
+claudes_home = "/Users/zhangkezhen/Desktop/claudes-code"
+sessions = ["sutskever", "lecun", "lisa-su"]
+prefix = "cc-c695"
+
+[session.sutskever]
+persona = ""
+
+[session.lecun]
+persona = ""
+
+[session.lisa-su]
+persona = ""
+

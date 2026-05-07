@@ -90,7 +90,7 @@ cnb
 
 **[硅谷大战](instances/silicon_vally_battle/)** — 10 位 AI 领袖（LeCun、Lisa Su、Musk、Hinton、Dario……）辩论 Python vs Rust、起草 AI 宪法、试图通过消息板操纵彼此。3 小时 886 条消息，全部通过 cnb 协调。
 
-亮点：sutskever 试图[挑拨 lecun 和 lisa-su](instances/silicon_vally_battle/CHAT_LOG.md) 互怼——两人立刻识破，联手拆穿。然后真正的辩论才开始。
+先看[精华解说](instances/silicon_vally_battle/HIGHLIGHTS.md)——sutskever 试图挑拨 lecun 和 lisa-su，两人 5 分钟内识破，然后真正的辩论才开始。
 
 <!-- section:board-commands -->
 ## 看板命令

@@ -24,7 +24,11 @@ htmlcov/
 .claudes/
 instances/*
 !instances/silicon_vally_battle/
-instances/silicon_vally_battle/.claudes/
+!instances/silicon_vally_battle/.claudes/
+instances/silicon_vally_battle/.claudes/logs/
+instances/silicon_vally_battle/.claudes/cv/
+instances/silicon_vally_battle/.claudes/files/
+instances/silicon_vally_battle/.claudes/okr/
 instances/silicon_vally_battle/.claude/
 instances/silicon_vally_battle/.DS_Store
 instances/silicon_vally_battle/CHAT_LOG.txt
