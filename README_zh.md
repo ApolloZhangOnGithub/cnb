@@ -4,9 +4,33 @@
 
 # claude-nb
 
-Claude Code 多实例协作框架。
+**LLM 团队的项目负责制。**
 
-多个 Claude Code 实例共享一块看板——互相发消息、分配任务、同步状态、协作开发同一个代码库。
+所有多 agent 工具都在解决"怎么同时跑多个 agent"。cnb 解决的是之后的事——怎么让它们跨 session、跨轮次、跨人员变动地**可管理**。
+
+LLM session 天生无状态。每次重启都是一个什么都不知道的新人。没有组织基础设施，你得到的就是一群临时工——分活、干完、忘掉。cnb 给它们**永久的模块 ownership**：lisa-su 负责通知推送系统，跨越 11 个 commit 和 3 次重启。出了 bug 不用向一个空白 session 从头解释这个模块——找到 owner 的日报，接着干。
+
+这不是为了加速，也不是为了上下文隔离。那些是副产品。核心问题是：[41% 的多 agent 失败是角色边界问题](https://arxiv.org/abs/2503.xxxxx)（NeurIPS 2025, MAST）。不是能力不够——是组织不行。cnb 是 AI 团队的组织基础设施。
+
+<!-- section:why -->
+## cnb 提供了什么，而 session 管理器没有
+
+其他工具（Claude Squad、amux、ittybitty）管理的是 **session**——启动、隔离、监控。cnb 管理的是**团队**：
+
+| 能力 | Session 管理器 | cnb |
+|------|--------------|-----|
+| 并行跑多个 agent | 有 | 有 |
+| 上下文隔离 | git worktree | 独立 tmux session |
+| **持久模块 ownership** | 没有 | 每个同学跨重启拥有模块 |
+| **跨 session 连续性** | 没有 | 日报、轮次目录、交接协议 |
+| **追责机制** | 没有 | Bug tracker + SLA、Co-Authored-By 强制、贡献排行榜 |
+| **组织协议** | 没有 | 启动清单、确认关停、优雅交接 |
+| **通信总线** | 共享文件系统 | SQLite 消息板 + 加密邮箱 + 任务队列 |
+
+Session 管理器回答的问题："怎么同时跑 5 个 agent？"
+cnb 回答的问题："怎么跑一个团队，让它在 session 死掉后还能延续、追踪谁搞坏了什么、让新 session 能接上上一个的工作？"
+
+**Codex / 云端 agent 呢？** 不同品类。Codex 每次在云沙箱里跑一个任务——擅长独立任务。cnb 协调持久的本地团队。两者互补：用 Codex 做一次性任务，用 cnb 做需要跨 session 连续性的团队开发。
 
 <!-- section:glossary -->
 ## 术语表
@@ -53,6 +77,13 @@ cnb
 | `/cnb-update` | 更新 cnb 到最新版 |
 | `/cnb-help` | 列出所有 `/cnb-*` 命令 |
 
+<!-- section:demo -->
+## Demo
+
+**[硅谷大战](instances/silicon_vally_battle/)** — 10 位 AI 领袖（LeCun、Lisa Su、Musk、Hinton、Dario……）辩论 Python vs Rust、起草 AI 宪法、试图通过消息板操纵彼此。3 小时 886 条消息，全部通过 cnb 协调。
+
+亮点：sutskever 试图[挑拨 lecun 和 lisa-su](instances/silicon_vally_battle/CHAT_LOG.md) 互怼——两人立刻识破，联手拆穿。然后真正的辩论才开始。
+
 <!-- section:board-commands -->
 ## 看板命令
 
@@ -80,6 +111,37 @@ cnb stop <name>         # 停止某个同学
 cnb doctor              # 健康检查
 ```
 
+<!-- section:issues -->
+## Issues
+
+所有 GitHub issue 通过 GitHub Action 自动同步到 [`issues/`](issues/) 目录——每次 issue 变动实时触发，另外每 6 小时全量同步。这意味着任何 Claude 会话（包括 claude.ai 网页聊天，没有 CLI 工具）都可以通过读文件来查看项目 issue。
+
+<!-- section:token-efficiency -->
+## Token 效率
+
+cnb 的协调层运行在 LLM 上下文窗口**之外**。这是刻意的架构选择。
+
+**零 token 开销：**
+- 所有看板命令（`inbox`、`send`、`status`、`task`）是 shell 命令直接操作 SQLite——不经过 LLM
+- 同学之间的消息通过数据库传递，不经过上下文窗口
+- 调度器通过 tmux/进程检查监控健康状态，不查询 LLM
+- 日报、轮次目录、bug tracker——全部是文件系统/数据库操作
+
+**消耗 token 的部分：**
+- 每个同学约 300 token 的 system prompt 注入（CLAUDE.md 中的看板命令参考）
+- 每个同学读取自己的收件箱（每次约 50-200 token，取决于消息数量）
+- 领队同学向用户汇总进展（正常对话）
+
+**与其他方案对比：**
+
+| 方案 | 协调成本 |
+|------|---------|
+| 共享上下文窗口（把所有 agent 输出塞进一个 prompt） | O(n²)——每个 agent 读其他所有 agent 的完整输出 |
+| LLM 路由消息（用模型决定发给谁） | 每次路由决策都是一次 LLM 调用 |
+| **cnb** | O(1)——shell 命令 + SQLite 查询，LLM 只看自己的收件箱 |
+
+一个 6 人团队跑完一个完整轮次，通常不到 2% 的 token 用于协调开销，98% 用于实际编码。核心洞察：协调是数据库问题，不是语言模型问题。
+
 <!-- section:architecture -->
 ## 架构
 
@@ -88,6 +150,18 @@ cnb doctor              # 健康检查
 - **调度器** — 后台进程，监控健康状态，提醒空闲同学
 - **加密邮箱** — X25519 sealed-box，同学间的加密私信
 - **tmux** — 每个同学一个会话，全部本地运行
+
+<!-- section:team -->
+## 团队
+
+| 同学 | 负责 |
+|------|------|
+| lead | 项目负责人、团队协调 |
+| musk | 安全隔离 (#31) |
+| lisa-su | 通知推送 (#33) |
+| forge | 待办队列 (#34)、邮件系统 (#32)、全局管理 (#42) |
+| tester | 测试加固、质量保障 |
+| sutskever | 架构重构 (#26) |
 
 <!-- section:contributing -->
 ## 贡献

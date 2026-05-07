@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""check-changelog — enforce changelog discipline on release versions.
+
+Rules:
+  1. Release versions (no -dev suffix) MUST have a matching ## {version} entry
+     in CHANGELOG.md with actual content (not just a header).
+  2. The entry must NOT be marked "(unreleased)".
+  3. Dev versions always pass — the unreleased section accumulates freely.
+
+Usage:
+    ./bin/check-changelog          # check and exit 0/1
+    ./bin/check-changelog --help   # this message
+"""
+
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+VERSION_FILE = ROOT / "VERSION"
+CHANGELOG_FILE = ROOT / "CHANGELOG.md"
+
+
+def read_version() -> str:
+    return VERSION_FILE.read_text().strip()
+
+
+def is_release(ver: str) -> bool:
+    return not ver.endswith("-dev")
+
+
+def find_changelog_section(ver: str, text: str) -> tuple[bool, str]:
+    """Find ## {ver} section in changelog. Returns (found, section_body)."""
+    pattern = re.compile(
+        rf"^## {re.escape(ver)}\b[^\n]*\n(.*?)(?=^## |\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    m = pattern.search(text)
+    if not m:
+        return False, ""
+    return True, m.group(1).strip()
+
+
+def check_not_unreleased(ver: str, text: str) -> bool:
+    """Return True if the version header is NOT marked unreleased."""
+    pattern = re.compile(rf"^## {re.escape(ver)}.*\(unreleased\)", re.MULTILINE | re.IGNORECASE)
+    return not pattern.search(text)
+
+
+def previous_release(text: str, current: str) -> str | None:
+    """Find the most recent release version before current in CHANGELOG.md."""
+    versions = re.findall(r"^## (\d+\.\d+\.\d+)\b", text, re.MULTILINE)
+    for v in versions:
+        if v != current:
+            return v
+    return None
+
+
+def main() -> None:
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print(__doc__)
+        return
+
+    ver = read_version()
+
+    if not is_release(ver):
+        print(f"OK {ver} is a dev version — changelog check skipped")
+        return
+
+    if not CHANGELOG_FILE.exists():
+        print(f"ERROR: CHANGELOG.md not found. Release {ver} requires a changelog entry.")
+        raise SystemExit(1)
+
+    text = CHANGELOG_FILE.read_text()
+
+    found, body = find_changelog_section(ver, text)
+    if not found:
+        prev = previous_release(text, ver)
+        hint = f" Summarize all changes since {prev}." if prev else ""
+        print(f"ERROR: CHANGELOG.md has no entry for release {ver}.{hint}")
+        print(f"Add a '## {ver}' section with Features, Bug Fixes, etc.")
+        raise SystemExit(1)
+
+    if not check_not_unreleased(ver, text):
+        print(f"ERROR: CHANGELOG.md entry for {ver} is marked (unreleased). Remove the marker for a release.")
+        raise SystemExit(1)
+
+    content_lines = [line for line in body.splitlines() if line.strip() and not line.startswith("#")]
+    if len(content_lines) < 3:
+        print(f"ERROR: CHANGELOG.md entry for {ver} is too thin ({len(content_lines)} content lines).")
+        print("A release changelog must summarize all changes since the previous release.")
+        raise SystemExit(1)
+
+    print(f"OK CHANGELOG.md has a valid entry for release {ver} ({len(content_lines)} content lines)")
+
+
+if __name__ == "__main__":
+    main()

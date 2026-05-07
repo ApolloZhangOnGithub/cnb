@@ -1,0 +1,33 @@
+name: Feature / Bug / Task
+description: 提交新 issue（必须先检查 ROADMAP）
+body:
+  - type: checkboxes
+    id: roadmap-check
+    attributes:
+      label: ROADMAP 检查
+      description: 核心团队成员必须在提 issue 前检查 ROADMAP.md
+      options:
+        - label: 已阅读 ROADMAP.md，确认本 issue 不与现有计划冲突或重复
+          required: true
+  - type: textarea
+    id: roadmap-relation
+    attributes:
+      label: 与 ROADMAP 的关系
+      description: 说明本 issue 与 ROADMAP 中哪些 phase/issue 有关联，或为什么属于 ROADMAP 之外的范围
+      placeholder: "与 #42 有关联但不重叠，因为..."
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 描述
+      description: 要做什么、为什么
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: 设计要点
+      description: 技术方案、影响面、风险
+    validations:
+      required: false

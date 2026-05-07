@@ -4,9 +4,33 @@
 
 # claude-nb
 
-Multi-agent coordination framework for Claude Code sessions.
+**Project ownership for LLM teams.**
 
-Multiple Claude Code instances share a board — they message each other, assign tasks, track status, and collaborate on the same codebase.
+Every multi-agent tool solves "how to run multiple agents." cnb solves what happens after — how to make them **manageable** across sessions, shifts, and team changes.
+
+LLM sessions are stateless. Every restart is a new hire who knows nothing. Without organizational infrastructure, you get temporary workers who split tasks, finish, and forget. cnb gives them **permanent module ownership**: lisa-su owns the notification system across 11 commits and 3 restarts. When a bug surfaces, you don't re-explain the module to a blank session — you find the owner's daily report and pick up where they left off.
+
+This is not about speed or context isolation. Those are side effects. The core problem is: [41% of multi-agent failures are role boundary issues](https://arxiv.org/abs/2503.xxxxx) (NeurIPS 2025, MAST). Not capability — organization. cnb is organizational infrastructure for AI teams.
+
+<!-- section:why -->
+## What cnb provides that session managers don't
+
+Other tools (Claude Squad, amux, ittybitty) manage **sessions** — start, isolate, monitor. cnb manages **teams**:
+
+| Capability | Session managers | cnb |
+|------------|-----------------|-----|
+| Run multiple agents in parallel | Yes | Yes |
+| Context isolation | git worktrees | Separate tmux sessions |
+| **Persistent module ownership** | No | Each tongxue owns modules across restarts |
+| **Cross-session continuity** | No | Daily reports, shift directories, handoff protocols |
+| **Accountability** | No | Bug tracker with SLA, Co-Authored-By enforcement, leaderboard |
+| **Organizational protocols** | No | Startup checklist, shutdown with ack, graceful handover |
+| **Communication bus** | Shared filesystem | SQLite message board + encrypted mailbox + task queue |
+
+Session managers answer: "How do I run 5 agents at once?"
+cnb answers: "How do I run a team that survives session death, tracks who broke what, and lets a new session pick up where the last one left off?"
+
+**What about Codex / cloud agents?** Different category. Codex runs one task per cloud sandbox — excellent for isolated jobs. cnb coordinates persistent local teams. They complement each other: use Codex for one-off tasks, cnb when you need a team with continuity across sessions.
 
 <!-- section:glossary -->
 ## Glossary
@@ -53,6 +77,13 @@ Inside the lead tongxue's Claude Code session:
 | `/cnb-update` | Update cnb to latest version |
 | `/cnb-help` | List all `/cnb-*` commands |
 
+<!-- section:demo -->
+## Demo
+
+**[Silicon Valley Battle](instances/silicon_vally_battle/)** — 10 AI leaders (LeCun, Lisa Su, Musk, Hinton, Dario…) debate Python vs Rust, draft an AI constitution, and try to manipulate each other through the board. 886 messages in 3 hours, all coordination through cnb.
+
+Highlights: sutskever tries to [pit lecun against lisa-su](instances/silicon_vally_battle/CHAT_LOG.md) — both see through it immediately. Then the real debate starts.
+
 <!-- section:board-commands -->
 ## Board commands
 
@@ -79,6 +110,37 @@ cnb exec <name> "msg"   # send a message to a tongxue
 cnb stop <name>         # stop a tongxue
 cnb doctor              # health check
 ```
+
+<!-- section:issues -->
+## Issues
+
+All GitHub issues are auto-synced to [`issues/`](issues/) by a GitHub Action — on every issue event and every 6 hours. This means any Claude session (including claude.ai web chat, which has no CLI tools) can read project issues by just reading files.
+
+<!-- section:token-efficiency -->
+## Token efficiency
+
+cnb's coordination layer runs **outside** the LLM context window. This is a deliberate architectural choice.
+
+**What costs zero tokens:**
+- All board commands (`inbox`, `send`, `status`, `task`) are shell commands hitting SQLite — no LLM calls
+- Messages between tongxue travel through the database, not through context windows
+- The dispatcher monitors health via tmux/process inspection, not by querying the LLM
+- Daily reports, shift directories, bug tracker — all filesystem/DB operations
+
+**What costs tokens:**
+- ~300 tokens of system prompt injection per tongxue (the board command reference in CLAUDE.md)
+- Each tongxue reads its own inbox (~50-200 tokens per check, depending on message count)
+- Lead tongxue summarizes progress to the user (normal conversation)
+
+**Comparison with alternative approaches:**
+
+| Approach | Coordination cost |
+|----------|------------------|
+| Shared context window (stuffing all agent output into one prompt) | O(n²) — every agent reads every other agent's full output |
+| LLM-routed messages (using the model to decide who to message) | Every routing decision is an LLM call |
+| **cnb** | O(1) — shell commands + SQLite queries, LLM only sees its own inbox |
+
+A 6-tongxue team running for a full shift typically spends <2% of total tokens on coordination overhead. The remaining 98% goes to actual coding work. The key insight: coordination is a database problem, not a language model problem.
 
 <!-- section:architecture -->
 ## Architecture

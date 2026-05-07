@@ -4,11 +4,12 @@
 
 Every change — feature, bug fix, refactor — follows this flow:
 
-1. **Create issue first** — describe what and why before writing code
-2. **Comment "正在做"** — when you start working on it
-3. **Implement + test** — code, tests, ruff, mypy all pass
-4. **Verify** — confirm the feature works end-to-end
-5. **Close issue** — only after verification passes
+1. **Check ROADMAP first** — read `ROADMAP.md`, confirm the issue doesn't duplicate or conflict with existing plans. Note the relationship in the issue body
+2. **Create issue** — describe what and why before writing code. Use the issue template (includes mandatory ROADMAP checklist)
+3. **Comment "正在做"** — when you start working on it
+4. **Implement + test** — code, tests, ruff, mypy all pass
+5. **Verify** — confirm the feature works end-to-end
+6. **Close issue** — only after verification passes
 
 No drive-by commits. If you're fixing something, there should be an issue for it.
 
@@ -19,6 +20,22 @@ No drive-by commits. If you're fixing something, there should be an issue for it
 - Save minor/major bumps for real feature releases
 - After a release (`0.5.1`), immediately bump to next dev (`0.5.2-dev`)
 - VERSION, package.json, and pyproject.toml must stay in sync (`bin/sync-version --check`)
+
+## Release changelog
+
+When publishing a release version (no `-dev` suffix), CHANGELOG.md **must** have a `## {version}` section that consolidates all changes since the previous release. This is enforced by CI (`bin/check-changelog`).
+
+Rules:
+- **Dev versions** (`0.5.14-dev`) accumulate freely under an `(unreleased)` header — no enforcement
+- **Release versions** (`0.6.0`) must have a dated, non-unreleased entry with real content (≥3 lines)
+- The release entry must **summarize all dev versions** since the last release — don't just copy the latest dev section
+- Group by Features / Bug Fixes / Security / Tests / Breaking Changes as applicable
+- If you're cutting a release and CHANGELOG.md doesn't have the entry, CI will block the merge
+
+Workflow:
+1. During dev: keep the `## X.Y.Z-dev (unreleased)` section updated as you go
+2. At release time: rename the header to `## X.Y.Z (YYYY-MM-DD)`, consolidate all accumulated dev entries, trim noise
+3. After release: add a new `## X.Y.(Z+1)-dev (unreleased)` section at the top
 
 ## Naming
 

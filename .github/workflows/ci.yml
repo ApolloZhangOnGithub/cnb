@@ -18,8 +18,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
-      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version tests/
-      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version tests/
+      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog tests/
+      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog tests/
 
   typecheck:
     runs-on: ubuntu-latest
@@ -58,6 +58,8 @@ jobs:
             echo "Example: Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
             exit 1
           fi
+      - name: Changelog required for release versions
+        run: python bin/check-changelog
       - name: Check npm publish status
         run: |
           LOCAL=$(cat VERSION)
