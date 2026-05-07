@@ -1,22 +1,39 @@
 # Changelog
 
-## 0.4.2-dev (unreleased)
+## 0.5.1-dev (unreleased)
 
 ### Features
 
 - **NudgeCoordinator** — Unified nudge concern replacing separate InboxNudger/QueuedMessageFlusher/IdleNudger. Enforces per-session cooldown across all nudge types, priority ordering (inbox > queued flush > idle), effectiveness tracking with exponential backoff, and cached session status checks.
 - **Stale session detection** — `swarm start` now detects sessions where agent exited but tmux lingers, auto-cleans and restarts them. `swarm status` shows "stale" state.
+- **Themes: threebody & titan** — Two new themes: `threebody` (三体 characters) and `titan` (科技先锋 — Chinese + international tech leaders). Removed `pokemon` theme.
+- **Theme profiles** — New `lib/theme_profiles.py` provides full-name + info profiles for all person-name themes (ai, threebody, titan). Profiles are injected into agent system prompts at startup so agents know who they're named after.
 
 ### Bug Fixes
 
 - **Dispatcher pid lock cleanup** — Pidfile removed on graceful shutdown, preventing stale locks.
 - **TimeAnnouncer restart safety** — Initializes `last_hour` to current hour on startup, preventing duplicate announcements.
+- **AI theme duplicate names** — `sutskever` and `amodei` were duplicates of `ilya` and `dario` (same people, different name forms). Replaced with `vaswani` (Ashish Vaswani, Transformer inventor) and `radford` (Alec Radford, GPT author).
 
 ### Tests
 
-- 336 tests total (up from 314)
-- 16 NudgeCoordinator tests: cooldown, backoff, priority, offline sessions, structure
-- 6 dispatcher tests: pid lock, TimeAnnouncer init
+- **667 tests total** (up from 314 — nearly doubled)
+- NudgeCoordinator (16): cooldown, backoff, priority, offline sessions, structure
+- Dispatcher (6): pid lock, TimeAnnouncer init
+- Concern helpers (35): tmux ops, session detection, board_send, process inspection
+- FileWatcher (15): tick/queue, suspension filtering, thread lifecycle
+- BoardDB (27): connection lifecycle, query methods, deliver_to_inbox, signals
+- Board admin (21): suspend, resume, kudos, kudos leaderboard
+- Board mailbox (16): keygen, seal/unseal encryption, mailbox log
+- Board lock (23): git lock acquire/extend/block, force-unlock, index.lock cleanup
+- Board view (24): heartbeat status, P0 detection, file retrieval, history, freshness
+- Board messaging (17): send/inbox/ack validation
+- Migrate (15): schema migration discovery, version tracking, apply/skip
+- Maintenance (17): prune, backup, restore, dry-run
+- Doctor (23): DB integrity, orphan detection, config, Python version, disk space
+- Resources (14): notify_if_changed state transitions/dedup, JSON serialization
+- Health concerns (15), coral (12), idle concerns (22), adaptive throttle (9)
+- Entrypoint (25): worker clamping, theme selection, banner, system prompt, slash commands
 
 ## 0.4.1 (2026-05-08 03:25)
 
