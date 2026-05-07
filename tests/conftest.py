@@ -29,13 +29,19 @@ DEFAULT_SESSIONS = ["alice", "bob", "charlie"]
 
 
 @pytest.fixture(autouse=True)
-def _clear_helpers_db_cache():
-    """Clear the module-level _db_cache in concerns/helpers to prevent cross-test leaks."""
+def _clear_module_state():
+    """Clear module-level caches and signals to prevent cross-test leaks."""
     yield
     try:
         from lib.concerns.helpers import _db_cache
 
         _db_cache.clear()
+    except ImportError:
+        pass
+    try:
+        from lib.board_db import inbox_delivered
+
+        inbox_delivered.clear()
     except ImportError:
         pass
 
