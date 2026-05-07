@@ -160,6 +160,28 @@ def _update_settings(project_dir: Path, claudes_home: Path) -> None:
     settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
 
 
+def _install_pre_commit_hook(project_dir: Path, claudes_home: Path) -> None:
+    """Install bin/secret-scan as a git pre-commit hook if git repo exists."""
+    git_dir = project_dir / ".git"
+    if not git_dir.is_dir():
+        return
+    hooks_dir = git_dir / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+    hook_path = hooks_dir / "pre-commit"
+    secret_scan = claudes_home / "bin" / "secret-scan"
+    if not secret_scan.exists():
+        return
+    if hook_path.exists():
+        content = hook_path.read_text()
+        if "secret-scan" in content:
+            return
+        content = content.rstrip("\n") + f"\n\n# cnb: block sensitive files\n{secret_scan}\n"
+        hook_path.write_text(content)
+    else:
+        hook_path.write_text(f"#!/bin/sh\n{secret_scan}\n")
+    hook_path.chmod(0o755)
+
+
 DEFAULT_SESSIONS = ["s1", "s2", "s3"]
 
 
@@ -266,6 +288,9 @@ def main() -> None:
     # .gitignore for generated stuff
     gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\ndispatcher.pid\nkeys/\n"
     (claudes_dir / ".gitignore").write_text(gitignore_content)
+
+    # Install pre-commit hook for secret scanning
+    _install_pre_commit_hook(project_dir, claudes_home)
 
     # Update .claude/settings.json (merge hooks if exists, create if not)
     _update_settings(project_dir, claudes_home)

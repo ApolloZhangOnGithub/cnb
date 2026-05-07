@@ -7,6 +7,13 @@ repos:
       - id: ruff-format
   - repo: local
     hooks:
+      - id: secret-scan
+        name: Block secrets from being committed
+        entry: bin/secret-scan
+        language: python
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
       - id: readme-sync
         name: README bilingual sync check
         entry: bin/check-readme-sync
