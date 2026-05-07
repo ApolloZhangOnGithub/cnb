@@ -93,6 +93,11 @@ On startup:
 board --as <your-name> inbox
 ```
 
+**Team leads only**: on first startup, check the global bulletin board for org-wide announcements:
+```bash
+cat ~/.cnb/bulletin.md
+```
+
 ### Commands
 
 ```bash
