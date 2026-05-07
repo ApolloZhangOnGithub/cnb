@@ -103,9 +103,7 @@ def check_foreign_keys(path: Path) -> bool:
     try:
         conn = sqlite3.connect(str(path))
         # PRAGMA foreign_keys is connection-level; check table definitions instead
-        rows = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND sql LIKE '%REFERENCES%'"
-        ).fetchall()
+        rows = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND sql LIKE '%REFERENCES%'").fetchall()
         conn.close()
         if rows:
             _ok(f"Foreign keys defined ({len(rows)} tables)")

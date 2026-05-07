@@ -18,18 +18,17 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
-      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init tests/
-      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init tests/
+      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/registry bin/sync-version tests/
+      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/registry bin/sync-version tests/
 
   typecheck:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install mypy
+      - run: pip install -e . && pip install mypy
       - run: mypy lib/
 
   check-consistency:
