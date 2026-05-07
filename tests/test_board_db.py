@@ -323,3 +323,68 @@ class TestDeliverToInbox:
             assert "alice" not in received
         finally:
             unsub()
+
+
+# ===========================================================================
+# post_message
+# ===========================================================================
+
+
+class TestPostMessage:
+    def test_inserts_message(self, tmp_path):
+        db_path = _init_db(tmp_path, ["alice", "bob"])
+        db = BoardDB(db_path)
+        msg_id = db.post_message("alice", "bob", "hello")
+        assert msg_id > 0
+        row = db.query_one("SELECT sender, recipient, body FROM messages WHERE id=?", (msg_id,))
+        assert row["sender"] == "alice"
+        assert row["recipient"] == "bob"
+        assert row["body"] == "hello"
+
+    def test_generates_timestamp(self, tmp_path):
+        db_path = _init_db(tmp_path, ["alice"])
+        db = BoardDB(db_path)
+        msg_id = db.post_message("alice", "all", "broadcast")
+        row = db.query_one("SELECT ts FROM messages WHERE id=?", (msg_id,))
+        assert row["ts"] is not None
+        assert len(row["ts"]) >= 10
+
+    def test_no_delivery_by_default(self, tmp_path):
+        db_path = _init_db(tmp_path, ["alice", "bob"])
+        db = BoardDB(db_path)
+        db.post_message("alice", "bob", "no inbox")
+        count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session='bob'")
+        assert count == 0
+
+    def test_deliver_true_creates_inbox(self, tmp_path):
+        db_path = _init_db(tmp_path, ["alice", "bob"])
+        db = BoardDB(db_path)
+        db.post_message("alice", "bob", "with inbox", deliver=True)
+        count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session='bob'")
+        assert count == 1
+
+    def test_deliver_broadcast(self, tmp_path):
+        db_path = _init_db(tmp_path, ["alice", "bob", "charlie"])
+        db = BoardDB(db_path)
+        db.post_message("alice", "all", "hi all", deliver=True)
+        bob_count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session='bob'")
+        charlie_count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session='charlie'")
+        alice_count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session='alice'")
+        assert bob_count == 1
+        assert charlie_count == 1
+        assert alice_count == 0
+
+    def test_with_connection(self, tmp_path):
+        db_path = _init_db(tmp_path, ["alice", "bob"])
+        db = BoardDB(db_path)
+        with db.conn() as c:
+            msg_id = db.post_message("alice", "bob", "in txn", c=c)
+        row = db.query_one("SELECT body FROM messages WHERE id=?", (msg_id,))
+        assert row["body"] == "in txn"
+
+    def test_system_sender(self, tmp_path):
+        db_path = _init_db(tmp_path, ["alice"])
+        db = BoardDB(db_path)
+        msg_id = db.post_message("SYSTEM", "all", "announcement")
+        row = db.query_one("SELECT sender FROM messages WHERE id=?", (msg_id,))
+        assert row["sender"] == "SYSTEM"
