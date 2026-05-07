@@ -162,6 +162,10 @@ class TestCmdHistory:
         output = capsys.readouterr().out
         assert "last 2" in output
 
+    def test_invalid_limit_exits(self, db):
+        with pytest.raises(SystemExit):
+            cmd_history(db, ["alice", "notanumber"])
+
 
 class TestCmdFreshness:
     def test_shows_sessions(self, db, capsys):

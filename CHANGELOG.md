@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.4-dev (unreleased)
+## 0.5.14-dev (unreleased)
 
 ### Features
 
@@ -25,6 +25,8 @@
 - **inject.py unhandled TimeoutExpired** — `send_tmux`/`send_screen` send-keys calls lacked try/except, crashing on slow tmux/screen responses.
 - **board_tui unhandled TimeoutExpired** — `_tmux()` and `_tmux_out()` subprocess calls could crash with TimeoutExpired. Added exception handling.
 - **board_view _git timeout** — `_git()` subprocess call lacked TimeoutExpired/OSError handling.
+- **board_view history invalid limit** — `cmd_history` passed user input to `int()` without catching `ValueError`. Now prints error and exits.
+- **panel invalid interval** — `panel.py main()` passed `sys.argv[1]` to `int()` without catching `ValueError`. Now prints error and exits.
 
 ### Security
 

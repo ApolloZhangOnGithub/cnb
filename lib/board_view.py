@@ -341,7 +341,11 @@ def cmd_history(db: BoardDB, args: list[str]) -> None:
         print("Usage: ./board history <session|topic> [limit]")
         raise SystemExit(1)
     subject = args[0].lower()
-    limit = int(args[1]) if len(args) > 1 else 20
+    try:
+        limit = int(args[1]) if len(args) > 1 else 20
+    except ValueError:
+        print(f"ERROR: 无效的数字: {args[1]}")
+        raise SystemExit(1)
 
     print(f"=== History: {args[0]} ===\n")
     print(f"Messages involving {args[0]} (last {limit}):")

@@ -89,7 +89,11 @@ def render(env: ClaudesEnv, interval: int) -> None:
 
 def main() -> None:
     env = ClaudesEnv.load()
-    interval = int(sys.argv[1]) if len(sys.argv) > 1 else 8
+    try:
+        interval = int(sys.argv[1]) if len(sys.argv) > 1 else 8
+    except ValueError:
+        print(f"ERROR: 无效的刷新间隔: {sys.argv[1]}")
+        raise SystemExit(1)
 
     # Hide cursor
     print("\033[?25l", end="", flush=True)
