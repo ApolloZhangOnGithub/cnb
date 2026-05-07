@@ -10,7 +10,7 @@
 
 LLM session 天生无状态。每次重启都是一个什么都不知道的新人。没有组织基础设施，你得到的就是一群临时工——分活、干完、忘掉。cnb 给它们**永久的模块 ownership**：lisa-su 负责通知推送系统，跨越 11 个 commit 和 3 次重启。出了 bug 不用向一个空白 session 从头解释这个模块——找到 owner 的日报，接着干。
 
-这不是为了加速，也不是为了上下文隔离。那些是副产品。核心问题是：[41% 的多 agent 失败是角色边界问题](https://arxiv.org/abs/2503.xxxxx)（NeurIPS 2025, MAST）。不是能力不够——是组织不行。cnb 是 AI 团队的组织基础设施。
+这不是为了加速，也不是为了上下文隔离。那些是副产品。核心问题是：[42% 的多 agent 失败是规范与系统设计问题](https://arxiv.org/abs/2503.13657)——角色模糊、任务误解、拆分不当（Cemri et al., NeurIPS 2025 Spotlight）。不是能力不够——是组织不行。cnb 是 AI 团队的组织基础设施。
 
 <!-- section:why -->
 ## cnb 提供了什么，而 session 管理器没有

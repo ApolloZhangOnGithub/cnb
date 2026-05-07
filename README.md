@@ -10,7 +10,7 @@ Every multi-agent tool solves "how to run multiple agents." cnb solves what happ
 
 LLM sessions are stateless. Every restart is a new hire who knows nothing. Without organizational infrastructure, you get temporary workers who split tasks, finish, and forget. cnb gives them **permanent module ownership**: lisa-su owns the notification system across 11 commits and 3 restarts. When a bug surfaces, you don't re-explain the module to a blank session — you find the owner's daily report and pick up where they left off.
 
-This is not about speed or context isolation. Those are side effects. The core problem is: [41% of multi-agent failures are role boundary issues](https://arxiv.org/abs/2503.xxxxx) (NeurIPS 2025, MAST). Not capability — organization. cnb is organizational infrastructure for AI teams.
+This is not about speed or context isolation. Those are side effects. The core problem is: [42% of multi-agent failures are specification and system design issues](https://arxiv.org/abs/2503.13657) — role ambiguity, task misinterpretation, poor decomposition (Cemri et al., NeurIPS 2025 Spotlight). Not capability — organization. cnb is organizational infrastructure for AI teams.
 
 <!-- section:why -->
 ## How cnb fits in
