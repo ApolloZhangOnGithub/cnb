@@ -4,6 +4,9 @@
 
 ### Features
 
+- **Ownership autonomy (Issue #45)** — Full ownership lifecycle: `board own claim/list/disown/map` for path-based ownership registry, `task done` auto-runs pytest before marking complete (skip with `--skip-verify`), auto-creates PR via `gh pr create` on feature branches after verified completion, `board scan` checks GitHub issues and CI status and routes notifications to path owners. Migration 008 adds `ownership` table.
+- **`.claudes/` → `.cnb/` rename with backward compatibility** — New projects initialize to `.cnb/`. Existing `.claudes/` projects keep working via fallback in `find_claudes_dir()`, `bin/cnb`, `bin/init`, and `lib/migrate.py`. Prints migration hint when legacy directory detected.
+
 - **Notification push system (Issue #33)** — Full notification infrastructure: TOML-based subscription config (`notifications.toml`), `NotificationPushConcern` for realtime @mention and bug activity delivery, `DigestScheduler` for daily/weekly digest scheduling, `generate_daily_digest` for activity summaries, and `bin/notify` CLI for subscription management, test delivery, and notification log viewing. Includes `notification_log` DB table for dedup.
 - **Pending actions queue** — `board pending` subcommand for tracking actions requiring user intervention (auth, approve, confirm). Supports add/list/verify/retry/resolve lifecycle with subprocess-based verification.
 - **Global project registry (Issue #36)** — `lib/global_registry.py` for cross-project discovery and shared credential status tracking. Registry at `~/.cnb/` stores project list and credential status (valid/expired/unknown). Integrated into `bin/init` (auto-register), `bin/cnb projects list|cleanup`, and `bin/doctor` (stale project and expired credential checks).

@@ -165,6 +165,16 @@ CREATE TABLE IF NOT EXISTS pending_actions(
 CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_actions(status);
 CREATE INDEX IF NOT EXISTS idx_pending_creator ON pending_actions(created_by);
 
+CREATE TABLE IF NOT EXISTS ownership(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session TEXT NOT NULL REFERENCES sessions(name) ON DELETE CASCADE,
+    path_pattern TEXT NOT NULL,
+    claimed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M','now','localtime')),
+    UNIQUE(session, path_pattern)
+);
+CREATE INDEX IF NOT EXISTS idx_ownership_session ON ownership(session);
+CREATE INDEX IF NOT EXISTS idx_ownership_path ON ownership(path_pattern);
+
 CREATE TABLE IF NOT EXISTS mail(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thread_id INTEGER REFERENCES mail(id) ON DELETE CASCADE,

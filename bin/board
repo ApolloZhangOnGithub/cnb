@@ -169,6 +169,9 @@ COMMANDS: list[Command] = [
     Command("bug", "lib.board_bug", "cmd_bug", "bug tracker", "bug {report|assign|fix|list|overdue}", hidden=True),
     # ── task ──
     Command("task", "lib.board_task", "cmd_task", "task queue management", "task {add|done|list|next}", hidden=True),
+    # ── ownership ──
+    Command("own", "lib.board_own", "cmd_own", "ownership registry", "own {claim|list|disown|map}"),
+    Command("scan", "lib.board_own", "cmd_scan", "scan issues/CI for owners", "scan"),
     # ── heartbeat ──
     Command(
         "pulse", "lib.board_pulse", "cmd_pulse", "heartbeat + unread count", "pulse", takes_rest=False, hidden=True
@@ -214,6 +217,8 @@ COMMANDS: list[Command] = [
         takes_rest=False,
         hidden=True,
     ),
+    # ── daily report ──
+    Command("daily", "lib.board_daily", "cmd_daily", "generate daily report", "daily [补充说明]"),
     # ── admin ──
     Command("kudos", "lib.board_admin", "cmd_kudos", "give public recognition", "kudos <target> <reason>", hidden=True),
     Command(

@@ -1,6 +1,7 @@
 """board_task — task queue: add / done / list / next."""
 
 from lib.board_db import BoardDB, ts
+from lib.board_own import auto_pr, verify_task
 from lib.common import is_privileged, is_terminal_task_status, parse_flags, validate_identity
 
 
@@ -101,8 +102,10 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
 
 def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
     name = identity.lower()
+    flags, positional = parse_flags(args, bool_flags={"skip_verify": ["--skip-verify"]})
+    skip_verify = bool(flags.get("skip_verify"))
 
-    raw_id: str | int | None = args[0] if args else None
+    raw_id: str | int | None = positional[0] if positional else None
 
     if not raw_id:
         _promote_next(db, name)
@@ -135,9 +138,28 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
         _print_queue(db, assignee)
         return
 
+    # --- Verify: run tests before marking done ---
+    env = db.env
+    if env and not skip_verify:
+        print("验证中: 运行测试...", flush=True)
+        passed, summary = verify_task(env.project_root)
+        if not passed:
+            print(f"ERROR: 测试未通过，task #{task_id} 未标记完成")
+            print(f"  {summary}")
+            print("  使用 --skip-verify 强制跳过")
+            return
+
+        print(f"  测试通过: {summary}")
+
     now = ts()
     db.execute("UPDATE tasks SET status='done', done_at=? WHERE id=?", (now, task_id))
     print(f"OK task #{task_id} done: {desc}")
+
+    # --- Auto-PR: create PR if on a feature branch ---
+    if env:
+        pr_url = auto_pr(env.project_root, desc, name)
+        if pr_url:
+            print(f"OK PR created: {pr_url}")
 
     _promote_next(db, assignee)
     nxt = db.query_one(

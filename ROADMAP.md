@@ -10,15 +10,9 @@
 
 先把地基打好。不做这些，后面的功能都是空中楼阁。
 
-### `.claudes/` → `.cnb/` 重命名 (#39)
+### ~~`.claudes/` → `.cnb/` 重命名 (#39)~~ ✅ 已完成
 
-| | |
-|---|---|
-| **为什么先做** | 所有后续功能都会写路径。现在不改，以后改代价翻倍 |
-| **影响面** | bin/, lib/, tests/, schema.sql, CLAUDE.md, README, CI — 全量替换 |
-| **风险** | 已有用户的项目目录要兼容迁移 |
-| **负责人** | 待定 |
-| **依赖** | 无 |
+向后兼容方式实现：新项目用 `.cnb/`，旧项目自动 fallback `.claudes/`，无需迁移。
 
 ### 待办操作队列 (#34)
 
@@ -55,20 +49,18 @@
 
 有了稳固基础，让负责人真正能独立完成工作——不需要人盯着才能推进。
 
-### 负责人自治能力
+### ~~负责人自治能力~~ ✅ 核心已完成 (#45)
 
-| | |
-|---|---|
-| **核心目标** | 让 ownership 不只是"这个模块是你的"，而是负责人能独立闭环完成工作 |
-| **四个缺失能力** | |
-| 1) 任务感知 | 负责人自动发现相关 issue 和 CI 失败，不需要人告诉她"去看一下" |
-| 2) 完成验证 | `task done` 后自动跑测试/CI，不是自己说 done 就 done |
-| 3) 产出交付 | 改完自动创建 PR，不是代码停在本地等人推 |
-| 4) 外部触发 | CI 挂了、有新 issue、PR 被评论——负责人自动收到通知并响应 |
-| **为什么属于 Phase 2** | 这些是 ownership 的完整定义。没有这些，负责人只是个等指令的执行者 |
-| **实现路径** | 1) issue 感知：已有 `issues/` 同步，需要按 ownership 路由给对应负责人 2) CI 验证：接 GitHub Actions status，task done 时检查 3) 自动 PR：`gh pr create` 集成到 shutdown/task-done 流程 4) 外部触发：接 Claude Code Channels 或 webhook |
-| **负责人** | 待定 |
-| **依赖** | #39（路径）、#41（shutdown 协议） |
+已实现:
+- ✅ **Ownership 注册**: `board own claim/list/disown/map`，路径级 ownership
+- ✅ **完成验证**: `task done` 自动跑 pytest，不过不标 done（`--skip-verify` 可跳过）
+- ✅ **产出交付**: `task done` 成功后自动 `gh pr create`（feature branch）
+- ✅ **任务感知**: `board scan` 扫描 GitHub issues + CI 状态，按 ownership 路由通知
+
+待优化（后续 issue）:
+- 外部触发自动化（webhook/polling 替代手动 `board scan`）
+- 基于 git blame 的 ownership 自动推荐
+- ownership 冲突解决机制
 
 ### 自动化下班流程 (#41)
 
