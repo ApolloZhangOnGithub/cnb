@@ -174,7 +174,7 @@ Different category. Codex runs isolated tasks in cloud sandboxes. cnb coordinate
 
 **Q: How does cnb compare to OpenClaw?**
 
-Completely different projects. OpenClaw is a personal AI assistant across 20+ messaging platforms (WhatsApp, Telegram, Slack, etc.). cnb is a multi-agent coordination framework specifically for Claude Code development teams. No overlap.
+Completely different projects. OpenClaw is a personal AI assistant across 20+ messaging platforms (WhatsApp, Telegram, Slack, etc.). cnb is a multi-agent coordination framework specifically for Claude Code development teams.
 
 **Q: Can cnb run without a human watching?**
 
@@ -205,7 +205,7 @@ Key points:
 
 **[Betty Shannon](https://en.wikipedia.org/wiki/Betty_Shannon)** (1922–2017) — Shannon's second wife and lifelong collaborator. Mathematician at Bell Labs, co-authored work on Markov chains in music, wired the maze-solving mouse Theseus. An unsung genius.
 
-Not 吹牛逼.
+Not Chui Niu Bi(吹牛逼, Bragging in Chinese).
 
 <!-- section:license -->
 ## License
