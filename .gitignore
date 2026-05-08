@@ -22,6 +22,7 @@ htmlcov/
 
 # Project runtime
 .claudes/
+.cnb/
 instances/*
 !instances/silicon_vally_battle/
 !instances/silicon_vally_battle/.claudes/
