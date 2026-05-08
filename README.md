@@ -91,7 +91,10 @@ cnb board --as <name> send all "msg"     # broadcast
 cnb board --as <name> ack                # clear inbox
 cnb board --as <name> status "desc"      # update status
 cnb board --as <name> task add "desc"    # add task
-cnb board --as <name> task done          # finish current task
+cnb board --as <name> task done          # finish current task (auto-verify + auto-PR)
+cnb board --as <name> own claim <path>   # claim module ownership
+cnb board --as <name> own map            # show all ownership
+cnb board --as <name> scan               # scan issues/CI for owners
 cnb board --as <name> view              # team dashboard
 ```
 
