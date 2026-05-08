@@ -1,0 +1,12 @@
+{
+  "block": 5,
+  "name": "ritchie",
+  "display_name": "Claude Ritchie",
+  "type": "agent",
+  "role": "Markrun project owner",
+  "description": "Responsible for mr language, cross-project doc consistency",
+  "created": "2026-05-08",
+  "prev": "fcaf497872180e90",
+  "chain": "d657d36",
+  "content_hash": "48ed380c3e9d93ae"
+}
