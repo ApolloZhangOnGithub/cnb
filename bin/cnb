@@ -26,7 +26,7 @@ _check_update() {
     fi
 }
 
-# ---- Export project root so all subprocesses can find .claudes/ ----
+# ---- Export project root so all subprocesses can find .cnb/ ----
 export CNB_PROJECT="${CNB_PROJECT:-$(pwd)}"
 
 # ---- Subcommands (exact match, always first) ----
@@ -174,23 +174,27 @@ fi
 
 # ---- Helper: start dispatcher if not already running ----
 _start_dispatcher() {
-    local pidfile="$CNB_PROJECT/.claudes/dispatcher.pid"
+    local pidfile="$CNB_PROJECT/$_CFG_DIR/dispatcher.pid"
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         return
     fi
-    mkdir -p "$CNB_PROJECT/.claudes/logs"
-    "$CLAUDES_HOME/bin/dispatcher" >> "$CNB_PROJECT/.claudes/logs/dispatcher.log" 2>&1 &
+    mkdir -p "$CNB_PROJECT/$_CFG_DIR/logs"
+    "$CLAUDES_HOME/bin/dispatcher" >> "$CNB_PROJECT/$_CFG_DIR/logs/dispatcher.log" 2>&1 &
     echo $! > "$pidfile"
     disown
 }
 
 # ---- Compose mode: reuse existing team from config.toml ----
-if [ -f .claudes/config.toml ] && [ -f .claudes/board.db ]; then
-    _EXISTING=$(grep '^sessions' .claudes/config.toml | sed 's/sessions = \[//;s/\]//;s/"//g;s/,/ /g;s/  */ /g' | xargs)
+# Detect config dir: prefer .cnb/, fall back to .claudes/
+_CFG_DIR=".cnb"
+[ ! -f ".cnb/config.toml" ] && [ -f ".claudes/config.toml" ] && _CFG_DIR=".claudes"
+
+if [ -f "$_CFG_DIR/config.toml" ] && [ -f "$_CFG_DIR/board.db" ]; then
+    _EXISTING=$(grep '^sessions' "$_CFG_DIR/config.toml" | sed 's/sessions = \[//;s/\]//;s/"//g;s/,/ /g;s/  */ /g' | xargs)
     if [ -n "$_EXISTING" ]; then
         ME=$(echo "$_EXISTING" | cut -d' ' -f1)
         WORKERS=$(echo "$_EXISTING" | cut -d' ' -f2-)
-        LABEL=$(grep '^prefix' .claudes/config.toml | cut -d'"' -f2)
+        LABEL=$(grep '^prefix' "$_CFG_DIR/config.toml" | cut -d'"' -f2)
         _NUM=$(echo "$WORKERS" | wc -w | tr -d ' ')
         "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 &
         disown
@@ -241,7 +245,7 @@ else
     ME=$(echo "$ALL_NAMES" | cut -d' ' -f1)
     WORKERS=$(echo "$ALL_NAMES" | cut -d' ' -f2-)
 
-    printf "${D}初始化 .claudes/ ...${N}\n"
+    printf "${D}初始化 .cnb/ ...${N}\n"
     "$CLAUDES_HOME/bin/init" $ALL_NAMES >/dev/null 2>&1
     "$CLAUDES_HOME/bin/swarm" start $WORKERS >/dev/null 2>&1 &
     disown
@@ -254,7 +258,7 @@ mkdir -p "$CMD_DIR"
 grep -qx 'commands/cnb-*' .claude/.gitignore 2>/dev/null || echo 'commands/cnb-*' >> .claude/.gitignore 2>/dev/null || true
 BOARD="$CLAUDES_HOME/bin/board"
 SWARM="$CLAUDES_HOME/bin/swarm"
-_PREFIX=$(grep '^prefix' .claudes/config.toml 2>/dev/null | cut -d'"' -f2)
+_PREFIX=$(grep '^prefix' "$_CFG_DIR/config.toml" 2>/dev/null | cut -d'"' -f2)
 cat > "$CMD_DIR/cnb-watch.md"     <<EOF
 看某个同学在干什么。解析 \$ARGUMENTS 拿到名字。
 运行 \`tmux capture-pane -t ${_PREFIX}-<名字> -p -S -30 2>/dev/null | tail -20\`，用简洁的话告诉用户这个同学在做什么、进展到哪了。

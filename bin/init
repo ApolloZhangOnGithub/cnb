@@ -117,7 +117,8 @@ def _update_claude_md(project_dir: Path, snippet: str) -> None:
 def _hook_command(claudes_home: Path) -> str:
     return (
         'if [ -n "$CLAUDE_SESSION_NAME" ] && [ -n "$CNB_PROJECT" ]; then '
-        "BOARD=$(grep '^claudes_home' \"$CNB_PROJECT/.claudes/config.toml\" 2>/dev/null "
+        "CFG=\"$CNB_PROJECT/.cnb/config.toml\"; [ ! -f \"$CFG\" ] && CFG=\"$CNB_PROJECT/.claudes/config.toml\"; "
+        "BOARD=$(grep '^claudes_home' \"$CFG\" 2>/dev/null "
         "| cut -d'\"' -f2)/bin/board; "
         '[ -x "$BOARD" ] && $BOARD --as $CLAUDE_SESSION_NAME pulse 2>/dev/null; fi'
     )
@@ -226,8 +227,13 @@ def main() -> None:
     else:
         sessions = list(DEFAULT_SESSIONS)
     project_dir = Path.cwd()
-    claudes_dir = project_dir / ".claudes"
+    claudes_dir = project_dir / ".cnb"
     claudes_home = CLAUDES_HOME
+
+    # Also accept existing .claudes/ projects
+    legacy_dir = project_dir / ".claudes"
+    if not claudes_dir.exists() and legacy_dir.exists():
+        claudes_dir = legacy_dir
 
     if (claudes_dir / "board.db").exists():
         print(f"Already initialized: {claudes_dir}")

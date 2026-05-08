@@ -12,21 +12,33 @@ from typing import Any, Generic, TypeVar
 
 
 def find_claudes_dir() -> Path:
-    """Find .claudes/ directory. Checks CNB_PROJECT env var first, then walks up from cwd."""
+    """Find project config directory. Prefers .cnb/, falls back to .claudes/."""
     import os
+
+    _DIRS = (".cnb", ".claudes")
+
+    def _pick(root: Path) -> Path | None:
+        for name in _DIRS:
+            p = root / name
+            if p.is_dir():
+                if name == ".claudes":
+                    print(f"提示: 检测到旧目录 {p}，建议重命名为 .cnb/（mv .claudes .cnb）", flush=True)
+                return p
+        return None
 
     env_root = os.environ.get("CNB_PROJECT")
     if env_root:
-        p = Path(env_root) / ".claudes"
-        if p.is_dir():
-            return p
+        found = _pick(Path(env_root))
+        if found:
+            return found
 
     d = Path.cwd()
     while d != d.parent:
-        if (d / ".claudes").is_dir():
-            return d / ".claudes"
+        found = _pick(d)
+        if found:
+            return found
         d = d.parent
-    raise FileNotFoundError(".claudes/ not found (set CNB_PROJECT or run from project dir)")
+    raise FileNotFoundError(".cnb/ (or .claudes/) not found (set CNB_PROJECT or run from project dir)")
 
 
 def _parse_toml(path: Path) -> dict:
@@ -84,7 +96,7 @@ class ClaudesEnv:
         if toml_file.exists():
             config = _parse_toml(toml_file)
         else:
-            print("ERROR: config.toml not found in .claudes/. Run: cnb init <session-names>", flush=True)
+            print("ERROR: config.toml not found. Run: cnb init <session-names>", flush=True)
             raise SystemExit(1)
 
         log_dir = cd / "logs"

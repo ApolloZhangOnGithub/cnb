@@ -88,14 +88,18 @@ def main() -> None:
     """Run pending migrations. Called from init and doctor."""
     # Resolve CLAUDES_HOME relative to this file
     claudes_home = Path(__file__).resolve().parent.parent
-    db_path = claudes_home / ".claudes" / "board.db"
+    db_path = claudes_home / ".cnb" / "board.db"
+    if not db_path.exists():
+        db_path = claudes_home / ".claudes" / "board.db"
 
     # Prefer the DB path from the current project
     from pathlib import Path as _P
 
-    cwd_db = _P.cwd() / ".claudes" / "board.db"
-    if cwd_db.exists():
-        db_path = cwd_db
+    for _name in (".cnb", ".claudes"):
+        cwd_db = _P.cwd() / _name / "board.db"
+        if cwd_db.exists():
+            db_path = cwd_db
+            break
 
     if not db_path.exists():
         print("ERROR: board.db not found. Run: cnb init <sessions>", flush=True)
