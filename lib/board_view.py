@@ -9,7 +9,12 @@ from pathlib import Path
 
 from lib.board_db import BoardDB
 from lib.common import escape_like, validate_identity
-from lib.tmux_utils import has_session, pane_command
+from lib.tmux_utils import capture_pane, has_session, pane_command
+
+SHELL_COMMANDS = {"zsh", "bash", "sh", "-zsh", "-bash", ""}
+SPINNER_RE = re.compile(r"^\s*(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|●)", re.MULTILINE)
+WORK_LABEL_RE = re.compile(r"^\s*[•●]\s+(Working|Thinking|Running)\b", re.IGNORECASE | re.MULTILINE)
+PROMPT_WITH_INPUT_RE = re.compile(r"^\s*❯ .{3,}", re.MULTILINE)
 
 
 def _git(project_root: Path, *args: str) -> str:
@@ -25,8 +30,38 @@ def _git(project_root: Path, *args: str) -> str:
         return ""
 
 
+def _pane_work_state(sess: str) -> str:
+    """Return a best-effort work state for a live non-shell agent pane."""
+    pane = capture_pane(sess, lines=20)
+    tail = "\n".join(pane.splitlines()[-8:])
+    if "bypass permissions" in tail:
+        return "blocked"
+    if SPINNER_RE.search(tail) or WORK_LABEL_RE.search(tail) or PROMPT_WITH_INPUT_RE.search(tail):
+        return "working"
+    return "idle"
+
+
+def _tmux_status(prefix: str, name: str, ago: str = "") -> tuple[str, str] | None:
+    sess = f"{prefix}-{name}"
+    if not has_session(sess):
+        return None
+
+    cmd = pane_command(sess)
+    if cmd in SHELL_COMMANDS:
+        return "○ shell", ago
+
+    # A live Claude/Codex pane is not necessarily working; it can be alive at
+    # the prompt. Keep this separate so managers do not confuse capacity with progress.
+    state = _pane_work_state(sess)
+    if state == "working":
+        return "● working", ago
+    if state == "blocked":
+        return "● alive blocked", ago
+    return "● alive idle", ago
+
+
 def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tuple[str, str]:
-    """Derive agent liveness from heartbeat timestamp, with tmux fallback."""
+    """Derive visible session state from tmux liveness plus heartbeat freshness."""
     ago = ""
     if last_heartbeat:
         try:
@@ -34,22 +69,21 @@ def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tup
             delta = (datetime.now() - hb_time).total_seconds()
             if delta < 120:
                 ago = f"[{int(delta)}s ago]"
-                return "● active", ago
+                tmux_state = _tmux_status(prefix, name, ago)
+                return tmux_state if tmux_state else ("● alive", ago)
             elif delta < 180:
-                return "◐ thinking", f"[{int(delta / 60)}m ago]"
+                return "◐ pulse lag", f"[{int(delta / 60)}m ago]"
             elif delta < 600:
-                return "○ stale", f"[{int(delta / 60)}m ago]"
+                return "○ pulse stale", f"[{int(delta / 60)}m ago]"
             else:
                 hours = delta / 3600
                 ago = f"[{int(hours)}h ago]" if hours >= 1 else f"[{int(delta / 60)}m ago]"
         except ValueError:
             pass
-    sess = f"{prefix}-{name}"
-    if has_session(sess):
-        cmd = pane_command(sess)
-        if cmd not in ("zsh", "bash", "sh", "-zsh", "-bash"):
-            return "● running", ago
-        return "○ dead", ago
+
+    tmux_state = _tmux_status(prefix, name, ago)
+    if tmux_state:
+        return tmux_state
     return "· offline", ago
 
 
