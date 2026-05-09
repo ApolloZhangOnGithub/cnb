@@ -96,7 +96,7 @@ def find_owner(db: BoardDB, file_path: str) -> str | None:
     rows = db.query("SELECT session, path_pattern FROM ownership ORDER BY LENGTH(path_pattern) DESC")
     for session, pattern in rows:
         if file_path.startswith(pattern) or file_path == pattern:
-            return session
+            return str(session)
     return None
 
 

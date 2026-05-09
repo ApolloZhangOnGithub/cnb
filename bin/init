@@ -117,7 +117,7 @@ def _update_claude_md(project_dir: Path, snippet: str) -> None:
 def _hook_command(claudes_home: Path) -> str:
     return (
         'if [ -n "$CLAUDE_SESSION_NAME" ] && [ -n "$CNB_PROJECT" ]; then '
-        "CFG=\"$CNB_PROJECT/.cnb/config.toml\"; [ ! -f \"$CFG\" ] && CFG=\"$CNB_PROJECT/.claudes/config.toml\"; "
+        'CFG="$CNB_PROJECT/.cnb/config.toml"; [ ! -f "$CFG" ] && CFG="$CNB_PROJECT/.claudes/config.toml"; '
         "BOARD=$(grep '^claudes_home' \"$CFG\" 2>/dev/null "
         "| cut -d'\"' -f2)/bin/board; "
         '[ -x "$BOARD" ] && $BOARD --as $CLAUDE_SESSION_NAME pulse 2>/dev/null; fi'

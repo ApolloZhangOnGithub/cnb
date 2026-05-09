@@ -2,6 +2,7 @@
 
 import os
 import threading
+from typing import Any, cast
 
 from lib.common import is_suspended
 
@@ -40,7 +41,16 @@ class FileWatcher(Concern):
     def _loop(self) -> None:
         import select as sel
 
-        kq = sel.kqueue()
+        sel_any = cast(Any, sel)
+        kqueue = sel_any.kqueue
+        kevent = sel_any.kevent
+        vnode_filter = sel_any.KQ_FILTER_VNODE
+        ev_add = sel_any.KQ_EV_ADD
+        ev_clear = sel_any.KQ_EV_CLEAR
+        note_write = sel_any.KQ_NOTE_WRITE
+        note_extend = sel_any.KQ_NOTE_EXTEND
+
+        kq = kqueue()
         dir_fd = -1
         file_fds: dict[str, int] = {}
         try:
@@ -48,11 +58,11 @@ class FileWatcher(Concern):
             dir_fd = os.open(watch_dir, os.O_RDONLY)
             kq.control(
                 [
-                    sel.kevent(
+                    kevent(
                         dir_fd,
-                        filter=sel.KQ_FILTER_VNODE,
-                        flags=sel.KQ_EV_ADD | sel.KQ_EV_CLEAR,
-                        fflags=sel.KQ_NOTE_WRITE,
+                        filter=vnode_filter,
+                        flags=ev_add | ev_clear,
+                        fflags=note_write,
                     )
                 ],
                 0,
@@ -70,11 +80,11 @@ class FileWatcher(Concern):
                         fd = os.open(path, os.O_RDONLY)
                         kq.control(
                             [
-                                sel.kevent(
+                                kevent(
                                     fd,
-                                    filter=sel.KQ_FILTER_VNODE,
-                                    flags=sel.KQ_EV_ADD | sel.KQ_EV_CLEAR,
-                                    fflags=sel.KQ_NOTE_WRITE | sel.KQ_NOTE_EXTEND,
+                                    filter=vnode_filter,
+                                    flags=ev_add | ev_clear,
+                                    fflags=note_write | note_extend,
                                 )
                             ],
                             0,

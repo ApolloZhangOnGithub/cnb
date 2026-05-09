@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any, cast
 
 # Try to import common; fall back gracefully for standalone use
 try:
@@ -55,16 +56,31 @@ class KqueueWatcher:
 
     def __init__(self, watch_dir: str) -> None:
         self.watch_dir = watch_dir
-        self.kq = select.kqueue()
+        select_any = cast(Any, select)
+        kqueue = select_any.kqueue
+        kevent = select_any.kevent
+        vnode_filter = select_any.KQ_FILTER_VNODE
+        ev_add = select_any.KQ_EV_ADD
+        ev_clear = select_any.KQ_EV_CLEAR
+        note_write = select_any.KQ_NOTE_WRITE
+        note_extend = select_any.KQ_NOTE_EXTEND
+
+        self.kq = kqueue()
         self.dir_fd = os.open(watch_dir, os.O_RDONLY)
-        dir_event = select.kevent(
+        dir_event = kevent(
             self.dir_fd,
-            filter=select.KQ_FILTER_VNODE,
-            flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
-            fflags=select.KQ_NOTE_WRITE,
+            filter=vnode_filter,
+            flags=ev_add | ev_clear,
+            fflags=note_write,
         )
         self.kq.control([dir_event], 0)
         self.file_fds: dict[str, int] = {}
+        self._kevent = kevent
+        self._vnode_filter = vnode_filter
+        self._ev_add = ev_add
+        self._ev_clear = ev_clear
+        self._note_write = note_write
+        self._note_extend = note_extend
         self._refresh()
 
     def _refresh(self) -> None:
@@ -78,11 +94,11 @@ class KqueueWatcher:
             fd = -1
             try:
                 fd = os.open(path, os.O_RDONLY)
-                ev = select.kevent(
+                ev = self._kevent(
                     fd,
-                    filter=select.KQ_FILTER_VNODE,
-                    flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
-                    fflags=select.KQ_NOTE_WRITE | select.KQ_NOTE_EXTEND,
+                    filter=self._vnode_filter,
+                    flags=self._ev_add | self._ev_clear,
+                    fflags=self._note_write | self._note_extend,
                 )
                 self.kq.control([ev], 0)
                 self.file_fds[path] = fd

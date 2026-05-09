@@ -36,14 +36,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # pull_request defaults to a synthetic merge commit whose message lacks
+          # project trailers. Check the real head commit instead.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: python bin/sync-version --check
       - name: Version must change on every push
         run: |
-          PREV=$(git show HEAD~1:VERSION 2>/dev/null || echo "")
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+            PREV=$(git show "origin/$GITHUB_BASE_REF:VERSION" 2>/dev/null || echo "")
+          else
+            PREV=$(git show HEAD~1:VERSION 2>/dev/null || echo "")
+          fi
           CURR=$(cat VERSION)
           if [ "$PREV" = "$CURR" ] && [ -n "$PREV" ]; then
             echo "ERROR: VERSION unchanged ($CURR). Every commit to master must bump the version."
@@ -52,7 +60,11 @@ jobs:
           fi
       - name: Require Co-Authored-By on every commit
         run: |
-          BODY=$(git log -1 --format='%b' HEAD)
+          TARGET=HEAD
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && git rev-parse -q --verify HEAD^2 >/dev/null; then
+            TARGET=HEAD^2
+          fi
+          BODY=$(git log -1 --format='%b' "$TARGET")
           if ! echo "$BODY" | grep -qi 'co-authored-by:'; then
             echo "ERROR: Commit must include a Co-Authored-By trailer."
             echo "Example: Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
