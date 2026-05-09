@@ -36,3 +36,5 @@ sidecar:
 - calls `cnb capture ingest`
 
 See [`../../docs/capture-protocol.md`](../../docs/capture-protocol.md) for the protocol.
+
+Default web capture must not ask for macOS Accessibility or Screen Recording permissions. Those belong only to an explicit visual fallback mode, not the normal Safari/WebExtension path.

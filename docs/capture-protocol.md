@@ -62,6 +62,14 @@ Optional fields:
 
 Collectors must not send cookies, localStorage, sessionStorage, or raw password fields by default.
 
+## Permissions
+
+Default browser capture must not require macOS Accessibility or Screen Recording permissions. The normal path is a user-gesture-triggered WebExtension content script that reads the current tab's DOM, selection, metadata, and visible text.
+
+Collectors should request only the narrow browser permissions needed for the current-tab handoff, such as `activeTab`, script injection, and native messaging. Do not use UI automation, screenshot capture, broad host access, or debugger-style permissions for the default path.
+
+`visual-only` and image payloads are opt-in boundary modes. A collector may support them behind an explicit user-visible setting or flag, but they must not be required for `selection`, `article`, or `page` capture.
+
 ## CLI
 
 ```bash
