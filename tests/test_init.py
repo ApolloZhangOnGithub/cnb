@@ -244,6 +244,33 @@ class TestSchemaApplication:
         assert "idx_inbox" in index_names
 
 
+class TestInstructionFiles:
+    """Initialization writes coordination instructions for supported agent CLIs."""
+
+    def test_agents_md_can_be_created_for_codex(self, tmp_path):
+        snippet = init_mod._claude_md_snippet(["alice"], Path("/tmp/cnb"))
+        init_mod._update_agents_md(tmp_path, snippet)
+
+        path = tmp_path / "AGENTS.md"
+        assert path.exists()
+        assert "Multi-Agent Coordination" in path.read_text()
+
+    def test_agents_md_marker_is_idempotent(self, tmp_path):
+        original = "project notes\n\n"
+        path = tmp_path / "AGENTS.md"
+        path.write_text(original)
+
+        first = init_mod._claude_md_snippet(["alice"], Path("/tmp/cnb"))
+        second = init_mod._claude_md_snippet(["bob"], Path("/tmp/cnb"))
+        init_mod._update_agents_md(tmp_path, first)
+        init_mod._update_agents_md(tmp_path, second)
+
+        text = path.read_text()
+        assert text.count(init_mod.MARKER_START) == 1
+        assert "**bob**" in text
+        assert "**alice**" not in text
+
+
 # ── session name validation (bin/init) ──
 
 VALID_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")

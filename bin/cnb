@@ -5,9 +5,9 @@ CLAUDES_HOME="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION=$(cat "$CLAUDES_HOME/VERSION" 2>/dev/null || echo "dev")
 
 if [ -t 1 ] || [ -t 2 ]; then
-    B=$'\033[1m' D=$'\033[2m' G=$'\033[0;32m' C=$'\033[0;36m' Y=$'\033[1;33m' N=$'\033[0m'
+    B=$'\033[1m' D=$'\033[2m' G=$'\033[0;32m' Y=$'\033[1;33m' N=$'\033[0m'
 else
-    B='' D='' G='' C='' Y='' N=''
+    B='' D='' G='' Y='' N=''
 fi
 
 # ---- Version update check (non-blocking, user-facing only at interactive startup) ----
@@ -285,8 +285,10 @@ cmd_usage(Path('$CNB_PROJECT'), sys.argv[1:])
         version|--version|-v) echo "cnb v${VERSION}"; exit 0 ;;
         help|--help|-h)
             printf "${B}${G}◆ cnb${N} ${D}v${VERSION}${N}\n"
-            printf "  多个 Claude Code 实例协作的团队开发工具\n\n"
-            printf "  cnb                   开始（默认2位同学，AI大佬主题）\n"
+            printf "  多个 Claude Code / Codex 实例协作的团队开发工具\n\n"
+            printf "  cnb                   开始（默认2位同学，AI大佬主题，Claude）\n"
+            printf "  cnb codex             使用 Codex 作为领队和后台同学引擎\n"
+            printf "  cnb --agent codex 5   5位同学 + Codex 引擎\n"
             printf "  cnb 5                 5位同学\n"
             printf "  cnb threebody         三体主题\n"
             printf "  cnb 5 titan           5位同学 + 科技先锋主题\n"
@@ -307,6 +309,53 @@ cmd_usage(Path('$CNB_PROJECT'), sys.argv[1:])
             exit 0 ;;
     esac
 fi
+
+# ---- Lead engine selection ----
+# Claude remains the default. Codex can be selected with either:
+#   CNB_AGENT=codex cnb
+#   cnb codex
+#   cnb --agent codex
+_LEAD_AGENT="${CNB_AGENT:-claude}"
+if [ -z "${CNB_AGENT:-}" ] && [ "${SWARM_AGENT:-}" = "codex" ]; then
+    _LEAD_AGENT="codex"
+fi
+_ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --agent=*)
+            _LEAD_AGENT="${1#--agent=}"
+            shift ;;
+        --agent)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "错误: --agent 需要参数: claude 或 codex" >&2
+                exit 1
+            fi
+            _LEAD_AGENT="$1"
+            shift ;;
+        claude|codex)
+            _LEAD_AGENT="$1"
+            shift ;;
+        *)
+            _ARGS+=("$1")
+            shift ;;
+    esac
+done
+if [ "${#_ARGS[@]}" -gt 0 ]; then
+    set -- "${_ARGS[@]}"
+else
+    set --
+fi
+
+case "$_LEAD_AGENT" in
+    claude|codex) ;;
+    *)
+        echo "错误: 不支持的领队引擎: $_LEAD_AGENT" >&2
+        echo "可选: claude, codex" >&2
+        exit 1 ;;
+esac
+export CNB_AGENT="$_LEAD_AGENT"
+export SWARM_AGENT="${SWARM_AGENT:-$_LEAD_AGENT}"
 
 # ---- Helper: start dispatcher if not already running ----
 _start_dispatcher() {
@@ -352,7 +401,7 @@ else
                 _THEME_IDX="$_idx"
             else
                 printf "${Y}未知参数: ${arg}${N}\n" >&2
-                echo "用法: cnb [数量] [主题]" >&2
+                echo "用法: cnb [数量] [主题] [claude|codex]" >&2
                 echo "主题: ai animal food lang music myth space threebody titan" >&2
                 exit 1
             fi
@@ -393,7 +442,6 @@ CMD_DIR=".claude/commands"
 mkdir -p "$CMD_DIR"
 grep -qx 'commands/cnb-*' .claude/.gitignore 2>/dev/null || echo 'commands/cnb-*' >> .claude/.gitignore 2>/dev/null || true
 BOARD="$CLAUDES_HOME/bin/board"
-SWARM="$CLAUDES_HOME/bin/swarm"
 _PREFIX=$(grep '^prefix' "$_CFG_DIR/config.toml" 2>/dev/null | cut -d'"' -f2)
 cat > "$CMD_DIR/cnb-watch.md"     <<EOF
 看某个同学在干什么。解析 \$ARGUMENTS 拿到名字。
@@ -428,7 +476,7 @@ EOF
 # ---- Require interactive terminal ----
 if [ ! -t 0 ] || [ ! -t 1 ]; then
     echo "错误: cnb 需要交互式终端运行。" >&2
-    echo "用法: cnb [数量] [主题]  （详见 cnb help）" >&2
+    echo "用法: cnb [数量] [主题] [claude|codex]  （详见 cnb help）" >&2
     exit 1
 fi
 
@@ -436,7 +484,18 @@ fi
 clear
 _check_update
 printf "${B}${G}◆ cnb${N} ${D}v${VERSION}${N}\n"
-printf "${D}  「${LABEL}」你是 ${ME}，同学: ${WORKERS}${N}\n\n"
+printf "${D}  「${LABEL}」engine: ${_LEAD_AGENT}，你是 ${ME}，同学: ${WORKERS}${N}\n\n"
+
+if [ "$_LEAD_AGENT" = "claude" ]; then
+    _MONITOR_GUIDE="派任务给同学后，你必须主动跟进，不要派完就忘。使用 Monitor 工具挂一个后台轮询：
+  Monitor 命令示例（每 30 秒检查一次 inbox，有新消息就通知你）：
+    last_count=0; while true; do out=\$(${BOARD} --as ${ME} inbox 2>&1); count=\$(echo \"\$out\" | grep -c '<message'); if [ \"\$count\" -gt \"\$last_count\" ]; then echo \"\$out\"; last_count=\$count; fi; sleep 30; done
+  设置 persistent: true，这样整个会话期间都会监控。"
+else
+    _MONITOR_GUIDE="派任务给同学后，你必须主动跟进，不要派完就忘。Codex 没有 Claude 的 Monitor 工具时，定期直接运行：
+    ${BOARD} --as ${ME} inbox
+  看到新消息后立刻汇总进展给用户。"
+fi
 
 SYSPROMPT="你是 ${ME}。你的终端直接面对用户。
 你有 ${_NUM} 位同学在后台工作：${WORKERS}。你们是平等的，只是你负责和用户沟通。
@@ -454,10 +513,12 @@ SYSPROMPT="你是 ${ME}。你的终端直接面对用户。
 - 用户可以用 /cnb-help 查看所有协作命令。
 
 重要 — 监控团队进展：
-派任务给同学后，你必须主动跟进，不要派完就忘。使用 Monitor 工具挂一个后台轮询：
-  Monitor 命令示例（每 30 秒检查一次 inbox，有新消息就通知你）：
-    last_count=0; while true; do out=\$(${BOARD} --as ${ME} inbox 2>&1); count=\$(echo \"\$out\" | grep -c '<message'); if [ \"\$count\" -gt \"\$last_count\" ]; then echo \"\$out\"; last_count=\$count; fi; sleep 30; done
-  设置 persistent: true，这样整个会话期间都会监控。
+${_MONITOR_GUIDE}
 收到通知后汇总进展给用户。派完任务后应立刻启动监控。"
 
-exec claude --name "${ME}" --append-system-prompt "$SYSPROMPT"
+case "$_LEAD_AGENT" in
+    claude)
+        exec claude --name "${ME}" --append-system-prompt "$SYSPROMPT" ;;
+    codex)
+        exec codex --dangerously-bypass-approvals-and-sandbox --cd "$CNB_PROJECT" "$SYSPROMPT" ;;
+esac

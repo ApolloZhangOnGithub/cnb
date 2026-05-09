@@ -25,7 +25,7 @@ These are complementary. You could use Claude Squad for session management and c
 
 cnb's specific focus is what happens **between** sessions — when a tongxue restarts with no memory, how does it pick up where the last one left off? Daily reports, shift directories, bug tracker with SLA, Co-Authored-By enforcement, and shutdown protocols are all designed for this.
 
-**Where cnb is headed:** Today, a module owner still needs a human to say "go check your issues" or "push your code." The goal is for owners to be fully autonomous within their domain — auto-detecting relevant issues, verifying their own work against CI, creating PRs, and responding to failures. Not "unattended agents doing random tasks" but "responsible owners who don't need to be told to do their job." See [ROADMAP.md](ROADMAP.md).
+**Where cnb is headed:** Organization architecture first, then automation. The immediate priority is clarifying roles (pilot vs project manager, infrastructure ownership) and building governance into the toolchain so compliance is the default path, not a matter of discipline. After that, module owners become fully autonomous — auto-detecting relevant issues, verifying their own work against CI, creating PRs, and responding to failures. Not "unattended agents doing random tasks" but "responsible owners who don't need to be told to do their job." See [ROADMAP.md](ROADMAP.md).
 
 <!-- section:glossary -->
 ## Glossary
@@ -33,8 +33,9 @@ cnb's specific focus is what happens **between** sessions — when a tongxue res
 | Term | Meaning |
 |------|---------|
 | **tongxue** (同学) | Literally "classmate" in Chinese. Each Claude Code instance in a cnb team is called a tongxue — not an "agent", not a "worker". The word implies peers learning and building together, which is how cnb sessions actually operate: they coordinate as equals through a shared message board, not through a master-slave hierarchy. |
-| **lead tongxue** | The tongxue whose terminal faces the user. It delegates work and relays results, but has no special privileges on the board. |
-| **board** | The shared SQLite database (`.claudes/board.db`) where tongxue exchange messages, track tasks, and report status. |
+| **pilot** (机长) | The user-facing Claude Code session. Activated by `/cnb` in any Claude Code session. Per-machine (not per-project), manages all cnb projects on the machine. The pilot is the entry point for cnb governance — once active, all operations are tracked, ownership is matched, and the organization is aware. |
+| **project manager** (项目经理) | Per-project tongxue responsible for team coordination within a single repo. Distinct from the pilot: the pilot faces the user, the project manager faces the team. |
+| **board** | The shared SQLite database (`.cnb/board.db`) where tongxue exchange messages, track tasks, and report status. |
 | **dispatcher** | A background process that monitors tongxue health and nudges idle ones. |
 
 <!-- section:install -->
@@ -44,24 +45,64 @@ cnb's specific focus is what happens **between** sessions — when a tongxue res
 npm install -g claude-nb
 ```
 
-Requires: Python 3.11+, tmux, Claude Code CLI.
+Requires: Python 3.11+, tmux, and at least one agent CLI: Claude Code CLI (default) or Codex CLI.
 
 <!-- section:quickstart -->
 ## Quick start
+
+**Option A — Activate from any Claude Code session (recommended):**
+
+```bash
+claude          # start Claude Code normally, anywhere
+/cnb            # activate pilot mode — cnb governance comes online
+```
+
+This registers you as the pilot, activates hooks for operation tracking and ownership matching, and shows the project overview. The pilot is per-machine and manages all cnb projects.
+
+**Option B — Full team launch:**
 
 ```bash
 cd your-project
 cnb
 ```
 
-This initializes the project (creates `.claudes/` with SQLite DB and config), launches a team of tongxue in tmux, starts a dispatcher, and drops you into the lead tongxue's Claude Code session.
+This initializes the project (creates `.cnb/` with SQLite DB and config), launches a team of tongxue in tmux, starts a dispatcher, and drops you into the pilot's session.
 
-The lead tongxue talks to the user directly. Background tongxue work independently and report back through the board.
+Claude is the default engine. Codex is available as the second option:
+
+```bash
+cnb codex
+# or
+CNB_AGENT=codex cnb
+```
+
+When Codex is selected, cnb launches it with the highest local permission mode by default:
+
+```bash
+codex --dangerously-bypass-approvals-and-sandbox --cd <project> "<prompt>"
+```
+
+That Codex flag is the top permission mode: it skips approval prompts and runs without sandboxing. Codex rejects combining it with `--ask-for-approval` or `--sandbox`.
+
+For lower-level swarm control, use `SWARM_AGENT=codex cnb swarm start`.
+
+See [docs/codex-engine.md](docs/codex-engine.md) for Codex launch notes and smoke-test guidance.
+
+The pilot talks to the user directly. Background tongxue work independently and report back through the board.
+
+<!-- section:docs -->
+## Docs
+
+The README is the short path. Longer product documentation lives under [`docs/`](docs/index.md):
+
+- [Pricing and usage](docs/pricing.md) — how cnb maps to Claude Code, Codex, credits, Fast mode, and team size.
+- [Codex engine notes](docs/codex-engine.md) — Codex launch flags, permission mode, and smoke testing.
+- [Ownership autonomy](docs/design-ownership-autonomy.md) — the design direction for self-managing module owners.
 
 <!-- section:slash-commands -->
 ## Slash commands
 
-Inside the lead tongxue's Claude Code session:
+When the pilot is running in Claude Code:
 
 | Command | What it does |
 |---------|-------------|
@@ -146,7 +187,7 @@ A 6-tongxue team running for a full shift typically spends <2% of total tokens o
 <!-- section:architecture -->
 ## Architecture
 
-- **SQLite (WAL mode)** — all state in `.claudes/board.db`, one DB per project
+- **SQLite (WAL mode)** — all state in `.cnb/board.db`, one DB per project
 - **Board** — message bus (inbox, broadcast, direct), task queue, status tracking
 - **Dispatcher** — background process that monitors health, nudges idle tongxue
 - **Encrypted mailbox** — X25519 sealed-box private messaging between tongxue
@@ -155,14 +196,7 @@ A 6-tongxue team running for a full shift typically spends <2% of total tokens o
 <!-- section:team -->
 ## Team
 
-| 同学 | 负责 |
-|------|------|
-| lead | 项目负责人、团队协调 |
-| musk | 安全隔离 (#31) |
-| lisa-su | 通知推送 (#33) |
-| forge | 待办队列 (#34)、邮件系统 (#32)、全局管理 (#42) |
-| tester | 测试加固、质量保障 |
-| sutskever | 架构重构 (#26) |
+Tongxue are assigned per-project. See [ROADMAP.md](ROADMAP.md) for current ownership assignments and priorities.
 
 <!-- section:faq -->
 ## FAQ
@@ -173,7 +207,7 @@ Different focus. Those are session managers — great at launching, isolating, a
 
 **Q: How does cnb compare to Codex?**
 
-Different category. Codex runs isolated tasks in cloud sandboxes. cnb coordinates persistent local teams across sessions. Use Codex for one-off jobs, cnb when you need continuity and ownership across restarts.
+Different category. Codex is an agent CLI; cnb is the organizational layer around persistent local teams. You can now run cnb itself on Codex with `cnb codex` or `CNB_AGENT=codex cnb` when you want the same board, ownership, and handoff flow with Codex as the engine.
 
 **Q: How does cnb compare to OpenClaw?**
 
@@ -181,7 +215,7 @@ Completely different projects. OpenClaw is a personal AI assistant across 20+ me
 
 **Q: Can cnb run without a human watching?**
 
-Not yet. Today, the lead tongxue needs a human to drive it. But this is the active development direction — see [ROADMAP.md](ROADMAP.md) Phase 2. The goal is for module owners to autonomously detect issues, verify their work, and deliver PRs without being told.
+Not yet. Today, the pilot needs a human to drive it. But this is the active development direction — see [ROADMAP.md](ROADMAP.md). The goal is for module owners to autonomously detect issues, verify their work, and deliver PRs without being told.
 
 **Q: Is cnb token-efficient?**
 

@@ -1,9 +1,12 @@
 """Coral: dispatcher session lifecycle management and heartbeat."""
 
+import os
 import re
+import shlex
 import time
 
 from lib.common import is_suspended
+from lib.swarm import CODEX_PERMISSION_FLAGS
 
 from .base import Concern
 from .config import DispatcherConfig
@@ -40,14 +43,18 @@ class CoralManager(Concern):
         tmux("new-session", "-d", "-s", self.cfg.coral_sess, "-x", "200", "-y", "50")
         tmux_send(self.cfg.coral_sess, f"cd '{self.cfg.project_root}' && export CNB_PROJECT='{self.cfg.project_root}'")
         time.sleep(0.5)
-        tmux_send(
-            self.cfg.coral_sess,
-            "claude --name dispatcher --append-system-prompt "
-            "'你是 Coral。启动后运行 cat dispatcher-role.md，然后等指令。回复不超过3行。'",
-        )
+        tmux_send(self.cfg.coral_sess, self._agent_cmd())
         self.record_boot("dispatcher")
-        log(f"Coral boot sent, waiting for Claude process (max {self.BOOT_WAIT}s)...")
+        log(f"Coral boot sent, waiting for agent process (max {self.BOOT_WAIT}s)...")
         self._wait_until_ready()
+
+    def _agent_cmd(self) -> str:
+        prompt = "你是 Coral。启动后运行 cat dispatcher-role.md，然后等指令。回复不超过3行。"
+        agent = os.environ.get("SWARM_AGENT") or os.environ.get("CNB_AGENT", "claude")
+        if agent == "codex":
+            flags = " ".join(CODEX_PERMISSION_FLAGS)
+            return f"codex {flags} --cd {shlex.quote(str(self.cfg.project_root))} {shlex.quote(prompt)}"
+        return f"claude --name dispatcher --append-system-prompt {shlex.quote(prompt)}"
 
     def _wait_until_ready(self) -> None:
         import time as _time

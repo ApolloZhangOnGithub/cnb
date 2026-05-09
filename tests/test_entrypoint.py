@@ -22,7 +22,7 @@ BOARD = CLAUDES_HOME / "bin" / "board"
 
 @pytest.fixture
 def fake_project(tmp_path):
-    """A temp dir with a fake claude binary that dumps its args."""
+    """A temp dir with fake agent binaries that dump their args."""
     fake_claude = tmp_path / "claude"
     fake_claude.write_text(
         "#!/usr/bin/env bash\n"
@@ -36,6 +36,22 @@ def fake_project(tmp_path):
     )
     fake_claude.chmod(fake_claude.stat().st_mode | stat.S_IEXEC)
 
+    fake_codex = tmp_path / "codex"
+    fake_codex.write_text(
+        "#!/usr/bin/env bash\n"
+        'echo CODEX_ARGS="$*"\n'
+        "while [[ $# -gt 0 ]]; do\n"
+        '  case "$1" in\n'
+        '    --cd) echo "CD=$2"; shift 2 ;;\n'
+        '    --sandbox) echo "SANDBOX=$2"; shift 2 ;;\n'
+        '    --ask-for-approval) echo "APPROVAL=$2"; shift 2 ;;\n'
+        '    --dangerously-bypass-approvals-and-sandbox) echo "BYPASS=1"; shift ;;\n'
+        "    *) shift ;;\n"
+        "  esac\n"
+        "done\n"
+    )
+    fake_codex.chmod(fake_codex.stat().st_mode | stat.S_IEXEC)
+
     stub_swarm = tmp_path / "swarm-stub"
     stub_swarm.write_text("#!/usr/bin/env bash\nexit 0\n")
     stub_swarm.chmod(stub_swarm.stat().st_mode | stat.S_IEXEC)
@@ -44,11 +60,13 @@ def fake_project(tmp_path):
     project_dir.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
 
-    return project_dir, fake_claude, stub_swarm
+    return project_dir, fake_claude, fake_codex, stub_swarm
 
 
-def _run(fake_project, args=None):
-    project_dir, fake_claude, stub_swarm = fake_project
+def _run(fake_project, args=None, env=None):
+    project_dir, fake_claude, fake_codex, stub_swarm = fake_project
+    home_dir = project_dir / "home"
+    home_dir.mkdir(exist_ok=True)
 
     script = ENTRYPOINT.read_text()
     script = script.replace(
@@ -56,6 +74,7 @@ def _run(fake_project, args=None):
         f'CLAUDES_HOME="{CLAUDES_HOME}"',
     )
     script = script.replace("exec claude", str(fake_claude))
+    script = script.replace("exec codex", str(fake_codex))
     script = script.replace('"$CLAUDES_HOME/bin/swarm"', str(stub_swarm))
     script = script.replace("_start_dispatcher\n", "# _start_dispatcher (stubbed)\n")
     script = script.replace("clear\n", "")
@@ -69,13 +88,19 @@ def _run(fake_project, args=None):
     if args:
         cmd.extend(args)
 
+    run_env = {**os.environ, "TERM": "dumb", "HOME": str(home_dir)}
+    run_env.pop("CNB_AGENT", None)
+    run_env.pop("SWARM_AGENT", None)
+    if env:
+        run_env.update(env)
+
     return subprocess.run(
         cmd,
         cwd=project_dir,
         capture_output=True,
         text=True,
         timeout=30,
-        env={**os.environ, "TERM": "dumb"},
+        env=run_env,
     )
 
 
@@ -154,6 +179,21 @@ class TestSystemPrompt:
         assert "send" in r.stdout
         assert "inbox" in r.stdout
 
+    def test_codex_agent_uses_highest_permissions(self, fake_project):
+        r = _run(fake_project, ["codex"])
+        assert r.returncode == 0
+        assert "engine: codex" in r.stdout
+        assert "BYPASS=1" in r.stdout
+        assert "APPROVAL=" not in r.stdout
+        assert "SANDBOX=" not in r.stdout
+        assert "CD=" in r.stdout
+
+    def test_codex_agent_from_env(self, fake_project):
+        r = _run(fake_project, env={"CNB_AGENT": "codex"})
+        assert r.returncode == 0
+        assert "engine: codex" in r.stdout
+        assert "BYPASS=1" in r.stdout
+
 
 class TestSlashCommands:
     def test_slash_commands_created(self, fake_project):
@@ -181,7 +221,7 @@ class TestSlashCommands:
 
 class TestSubcommands:
     def test_version(self, fake_project):
-        project_dir, _, _ = fake_project
+        project_dir = fake_project[0]
         r = subprocess.run(
             ["bash", str(ENTRYPOINT), "version"],
             cwd=project_dir,
@@ -192,7 +232,7 @@ class TestSubcommands:
         assert "cnb v" in r.stdout
 
     def test_unknown_command_errors(self, fake_project):
-        project_dir, _, _ = fake_project
+        project_dir = fake_project[0]
         r = subprocess.run(
             ["bash", str(ENTRYPOINT), "nonsense"],
             cwd=project_dir,
@@ -202,7 +242,7 @@ class TestSubcommands:
         assert r.returncode != 0
 
     def test_help_shows_themes(self, fake_project):
-        project_dir, _, _ = fake_project
+        project_dir = fake_project[0]
         r = subprocess.run(
             ["bash", str(ENTRYPOINT), "help"],
             cwd=project_dir,
@@ -276,8 +316,6 @@ class TestSubcommands:
         inbox = _board(board_project, "--as", "lead", "inbox")
         assert "cnb v9.9.9 已发布" not in inbox.stdout
         assert not (cnb_home / "update-notified").exists()
-
-
 
 
 # ── Board message validation (found by AI self-play) ──

@@ -2,6 +2,7 @@
 
 import os
 import re
+import shlex
 import threading
 import time
 import tomllib
@@ -14,6 +15,12 @@ from lib.common import ClaudesEnv, _write_config_toml, is_suspended
 from lib.swarm_backend import SessionBackend, TmuxBackend, detect_backend
 from lib.theme_profiles import PROFILES
 
+SUPPORTED_AGENTS = frozenset({"claude", "codex", "trae", "qwen"})
+# Codex treats this as the top permission mode. In Codex CLI 0.130.0 it
+# conflicts with explicit --ask-for-approval or --sandbox flags, so keep it
+# standalone instead of trying to restate the implied "never ask/no sandbox".
+CODEX_PERMISSION_FLAGS = ("--dangerously-bypass-approvals-and-sandbox",)
+
 
 @dataclass
 class SwarmConfig:
@@ -25,7 +32,7 @@ class SwarmConfig:
     @classmethod
     def load(cls) -> "SwarmConfig":
         env = ClaudesEnv.load()
-        agent = os.environ.get("SWARM_AGENT", "claude")
+        agent = os.environ.get("SWARM_AGENT") or os.environ.get("CNB_AGENT", "claude")
         backend = detect_backend()
         install_home_raw = os.environ.get("CLAUDES_HOME", "")
         install_home = Path(install_home_raw) if install_home_raw else env.install_home
@@ -72,22 +79,30 @@ class SwarmManager:
 
     def build_agent_cmd(self, name: str) -> str:
         prompt = self.build_system_prompt(name)
-        escaped = prompt.replace("'", "'\\''")
         if self.cfg.agent == "claude":
+            escaped = prompt.replace("'", "'\\''")
             return f"claude --name '{name}' --dangerously-skip-permissions --append-system-prompt '{escaped}'"
+        elif self.cfg.agent == "codex":
+            initial = self.build_initial_prompt(name)
+            combined_prompt = f"{prompt}\n\n{initial}"
+            flags = " ".join(CODEX_PERMISSION_FLAGS)
+            return f"codex {flags} --cd {shlex.quote(str(self._env.project_root))} {shlex.quote(combined_prompt)}"
         elif self.cfg.agent == "trae":
             return "trae-cli"
         elif self.cfg.agent == "qwen":
             return "qwen"
         else:
-            print(f"ERROR: unknown agent: {self.cfg.agent}")
+            print(f"ERROR: unknown agent: {self.cfg.agent} (supported: {', '.join(sorted(SUPPORTED_AGENTS))})")
             raise SystemExit(1)
 
     def _needs_prompt_injection(self) -> bool:
         return self.cfg.agent in ("trae", "qwen")
 
+    def _uses_prompt_argument(self) -> bool:
+        return self.cfg.agent == "codex"
+
     def build_initial_prompt(self, name: str) -> str:
-        engine_labels = {"trae": "Trae CLI", "qwen": "Qwen Code"}
+        engine_labels = {"codex": "Codex CLI", "trae": "Trae CLI", "qwen": "Qwen Code"}
         engine_label = engine_labels.get(self.cfg.agent, self.cfg.agent)
         sd = self._env.sessions_dir
         cv = self._env.cv_dir
@@ -325,12 +340,13 @@ class SwarmManager:
         agent_cmd = self.build_agent_cmd(name)
         backend.start_session(prefix, name, self._env.project_root, agent_cmd)
 
-        if isinstance(backend, TmuxBackend):
-            t_trust = threading.Thread(target=backend.auto_accept_trust, args=(prefix, name))
+        if isinstance(backend, TmuxBackend) and self.cfg.agent in ("claude", "codex"):
+            trust_timeout = 60 if self.cfg.agent == "claude" else 20
+            t_trust = threading.Thread(target=backend.auto_accept_trust, args=(prefix, name, trust_timeout))
             t_trust.start()
             self._pending_threads.append(t_trust)
 
-        if self._needs_prompt_injection() or isinstance(backend, TmuxBackend):
+        if self._needs_prompt_injection() or (isinstance(backend, TmuxBackend) and not self._uses_prompt_argument()):
             initial = self.build_initial_prompt(name)
             t = threading.Thread(
                 target=backend.inject_initial_prompt,
@@ -536,7 +552,7 @@ class SwarmManager:
 swarm — 管理同学协作会话
 
 Mode: {backend_name} (override with SWARM_MODE=tmux|screen)
-Engine: {self.cfg.agent} (override with SWARM_AGENT=claude|trae|qwen)
+Engine: {self.cfg.agent} (override with CNB_AGENT/SWARM_AGENT=claude|codex|trae|qwen)
 
   start [names...]    Launch sessions (default: all non-suspended)
   start --role=dev    Launch only sessions with matching role
@@ -554,6 +570,7 @@ Roles (from config.toml [session.X] role key): lead, dev, intern, dispatcher
 
 Examples:
   swarm start                           # launch all with Claude (default)
+  SWARM_AGENT=codex swarm start         # launch all with Codex
   SWARM_AGENT=trae swarm start          # launch all with Trae
   swarm start alice bob                 # launch specific sessions
   swarm attach alice                    # interactive access

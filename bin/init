@@ -94,8 +94,7 @@ def _claude_md_snippet(sessions: list[str], claudes_home: Path, personas: dict[s
     return "\n".join(lines) + "\n"
 
 
-def _update_claude_md(project_dir: Path, snippet: str) -> None:
-    md_path = project_dir / "CLAUDE.md"
+def _update_marked_md(md_path: Path, snippet: str) -> None:
     if md_path.exists():
         text = md_path.read_text()
         if MARKER_START in text:
@@ -114,10 +113,18 @@ def _update_claude_md(project_dir: Path, snippet: str) -> None:
         md_path.write_text(snippet)
 
 
+def _update_claude_md(project_dir: Path, snippet: str) -> None:
+    _update_marked_md(project_dir / "CLAUDE.md", snippet)
+
+
+def _update_agents_md(project_dir: Path, snippet: str) -> None:
+    _update_marked_md(project_dir / "AGENTS.md", snippet)
+
+
 def _hook_command(claudes_home: Path) -> str:
     return (
         'if [ -n "$CLAUDE_SESSION_NAME" ] && [ -n "$CNB_PROJECT" ]; then '
-        "CFG=\"$CNB_PROJECT/.cnb/config.toml\"; [ ! -f \"$CFG\" ] && CFG=\"$CNB_PROJECT/.claudes/config.toml\"; "
+        'CFG="$CNB_PROJECT/.cnb/config.toml"; [ ! -f "$CFG" ] && CFG="$CNB_PROJECT/.claudes/config.toml"; '
         "BOARD=$(grep '^claudes_home' \"$CFG\" 2>/dev/null "
         "| cut -d'\"' -f2)/bin/board; "
         '[ -x "$BOARD" ] && $BOARD --as $CLAUDE_SESSION_NAME pulse 2>/dev/null; fi'
@@ -301,9 +308,10 @@ def main() -> None:
     # Update .claude/settings.json (merge hooks if exists, create if not)
     _update_settings(project_dir, claudes_home)
 
-    # Write multi-agent coordination section into CLAUDE.md
+    # Write multi-agent coordination sections for Claude Code and Codex.
     snippet = _claude_md_snippet(sessions, claudes_home, personas)
     _update_claude_md(project_dir, snippet)
+    _update_agents_md(project_dir, snippet)
 
     # Register in global project registry
     try:

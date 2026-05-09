@@ -32,7 +32,7 @@ class FakeBackend(SessionBackend):
         return f"{prefix}-{name}" in self._running
 
     def start_session(self, prefix: str, name: str, project_root: Path, agent_cmd: str) -> str:
-        self.calls.append(("start_session", prefix, name))
+        self.calls.append(("start_session", prefix, name, agent_cmd))
         self._running.add(f"{prefix}-{name}")
         return f"{prefix}-{name}"
 
@@ -129,6 +129,17 @@ class TestPrompts:
         mgr.cfg.agent = "unknown_agent"
         with pytest.raises(SystemExit):
             mgr.build_agent_cmd("alice")
+
+    def test_agent_cmd_codex_highest_permissions(self, mgr):
+        mgr.cfg.agent = "codex"
+        cmd = mgr.build_agent_cmd("alice")
+        assert cmd.startswith("codex ")
+        assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+        assert "--ask-for-approval" not in cmd
+        assert "--sandbox" not in cmd
+        assert "--cd" in cmd
+        assert "alice" in cmd
+        assert "--append-system-prompt" not in cmd
 
     def test_initial_prompt_contains_session_dir(self, mgr):
         p = mgr.build_initial_prompt("bob")
@@ -307,8 +318,7 @@ class TestStartStop:
 
     def test_status_uses_recorded_engine(self, mgr, fake_backend, capsys):
         mgr.cfg.agent = "codex"
-        mgr.clock_in("alice")
-        fake_backend._running.add("cc-test-alice")
+        mgr.start(["alice"])
         mgr.cfg.agent = "claude"
         capsys.readouterr()
         mgr.status()
