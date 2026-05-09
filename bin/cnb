@@ -176,6 +176,7 @@ if [ $# -gt 0 ]; then
         watchdog)   shift; exec "$CLAUDES_HOME/bin/dispatcher-watchdog" "$@" ;;
         doctor)     shift; exec "$CLAUDES_HOME/bin/doctor" "$@" ;;
         feishu)     shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.feishu_bridge "$@" ;;
+        capture)    shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.capture_ingest "$@" ;;
         shutdown)   shift; exec "$CLAUDES_HOME/bin/shutdown" "$@" ;;
         logs)
             shift
@@ -317,6 +318,9 @@ cmd_usage(Path('$CNB_PROJECT'), sys.argv[1:])
             printf "  cnb feishu start      启动飞书入站 bridge，允许用户从飞书唤起本机终端主管同学\n\n"
             printf "  cnb feishu tui        查看终端主管 TUI 快照\n"
             printf "  cnb feishu watch      启动只读 Web TUI\n\n"
+            printf "  cnb capture ingest    接收用户授权的网页/应用 capture\n"
+            printf "  cnb capture list      列出本项目 capture\n"
+            printf "  cnb capture show <id> 查看 capture 内容\n\n"
             printf "  cnb board [...]       底层消息/任务命令\n"
             printf "  cnb swarm [...]       管理后台同学\n"
             exit 0 ;;

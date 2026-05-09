@@ -7,6 +7,7 @@ This directory contains executable entrypoints for cnb. Keep the root README foc
 | Tool | Purpose | Usage Notes |
 | --- | --- | --- |
 | `cnb` | Main CLI for project init, team launch, management, registry, Feishu bridge, and project discovery. | Detailed project discovery usage lives in [`../tools/project-discovery/README.md`](../tools/project-discovery/README.md). |
+| `cnb capture` | Receives user-authorized browser/app captures and stores `.cnb/captures/<id>/` artifacts. | Protocol notes live in [`../docs/capture-protocol.md`](../docs/capture-protocol.md) and [`../tools/web-capture/README.md`](../tools/web-capture/README.md). |
 | `board` | Lower-level board operations: inbox, messages, status, tasks, ownership, pending actions, and views. | Prefer `cnb board ...` unless a test or script needs the direct entrypoint. |
 | `swarm` | Starts and manages background tongxue sessions. | Usually invoked through `cnb` during normal operation. |
 | `dispatcher` / `dispatcher-watchdog` | Monitors board activity and keeps coordination moving. | Background infrastructure; document operational changes before changing defaults. |
