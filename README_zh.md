@@ -82,6 +82,7 @@ cnb
 | `/cnb-watch <name>` | 看某个同学在做什么 |
 | `/cnb-progress` | 最近进展汇总——新消息、已完成任务 |
 | `/cnb-history` | 完整消息历史 |
+| `/cnb-pending` | 查看待用户处理的操作，并验证/重试 |
 | `/cnb-update` | 更新 cnb 到最新版 |
 | `/cnb-help` | 列出所有 `/cnb-*` 命令 |
 
@@ -105,6 +106,8 @@ cnb board --as <name> ack                # 清空收件箱
 cnb board --as <name> status "desc"      # 更新状态
 cnb board --as <name> task add "desc"    # 添加任务
 cnb board --as <name> task done          # 完成当前任务
+cnb board --as <name> pending list       # 查看待用户处理的操作
+cnb board --as <name> pending verify --retry  # 验证并重试原操作
 cnb board --as <name> view              # 团队面板
 ```
 

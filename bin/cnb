@@ -409,6 +409,9 @@ EOF
 cat > "$CMD_DIR/cnb-history.md"   <<EOF
 运行 \`${BOARD} --as ${ME} log 50\`，把完整的消息历史展示给我。
 EOF
+cat > "$CMD_DIR/cnb-pending.md"   <<EOF
+查看需要用户介入的待处理操作。运行 \`${BOARD} --as ${ME} pending list\`，把所有 \`用户需执行: ! ...\` 命令整理成可复制清单；如果用户说已经执行，运行 \`${BOARD} --as ${ME} pending verify --retry\` 并汇报验证/重试结果。
+EOF
 cat > "$CMD_DIR/cnb-update.md"    <<EOF
 运行 \`pip install --upgrade claude-nb\`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 cnb 以生效。
 EOF
@@ -418,6 +421,7 @@ cat > "$CMD_DIR/cnb-help.md"      <<EOF
 - /cnb-watch <名字> — 看某个同学在干什么
 - /cnb-progress — 最近进展汇总
 - /cnb-history — 查看完整消息历史
+- /cnb-pending — 查看待用户处理的操作并验证重试
 - /cnb-update — 更新 cnb 到最新版
 EOF
 

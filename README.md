@@ -69,6 +69,7 @@ Inside the lead tongxue's Claude Code session:
 | `/cnb-watch <name>` | Peek at what a specific tongxue is working on |
 | `/cnb-progress` | Recent progress summary — new messages, completed tasks |
 | `/cnb-history` | Full message log |
+| `/cnb-pending` | Pending user actions with verify/retry loop |
 | `/cnb-update` | Update cnb to latest version |
 | `/cnb-help` | List all `/cnb-*` commands |
 
@@ -95,6 +96,8 @@ cnb board --as <name> task done          # finish current task (auto-verify + au
 cnb board --as <name> own claim <path>   # claim module ownership
 cnb board --as <name> own map            # show all ownership
 cnb board --as <name> scan               # scan issues/CI for owners
+cnb board --as <name> pending list       # pending user-required actions
+cnb board --as <name> pending verify --retry  # verify actions, then retry originals
 cnb board --as <name> view              # team dashboard
 ```
 

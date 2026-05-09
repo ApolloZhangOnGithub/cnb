@@ -167,11 +167,16 @@ class TestSlashCommands:
             "cnb-overview.md",
             "cnb-progress.md",
             "cnb-history.md",
+            "cnb-pending.md",
             "cnb-update.md",
             "cnb-help.md",
         ]
         for f in expected:
             assert (cmd_dir / f).exists(), f"Missing: {f}"
+
+        pending_content = (cmd_dir / "cnb-pending.md").read_text()
+        assert "pending list" in pending_content
+        assert "pending verify --retry" in pending_content
 
 
 class TestSubcommands:
