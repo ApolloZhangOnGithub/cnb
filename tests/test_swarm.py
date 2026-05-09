@@ -188,6 +188,17 @@ class TestAttendance:
         assert "alice" in log.read_text()
         assert "clock-in" in log.read_text()
 
+    def test_clock_in_records_engine(self, mgr):
+        mgr.cfg.agent = "codex"
+        mgr.clock_in("alice")
+        assert "engine=codex" in mgr._env.attendance_log.read_text()
+
+    def test_recorded_engine_falls_back_to_startup_log(self, mgr):
+        mgr.cfg.agent = "codex"
+        mgr.log_startup("alice")
+        mgr.cfg.agent = "claude"
+        assert mgr.recorded_engine("alice") == "codex"
+
     def test_clock_out_writes_log(self, mgr):
         mgr.clock_in("alice")
         mgr.clock_out("alice")
@@ -256,6 +267,16 @@ class TestStartStop:
         assert "running" in out
         assert "bob" in out
         assert "stopped" in out
+
+    def test_status_uses_recorded_engine(self, mgr, fake_backend, capsys):
+        mgr.cfg.agent = "codex"
+        mgr.clock_in("alice")
+        fake_backend._running.add("cc-test-alice")
+        mgr.cfg.agent = "claude"
+        capsys.readouterr()
+        mgr.status()
+        out = capsys.readouterr().out
+        assert "alice: running (fake, agent: codex)" in out
 
 
 # ---------------------------------------------------------------------------

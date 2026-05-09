@@ -1,6 +1,7 @@
 """swarm — launch and manage multi-agent sessions."""
 
 import os
+import re
 import threading
 import time
 import tomllib
@@ -142,15 +143,42 @@ class SwarmManager:
 
     # --- Attendance ---
 
+    def _engine_from_record(self, line: str) -> str:
+        m = re.search(r"\bengine=([a-z0-9_-]+)", line)
+        if m:
+            return m.group(1)
+        if " with agent: " in line:
+            return line.rsplit(" with agent: ", 1)[1].strip()
+        return ""
+
+    def recorded_engine(self, name: str) -> str:
+        # A running session may be inspected from a later shell where SWARM_AGENT
+        # defaults differently. Persisted startup records are the truth for the
+        # engine that actually clocked in.
+        paths = [self._env.attendance_log, self._env.log_dir / f"{name}.log", self._env.log_dir / "swarm.log"]
+        for path in paths:
+            if not path.exists():
+                continue
+            try:
+                lines = path.read_text().splitlines()
+            except OSError:
+                continue
+            for line in reversed(lines):
+                if f"| {name} | clock-in" in line or f"Starting {name} with agent:" in line:
+                    engine = self._engine_from_record(line)
+                    if engine:
+                        return engine
+        return self.cfg.agent
+
     def clock_in(self, name: str) -> None:
         t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self._env.attendance_log, "a") as f:
-            f.write(f"{t} | {name} | clock-in\n")
+            f.write(f"{t} | {name} | clock-in | engine={self.cfg.agent}\n")
 
     def clock_out(self, name: str) -> None:
         t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self._env.attendance_log, "a") as f:
-            f.write(f"{t} | {name} | clock-out\n")
+            f.write(f"{t} | {name} | clock-out | engine={self.recorded_engine(name)}\n")
 
     def attendance(self) -> None:
         log = self._env.attendance_log
@@ -166,10 +194,15 @@ class SwarmManager:
             today_outs = [l for l in lines if f"| {name} | clock-out" in l and l.startswith(today)]
             last_in = today_ins[-1].split("|")[0].strip() if today_ins else ""
             last_out = today_outs[-1].split("|")[0].strip() if today_outs else ""
+            engine = self._engine_from_record(today_ins[-1]) if today_ins else ""
+            if today_ins and not engine:
+                engine = self.recorded_engine(name)
             if last_in and not last_out:
-                print(f"  {name}: 在岗 (上班 {last_in})")
+                engine_note = f", engine {engine}" if engine else ""
+                print(f"  {name}: 在岗 (上班 {last_in}{engine_note})")
             elif last_out:
-                print(f"  {name}: 已下班 (最后 {last_out})")
+                engine_note = f", engine {engine}" if engine else ""
+                print(f"  {name}: 已下班 (最后 {last_out}{engine_note})")
             else:
                 print(f"  {name}: 今日未上班")
         print()
@@ -299,14 +332,14 @@ class SwarmManager:
 
     def status(self) -> None:
         backend_name = type(self.cfg.backend).__name__.lower().replace("backend", "")
-        print(f"=== 同学状态 (mode: {backend_name}, engine: {self.cfg.agent}) ===")
+        print(f"=== 同学状态 (mode: {backend_name}, default engine: {self.cfg.agent}) ===")
         prefix = self._env.prefix
         sf = self._env.suspended_file
         for name in self._env.sessions:
             if is_suspended(name, sf):
                 print(f"  {name}: SUSPENDED")
             elif self.cfg.backend.is_agent_active(prefix, name):
-                line = self.cfg.backend.status_line(prefix, name, self.cfg.agent)
+                line = self.cfg.backend.status_line(prefix, name, self.recorded_engine(name))
                 print(f"  {name}: {line}")
             elif self.cfg.backend.is_running(prefix, name):
                 print(f"  {name}: stale (session exists, 同学已退出)")
