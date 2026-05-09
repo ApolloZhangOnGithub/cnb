@@ -89,7 +89,7 @@ def tmp_project(tmp_path):
 
     # Create session .md files
     for name in DEFAULT_SESSIONS:
-        (claudes / "sessions" / f"{name}.md").write_text(f"# {name}\n\n## Current task\n(none)\n\n## @inbox\n")
+        (claudes / "sessions" / f"{name}.md").write_text(f"# {name}\n\n## Current task\n(none)\n")
 
     return tmp_path
 
@@ -118,7 +118,7 @@ def db(tmp_project):
     """Return a BoardDB instance backed by a full ClaudesEnv (not bare path).
 
     This ensures db.env is populated, so commands that access the filesystem
-    (attachments, .md sync) work correctly in tests.
+    (attachments, ack markers) work correctly in tests.
     """
     from lib.board_db import BoardDB
     from lib.common import ClaudesEnv

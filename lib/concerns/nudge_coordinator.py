@@ -140,7 +140,7 @@ class NudgeCoordinator(Concern):
                 break
 
     def check_session(self, name: str, now: int) -> None:
-        """Check and nudge a specific session (used by FileWatcher for instant inbox detection)."""
+        """Check and nudge a specific session immediately."""
         self._process_session(name, now)
 
     def tick(self, now: int) -> None:

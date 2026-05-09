@@ -153,11 +153,12 @@ class TestSessionFiles:
             content = (tmp_project / ".claudes" / "sessions" / f"{name}.md").read_text()
             assert "## Current task" in content
 
-    def test_session_file_has_inbox_section(self, tmp_project):
-        """Each session file has an @inbox section."""
+    def test_session_file_has_no_inbox_section(self, tmp_project):
+        """Session files do not mirror SQLite inbox state."""
         for name in DEFAULT_SESSIONS:
             content = (tmp_project / ".claudes" / "sessions" / f"{name}.md").read_text()
-            assert "## @inbox" in content
+            assert "## @inbox" not in content
+            assert "## @收件箱" not in content
 
 
 class TestIdempotency:
@@ -207,7 +208,7 @@ class TestIdempotency:
         path.write_text("# alice\n\n## Current task\nworking on something\n")
 
         # Re-create (simulating init)
-        path.write_text("# alice\n\n## Current task\n(none)\n\n## @inbox\n")
+        path.write_text("# alice\n\n## Current task\n(none)\n")
 
         content = path.read_text()
         assert "(none)" in content

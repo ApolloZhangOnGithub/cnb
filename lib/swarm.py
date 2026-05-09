@@ -122,7 +122,7 @@ class SwarmManager:
         for n in names:
             md = self._env.sessions_dir / f"{n}.md"
             if not md.exists():
-                md.write_text(f"# {n}\n\n## Current task\n(none)\n\n## @inbox\n")
+                md.write_text(f"# {n}\n\n## Current task\n(none)\n")
 
         config_path = self._env.claudes_dir / "config.toml"
         if config_path.exists():

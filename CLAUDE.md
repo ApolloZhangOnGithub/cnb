@@ -38,8 +38,8 @@ Two DB wrappers exist — use the right one:
 
 | Wrapper | File | Use when |
 |---------|------|----------|
-| `BoardDB` | `lib/board_db.py` | All `board_*` modules. Includes `.md` file sync helpers. |
-| `DB` | `lib/common.py` | `bin/dispatcher`, `lib/monitor.py`, standalone scripts. |
+| `BoardDB` | `lib/board_db.py` | All `board_*` modules. SQLite inbox is the source of truth; no session `.md` inbox sync. |
+| `DB` | `lib/common.py` | `bin/dispatcher`, standalone scripts. |
 
 Both wrappers create a **new connection per call** (no pooling). This is intentional — SQLite WAL handles concurrent readers, and our writes are infrequent. Don't add connection pooling or singleton patterns.
 
