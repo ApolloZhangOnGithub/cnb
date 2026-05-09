@@ -189,15 +189,46 @@ class TestAttendance:
         assert "clock-in" in log.read_text()
 
     def test_clock_in_records_engine(self, mgr):
+        from lib.board_db import BoardDB
+
         mgr.cfg.agent = "codex"
         mgr.clock_in("alice")
         assert "engine=codex" in mgr._env.attendance_log.read_text()
+        db = BoardDB(mgr._env)
+        row = db.query_one(
+            "SELECT session, engine, ended_at FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1"
+        )
+        assert row["session"] == "alice"
+        assert row["engine"] == "codex"
+        assert row["ended_at"] is None
+
+    def test_clock_out_records_run_end(self, mgr):
+        from lib.board_db import BoardDB
+
+        mgr.cfg.agent = "codex"
+        mgr.clock_in("alice")
+        mgr.clock_out("alice")
+        db = BoardDB(mgr._env)
+        row = db.query_one("SELECT engine, ended_at FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1")
+        assert row["engine"] == "codex"
+        assert row["ended_at"] is not None
+
+    def test_recorded_engine_prefers_run_history(self, mgr):
+        mgr.cfg.agent = "codex"
+        mgr.clock_in("alice")
+        mgr.cfg.agent = "claude"
+        assert mgr.recorded_engine("alice") == "codex"
 
     def test_recorded_engine_falls_back_to_startup_log(self, mgr):
+        from lib.board_db import BoardDB
+
         mgr.cfg.agent = "codex"
         mgr.log_startup("alice")
         mgr.cfg.agent = "claude"
         assert mgr.recorded_engine("alice") == "codex"
+        db = BoardDB(mgr._env)
+        row = db.query_one("SELECT engine FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1")
+        assert row["engine"] == "codex"
 
     def test_clock_out_writes_log(self, mgr):
         mgr.clock_in("alice")

@@ -151,7 +151,66 @@ class SwarmManager:
             return line.rsplit(" with agent: ", 1)[1].strip()
         return ""
 
+    def _timestamp_from_record(self, line: str) -> str:
+        m = re.match(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]", line)
+        if m:
+            return m.group(1)
+        m = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\|", line)
+        if m:
+            return m.group(1)
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def _record_run_start(self, name: str, started_at: str) -> None:
+        db = BoardDB(self._env)
+        with db.conn() as c:
+            db.ensure_session(name, c=c)
+            # Close any previous open run for this session before recording a
+            # new clock-in, so restarts do not leave ambiguous current engines.
+            c.execute(
+                "UPDATE session_runs SET ended_at=? WHERE session=? AND ended_at IS NULL",
+                (started_at, name),
+            )
+            c.execute(
+                "INSERT INTO session_runs(session, engine, started_at) VALUES (?, ?, ?)",
+                (name, self.cfg.agent, started_at),
+            )
+
+    def _record_run_end(self, name: str, ended_at: str) -> None:
+        db = BoardDB(self._env)
+        with db.conn() as c:
+            c.execute(
+                "UPDATE session_runs SET ended_at=? "
+                "WHERE id=(SELECT id FROM session_runs "
+                "WHERE session=? AND ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT 1)",
+                (ended_at, name),
+            )
+
+    def _record_run_snapshot(self, name: str, engine: str, started_at: str) -> None:
+        db = BoardDB(self._env)
+        with db.conn() as c:
+            db.ensure_session(name, c=c)
+            c.execute(
+                "INSERT INTO session_runs(session, engine, started_at) VALUES (?, ?, ?)",
+                (name, engine, started_at),
+            )
+
+    def _engine_from_run_history(self, name: str) -> str:
+        if not self._env.board_db.exists():
+            return ""
+        try:
+            db = BoardDB(self._env)
+            row = db.query_one(
+                "SELECT engine FROM session_runs WHERE session=? ORDER BY started_at DESC, id DESC LIMIT 1",
+                (name,),
+            )
+        except Exception:
+            return ""
+        return row["engine"] if row and row["engine"] else ""
+
     def recorded_engine(self, name: str) -> str:
+        engine = self._engine_from_run_history(name)
+        if engine:
+            return engine
         # A running session may be inspected from a later shell where SWARM_AGENT
         # defaults differently. Persisted startup records are the truth for the
         # engine that actually clocked in.
@@ -167,18 +226,25 @@ class SwarmManager:
                 if f"| {name} | clock-in" in line or f"Starting {name} with agent:" in line:
                     engine = self._engine_from_record(line)
                     if engine:
+                        try:
+                            self._record_run_snapshot(name, engine, self._timestamp_from_record(line))
+                        except Exception:
+                            pass
                         return engine
         return self.cfg.agent
 
     def clock_in(self, name: str) -> None:
         t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._record_run_start(name, t)
         with open(self._env.attendance_log, "a") as f:
             f.write(f"{t} | {name} | clock-in | engine={self.cfg.agent}\n")
 
     def clock_out(self, name: str) -> None:
         t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        engine = self.recorded_engine(name)
+        self._record_run_end(name, t)
         with open(self._env.attendance_log, "a") as f:
-            f.write(f"{t} | {name} | clock-out | engine={self.recorded_engine(name)}\n")
+            f.write(f"{t} | {name} | clock-out | engine={engine}\n")
 
     def attendance(self) -> None:
         log = self._env.attendance_log
