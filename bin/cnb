@@ -175,6 +175,7 @@ if [ $# -gt 0 ]; then
         dispatcher) shift; exec "$CLAUDES_HOME/bin/dispatcher" "$@" ;;
         watchdog)   shift; exec "$CLAUDES_HOME/bin/dispatcher-watchdog" "$@" ;;
         doctor)     shift; exec "$CLAUDES_HOME/bin/doctor" "$@" ;;
+        feishu)     shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.feishu_bridge "$@" ;;
         shutdown)   shift; exec "$CLAUDES_HOME/bin/shutdown" "$@" ;;
         logs)
             shift
@@ -224,7 +225,7 @@ print(' '.join(names))
         projects)
             shift
             if [ $# -eq 0 ]; then
-                echo "用法: cnb projects <list|cleanup>" >&2; exit 1
+                echo "用法: cnb projects <list|cleanup|scan>" >&2; exit 1
             fi
             subcmd="$1"; shift
             case "$subcmd" in
@@ -251,8 +252,15 @@ else:
         print(f'  已移除: {p}')
     print(f'OK 清理了 {len(removed)} 个失效项目')
 " ;;
+                scan)
+                    python3 - "$@" <<PY
+import sys; sys.path.insert(0, '$CLAUDES_HOME')
+from lib.global_registry import cmd_projects_scan
+cmd_projects_scan(sys.argv[1:])
+PY
+                    ;;
                 *)
-                    echo "用法: cnb projects <list|cleanup>" >&2; exit 1 ;;
+                    echo "用法: cnb projects <list|cleanup|scan>" >&2; exit 1 ;;
             esac
             exit 0 ;;
         ui)         shift; exec "$CLAUDES_HOME/bin/board" tui ;;
@@ -300,10 +308,15 @@ cmd_usage(Path('$CNB_PROJECT'), sys.argv[1:])
             printf "  cnb exec <name> \"msg\" 给某个同学发指令\n"
             printf "  cnb stop <name>       停止某个同学\n"
             printf "  cnb projects list     列出所有已注册的项目\n"
+            printf "  cnb projects scan     扫描本机真实 cnb 项目\n"
             printf "  cnb projects cleanup  清理已失效的项目\n"
             printf "  cnb usage             token 用量统计\n"
             printf "  cnb leaderboard       贡献排行榜\n"
             printf "  cnb doctor            健康检查\n\n"
+            printf "  cnb feishu status     查看飞书入站 bridge 配置\n"
+            printf "  cnb feishu start      启动飞书入站 bridge，允许用户从飞书唤起本机终端主管同学\n\n"
+            printf "  cnb feishu tui        查看终端主管 TUI 快照\n"
+            printf "  cnb feishu watch      启动只读 Web TUI\n\n"
             printf "  cnb board [...]       底层消息/任务命令\n"
             printf "  cnb swarm [...]       管理后台同学\n"
             exit 0 ;;

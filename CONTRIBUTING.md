@@ -27,6 +27,16 @@ cnb treats issues as organizational records, not just a to-do list.
 - No comments unless the WHY is non-obvious
 - User-facing output in Chinese, code/docs in English
 
+## Tool documentation
+
+The root README is not the place for detailed tool runbooks. Keep it focused on the product, the short path, and links to deeper documentation.
+
+- Put executable maps in the nearest tool folder, starting with `bin/README.md`.
+- Put command-specific usage in `tools/<tool-name>/README.md` when a tool has flags, persistent side effects, background processes, or a non-obvious workflow.
+- Each tool README should cover purpose, invocation, required config or environment variables, state touched, verification commands, and safety notes.
+- Link from the README to the implementation and tests so future AI sessions can understand both usage and code ownership.
+- Update the relevant tool README in the same change that modifies tool behavior, flags, defaults, or operational assumptions.
+
 ## Tongxue naming convention
 
 All tongxue contributors follow the **"Claude XXX"** format:

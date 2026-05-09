@@ -19,7 +19,9 @@ from lib.global_registry import (
     _read_projects,
     check_credential,
     cleanup,
+    discover_projects,
     list_projects,
+    register_discovered_projects,
     register_project,
     remove_project,
     update_credential,
@@ -276,6 +278,75 @@ class TestCleanup:
         removed = cleanup(registry_path=registry_file)
         assert len(removed) == 2
         assert list_projects(registry_path=registry_file) == []
+
+
+# ---------------------------------------------------------------------------
+# discover_projects
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoverProjects:
+    def test_discovers_cnb_project_under_bounded_root(self, tmp_path):
+        proj = tmp_path / "workspace" / "app"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+        (cnb_dir / "config.toml").write_text('prefix = "cc-test"\nsessions = ["alice"]\n')
+
+        projects = discover_projects(roots=[tmp_path], max_depth=3)
+
+        assert len(projects) == 1
+        assert projects[0]["name"] == "app"
+        assert projects[0]["path"] == str(proj.resolve())
+        assert projects[0]["config_dir"] == ".cnb"
+        assert projects[0]["prefix"] == "cc-test"
+        assert projects[0]["configured_sessions"] == ["alice"]
+
+    def test_discovers_legacy_claudes_project(self, tmp_path):
+        proj = tmp_path / "legacy"
+        legacy_dir = proj / ".claudes"
+        legacy_dir.mkdir(parents=True)
+        (legacy_dir / "board.db").touch()
+
+        projects = discover_projects(roots=[tmp_path], max_depth=2)
+
+        assert len(projects) == 1
+        assert projects[0]["config_dir"] == ".claudes"
+
+    def test_prefers_cnb_over_legacy_for_same_project(self, tmp_path):
+        proj = tmp_path / "both"
+        (proj / ".cnb").mkdir(parents=True)
+        (proj / ".claudes").mkdir(parents=True)
+        (proj / ".cnb" / "board.db").touch()
+        (proj / ".claudes" / "board.db").touch()
+
+        projects = discover_projects(roots=[tmp_path], max_depth=2)
+
+        assert len(projects) == 1
+        assert projects[0]["config_dir"] == ".cnb"
+
+    def test_respects_max_depth(self, tmp_path):
+        proj = tmp_path / "a" / "b" / "c"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+
+        assert discover_projects(roots=[tmp_path], max_depth=1) == []
+        assert len(discover_projects(roots=[tmp_path], max_depth=3)) == 1
+
+    def test_registers_discovered_projects(self, registry_file, tmp_path):
+        proj = tmp_path / "app"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+        projects = discover_projects(roots=[tmp_path], max_depth=1)
+
+        count = register_discovered_projects(projects, registry_path=registry_file)
+
+        assert count == 1
+        registered = list_projects(registry_path=registry_file)
+        assert registered[0]["name"] == "app"
+        assert registered[0]["path"] == str(proj.resolve())
 
 
 # ---------------------------------------------------------------------------

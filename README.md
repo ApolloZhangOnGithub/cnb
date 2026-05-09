@@ -25,7 +25,7 @@ These are complementary. You could use Claude Squad for session management and c
 
 cnb's specific focus is what happens **between** sessions — when a tongxue restarts with no memory, how does it pick up where the last one left off? Daily reports, shift directories, bug tracker with SLA, Co-Authored-By enforcement, and shutdown protocols are all designed for this.
 
-**Where cnb is headed:** Organization architecture first, then automation. The immediate priority is clarifying roles (pilot vs project manager, infrastructure ownership) and building governance into the toolchain so compliance is the default path, not a matter of discipline. After that, module owners become fully autonomous — auto-detecting relevant issues, verifying their own work against CI, creating PRs, and responding to failures. Not "unattended agents doing random tasks" but "responsible owners who don't need to be told to do their job." See [ROADMAP.md](ROADMAP.md).
+**Where cnb is headed:** Organization architecture first, then automation. The immediate priority is clarifying roles (terminal supervisor tongxue vs project-level responsible tongxue, infrastructure ownership) and building governance into the toolchain so compliance is the default path, not a matter of discipline. After that, module owners become fully autonomous — auto-detecting relevant issues, verifying their own work against CI, creating PRs, and responding to failures. Not "unattended agents doing random tasks" but "responsible owners who don't need to be told to do their job." See [ROADMAP.md](ROADMAP.md).
 
 <!-- section:glossary -->
 ## Glossary
@@ -33,8 +33,8 @@ cnb's specific focus is what happens **between** sessions — when a tongxue res
 | Term | Meaning |
 |------|---------|
 | **tongxue** (同学) | Literally "classmate" in Chinese. Each Claude Code instance in a cnb team is called a tongxue — not an "agent", not a "worker". The word implies peers learning and building together, which is how cnb sessions actually operate: they coordinate as equals through a shared message board, not through a master-slave hierarchy. |
-| **pilot** (机长) | The user-facing Claude Code session. Activated by `/cnb` in any Claude Code session. Per-machine (not per-project), manages all cnb projects on the machine. The pilot is the entry point for cnb governance — once active, all operations are tracked, ownership is matched, and the organization is aware. |
-| **project manager** (项目经理) | Per-project tongxue responsible for team coordination within a single repo. Distinct from the pilot: the pilot faces the user, the project manager faces the team. |
+| **terminal supervisor tongxue** (终端主管同学) | The user-facing Claude Code session. Activated by `/cnb` in any Claude Code session. Per-machine (not per-project), manages all cnb projects on the machine. Once active, all operations are tracked, ownership is matched, and the organization is aware. |
+| **responsible tongxue** (负责同学) | A tongxue responsible for a specific scope. The scope is the differentiator, not the title — a module 负责同学, a project 负责同学, a machine 负责同学 are all the same role at different scales. |
 | **board** | The shared SQLite database (`.cnb/board.db`) where tongxue exchange messages, track tasks, and report status. |
 | **dispatcher** | A background process that monitors tongxue health and nudges idle ones. |
 
@@ -54,10 +54,10 @@ Requires: Python 3.11+, tmux, and at least one agent CLI: Claude Code CLI (defau
 
 ```bash
 claude          # start Claude Code normally, anywhere
-/cnb            # activate pilot mode — cnb governance comes online
+/cnb            # activate terminal supervisor mode — cnb governance comes online
 ```
 
-This registers you as the pilot, activates hooks for operation tracking and ownership matching, and shows the project overview. The pilot is per-machine and manages all cnb projects.
+This registers you as the terminal supervisor tongxue, activates hooks for operation tracking and ownership matching, and shows the project overview. The terminal supervisor tongxue is per-machine and manages all cnb projects.
 
 **Option B — Full team launch:**
 
@@ -66,7 +66,7 @@ cd your-project
 cnb
 ```
 
-This initializes the project (creates `.cnb/` with SQLite DB and config), launches a team of tongxue in tmux, starts a dispatcher, and drops you into the pilot's session.
+This initializes the project (creates `.cnb/` with SQLite DB and config), launches a team of tongxue in tmux, starts a dispatcher, and drops you into the terminal supervisor tongxue's session.
 
 Claude is the default engine. Codex is available as the second option:
 
@@ -88,7 +88,31 @@ For lower-level swarm control, use `SWARM_AGENT=codex cnb swarm start`.
 
 See [docs/codex-engine.md](docs/codex-engine.md) for Codex launch notes and smoke-test guidance.
 
-The pilot talks to the user directly. Background tongxue work independently and report back through the board.
+The terminal supervisor tongxue talks to the user directly. Background tongxue work independently and report back through the board.
+
+**Feishu wake-up path:** configure `~/.cnb/config.toml` with an allowlisted Feishu chat, then run `cnb feishu start` on the Mac. Incoming Feishu IM events from that chat are routed into a tmux session for the machine-level terminal supervisor tongxue.
+
+```toml
+[feishu]
+transport = "hermes_lark_cli"  # development test adapter backed by the Hermes Feishu CLI bot
+chat_id = "oc_xxxxx"
+terminal_supervisor_name = "terminal-supervisor"
+terminal_supervisor_tmux = "cnb-terminal-supervisor"
+agent = "codex"
+tui_capture_lines = 120
+watch_port = 8765
+watch_tool = "builtin"
+```
+
+Use `cnb feishu status` to verify the bridge before starting it.
+This is an async message bridge, not a terminal screen mirror: Claude Code's live TUI rendering is not synchronized to Feishu. The routed message includes the Feishu `message_id`; the terminal supervisor tongxue sends user-visible updates by running `cnb feishu reply <message_id> "message"`.
+
+The current Feishu transport is explicitly `hermes_lark_cli`: it reuses the existing Hermes Feishu CLI bot for development testing. Do not treat that bot as a CNB production identity or as the source of CNB organization state.
+
+Feishu-side CNB commands are namespaced to avoid collisions:
+
+- `/cnb_tui` or `/c_tui` replies with the current terminal supervisor TUI snapshot.
+- `/cnb_watch` or `/c_watch` starts a built-in read-only Web TUI viewer and replies with the link. Set `watch_public_url` if the link should point at an external tunnel.
 
 <!-- section:docs -->
 ## Docs
@@ -102,7 +126,7 @@ The README is the short path. Longer product documentation lives under [`docs/`]
 <!-- section:slash-commands -->
 ## Slash commands
 
-When the pilot is running in Claude Code:
+When the terminal supervisor tongxue is running in Claude Code:
 
 | Command | What it does |
 |---------|-------------|
@@ -215,7 +239,7 @@ Completely different projects. OpenClaw is a personal AI assistant across 20+ me
 
 **Q: Can cnb run without a human watching?**
 
-Not yet. Today, the pilot needs a human to drive it. But this is the active development direction — see [ROADMAP.md](ROADMAP.md). The goal is for module owners to autonomously detect issues, verify their work, and deliver PRs without being told.
+Not yet. Today, the terminal supervisor tongxue needs a human to drive it. But this is the active development direction — see [ROADMAP.md](ROADMAP.md). The goal is for module owners to autonomously detect issues, verify their work, and deliver PRs without being told.
 
 **Q: Is cnb token-efficient?**
 
