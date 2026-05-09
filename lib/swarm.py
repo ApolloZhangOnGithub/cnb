@@ -104,11 +104,9 @@ class SwarmManager:
 
     def _save_cmd(self, name: str) -> str:
         board = self._board_path()
-        return (
-            f"git add -A && git commit -m '[WIP][{name}] auto-save before shutdown' "
-            f"--allow-empty-message 2>/dev/null; "
-            f"'{board}' --as {name} status 'shutdown: state saved'"
-        )
+        # Never auto-stage on shutdown. A previous git add -A auto-save path
+        # leaked secrets and can also mix unrelated agents' hunks in one commit.
+        return f"'{board}' --as {name} status 'shutdown: stopped without auto-commit'"
 
     # --- Session registration ---
 

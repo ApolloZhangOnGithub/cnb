@@ -248,6 +248,12 @@ class TestAttendance:
 
 
 class TestStartStop:
+    def test_save_cmd_does_not_auto_stage_or_commit(self, mgr):
+        cmd = mgr._save_cmd("alice")
+        assert "git add" not in cmd
+        assert "git commit" not in cmd
+        assert "shutdown: stopped without auto-commit" in cmd
+
     def test_start_dry_run(self, mgr, fake_backend, capsys):
         mgr.start([], dry_run=True)
         out = capsys.readouterr().out
