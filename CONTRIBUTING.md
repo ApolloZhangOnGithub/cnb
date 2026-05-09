@@ -2,6 +2,16 @@
 
 We welcome contributions from everyone.
 
+## Issue management
+
+cnb treats issues as organizational records, not just a to-do list.
+
+- **Read ROADMAP.md before creating an issue.** Confirm it doesn't duplicate existing plans. Note the relationship in the issue body.
+- **Every issue must have labels.** At least one phase label (`phase:1`/`phase:2`/`phase:3`) and one type label (`infra`/`ownership`/`org-design`/`experiment`). Unlabeled issues will be sent back.
+- **One issue per problem.** If you find an existing issue covering the same problem, add to it instead of opening a new one.
+- **Research ≠ execution.** Issues tagged `experiment` are hypotheses to validate, not features to build. They have no deadline and don't compete with operational work.
+- **Don't close issues lightly.** Only close when: all work is fully complete, the issue is spam/duplicate, or it has been consolidated into another issue. Partial completion → update progress, keep open.
+
 ## Workflow
 
 1. Fork the repo (or create a branch if you have write access)
