@@ -37,6 +37,17 @@ The root README is not the place for detailed tool runbooks. Keep it focused on 
 - Link from the README to the implementation and tests so future AI sessions can understand both usage and code ownership.
 - Update the relevant tool README in the same change that modifies tool behavior, flags, defaults, or operational assumptions.
 
+## Boundary-compatible changes
+
+When behavior has multiple valid interpretations or boundary cases, prefer adding explicit modes, options, or strategy selection instead of rewriting the code from one interpretation into another.
+
+- Keep the existing default stable unless it is clearly wrong, unsafe, or impossible to support.
+- Preserve strict definitions for normal operation, and add opt-in modes for audit, migration, compatibility, or partial-state inspection.
+- Name the modes by the boundary they represent, not by the current incident. For example: `board` vs `marker`, `strict` vs `audit`, `live` vs `stale-ok`.
+- Tests should cover the default path and at least one non-default boundary mode.
+- Documentation should explain when to use each mode, what state it reads or writes, and which modes are safe to register or persist.
+- Avoid ping-pong changes where one patch broadens a definition and the next narrows it again. Make the boundary explicit so future contributors can call the right path on demand.
+
 ## Tongxue naming convention
 
 All tongxue contributors follow the **"Claude XXX"** format:
