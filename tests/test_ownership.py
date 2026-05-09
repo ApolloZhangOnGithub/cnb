@@ -3,6 +3,7 @@
 import json
 import sqlite3
 import subprocess
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -115,6 +116,92 @@ class TestOwnMap:
         cmd_own(db, "alice", ["map"])
         out = capsys.readouterr().out
         assert "无 ownership" in out
+
+
+class TestOwnTransfer:
+    def test_transfer_single(self, db, capsys):
+        cmd_own(db, "alice", ["claim", "lib/"])
+        capsys.readouterr()
+
+        cmd_own(db, "alice", ["transfer", "bob", "lib/"])
+        out = capsys.readouterr().out
+        assert "alice -> bob" in out
+
+        assert find_owner(db, "lib/board_own.py") == "bob"
+        assert db.scalar("SELECT COUNT(*) FROM ownership WHERE session='alice'") == 0
+
+    def test_transfer_unowned_warns(self, db, capsys):
+        cmd_own(db, "alice", ["transfer", "bob", "lib/"])
+        out = capsys.readouterr().out
+        assert "不拥有" in out
+        assert "0 条 ownership" in out
+
+    def test_transfer_to_self_rejected(self, db):
+        cmd_own(db, "alice", ["claim", "lib/"])
+        with pytest.raises(SystemExit):
+            cmd_own(db, "alice", ["transfer", "alice", "lib/"])
+
+    def test_transfer_all(self, db, capsys):
+        cmd_own(db, "alice", ["claim", "lib/", "bin/"])
+        capsys.readouterr()
+
+        cmd_own(db, "alice", ["transfer-all", "bob"])
+        out = capsys.readouterr().out
+        assert "全部 ownership 交接给 bob" in out
+        assert find_owner(db, "lib/board_own.py") == "bob"
+        assert find_owner(db, "bin/board") == "bob"
+
+    def test_transfer_all_empty(self, db, capsys):
+        cmd_own(db, "alice", ["transfer-all", "bob"])
+        out = capsys.readouterr().out
+        assert "无 ownership 可交接" in out
+
+
+class TestOwnOffboard:
+    def test_offboard_lists_ownership_and_tasks(self, db, capsys):
+        cmd_own(db, "alice", ["claim", "lib/"])
+        db.execute(
+            "INSERT INTO tasks(session, description, status, priority) VALUES (?, ?, ?, ?)",
+            ("alice", "finish handoff", "active", 2),
+        )
+        capsys.readouterr()
+
+        cmd_own(db, "alice", ["offboard"])
+        out = capsys.readouterr().out
+        assert "离职清单: alice" in out
+        assert "lib/" in out
+        assert "finish handoff" in out
+        assert "当前上下文不可用" in out
+
+    def test_other_session_offboard_requires_privilege(self, db):
+        with pytest.raises(SystemExit):
+            cmd_own(db, "bob", ["offboard", "alice"])
+
+    def test_dispatcher_can_view_other_session_offboard(self, db, capsys):
+        cmd_own(db, "dispatcher", ["offboard", "alice"])
+        out = capsys.readouterr().out
+        assert "离职清单: alice" in out
+
+
+class TestOwnOrphans:
+    def test_missing_heartbeat_is_not_orphan(self, db, capsys):
+        cmd_own(db, "alice", ["claim", "lib/"])
+        capsys.readouterr()
+
+        cmd_own(db, "alice", ["orphans"])
+        out = capsys.readouterr().out
+        assert "无 orphaned ownership" in out
+
+    def test_stale_heartbeat_is_orphan(self, db, capsys):
+        old = (datetime.now() - timedelta(hours=25)).strftime("%Y-%m-%d %H:%M:%S")
+        db.execute("UPDATE sessions SET last_heartbeat=? WHERE name='alice'", (old,))
+        cmd_own(db, "alice", ["claim", "lib/"])
+        capsys.readouterr()
+
+        cmd_own(db, "alice", ["orphans"])
+        out = capsys.readouterr().out
+        assert "alice" in out
+        assert "lib/" in out
 
 
 class TestFindOwner:
@@ -285,6 +372,35 @@ class TestScan:
 
         msgs = db.query("SELECT body FROM messages WHERE recipient='alice' AND body LIKE '%ISSUE #10%'")
         assert len(msgs) == 1
+
+    @patch("lib.board_own.subprocess.run")
+    def test_scan_broadcasts_issue_for_orphaned_owner(self, mock_run, db, capsys):
+        env = MagicMock()
+        env.project_root = Path("/tmp/fake")
+        db.env = env
+
+        old = (datetime.now() - timedelta(hours=25)).strftime("%Y-%m-%d %H:%M:%S")
+        db.execute("UPDATE sessions SET last_heartbeat=? WHERE name='alice'", (old,))
+        cmd_own(db, "alice", ["claim", "lib/"])
+        capsys.readouterr()
+
+        issues_json = json.dumps([{"number": 11, "title": "lib/ needs owner", "labels": [], "body": ""}])
+
+        def side_effect(cmd, **kwargs):
+            if "issue" in cmd:
+                return MagicMock(returncode=0, stdout=issues_json)
+            return MagicMock(returncode=0, stdout="[]")
+
+        mock_run.side_effect = side_effect
+
+        cmd_scan(db, "alice", [])
+        out = capsys.readouterr().out
+        assert "1 个 issue" in out
+
+        msgs = db.query("SELECT body FROM messages WHERE recipient='all' AND body LIKE '%ISSUE #11%'")
+        assert len(msgs) == 1
+        assert "orphaned" in msgs[0][0]
+        assert "alice" in msgs[0][0]
 
     @patch("lib.board_own.subprocess.run")
     def test_scan_ci_failure(self, mock_run, db, capsys):

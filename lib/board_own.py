@@ -2,10 +2,13 @@
 
 import json
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from lib.board_db import BoardDB
-from lib.common import validate_identity
+from lib.common import is_privileged, parse_flags, validate_identity
+
+DEFAULT_ORPHAN_HOURS = 24
 
 
 def cmd_own(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -19,10 +22,18 @@ def cmd_own(db: BoardDB, identity: str, args: list[str]) -> None:
         _own_list(db, identity, rest)
     elif subcmd == "disown":
         _own_disown(db, identity, rest)
+    elif subcmd == "transfer":
+        _own_transfer(db, identity, rest)
+    elif subcmd == "transfer-all":
+        _own_transfer_all(db, identity, rest)
+    elif subcmd == "offboard":
+        _own_offboard(db, identity, rest)
+    elif subcmd in ("orphans", "orphan"):
+        _own_orphans(db, rest)
     elif subcmd == "map":
         _own_map(db)
     else:
-        print("Usage: board --as <name> own {claim|list|disown|map}")
+        print("Usage: board --as <name> own {claim|list|disown|transfer|transfer-all|offboard|orphans|map}")
         raise SystemExit(1)
 
 
@@ -63,6 +74,89 @@ def _own_disown(db: BoardDB, identity: str, args: list[str]) -> None:
             print(f"WARNING: {name} 不拥有 {pattern}")
 
 
+def _ensure_transfer_target(db: BoardDB, source: str, target: str) -> None:
+    if target == source:
+        print("ERROR: 目标同学不能是自己")
+        raise SystemExit(1)
+    db.ensure_session(target)
+
+
+def _transfer_one(db: BoardDB, source: str, target: str, pattern: str, *, c) -> bool:
+    row = db.query_one(
+        "SELECT id FROM ownership WHERE session=? AND path_pattern=?",
+        (source, pattern),
+        c=c,
+    )
+    if not row:
+        print(f"WARNING: {source} 不拥有 {pattern}，跳过")
+        return False
+
+    target_row = db.query_one(
+        "SELECT id FROM ownership WHERE session=? AND path_pattern=?",
+        (target, pattern),
+        c=c,
+    )
+    if target_row:
+        db.execute(
+            "DELETE FROM ownership WHERE session=? AND path_pattern=?",
+            (source, pattern),
+            c=c,
+        )
+        print(f"OK {pattern} 已由 {target} 负责；已从 {source} 释放")
+        return True
+
+    db.execute(
+        "UPDATE ownership SET session=?, claimed_at=(strftime('%Y-%m-%d %H:%M','now','localtime')) "
+        "WHERE session=? AND path_pattern=?",
+        (target, source, pattern),
+        c=c,
+    )
+    print(f"OK 已交接 {pattern}: {source} -> {target}")
+    return True
+
+
+def _own_transfer(db: BoardDB, identity: str, args: list[str]) -> None:
+    source = identity.lower()
+    if len(args) < 2:
+        print("Usage: board --as <name> own transfer <target> <path_pattern> [path2 ...]")
+        raise SystemExit(1)
+
+    target = args[0].lower()
+    patterns = args[1:]
+    _ensure_transfer_target(db, source, target)
+
+    moved = 0
+    with db.conn() as c:
+        for pattern in patterns:
+            if _transfer_one(db, source, target, pattern, c=c):
+                moved += 1
+    print(f"OK 已交接 {moved} 条 ownership 给 {target}")
+
+
+def _own_transfer_all(db: BoardDB, identity: str, args: list[str]) -> None:
+    source = identity.lower()
+    if len(args) != 1:
+        print("Usage: board --as <name> own transfer-all <target>")
+        raise SystemExit(1)
+
+    target = args[0].lower()
+    _ensure_transfer_target(db, source, target)
+    patterns = [
+        row[0]
+        for row in db.query("SELECT path_pattern FROM ownership WHERE session=? ORDER BY path_pattern", (source,))
+    ]
+    if not patterns:
+        print(f"{source} 无 ownership 可交接")
+        return
+
+    moved = 0
+    with db.conn() as c:
+        for pattern in patterns:
+            if _transfer_one(db, source, target, pattern, c=c):
+                moved += 1
+    print(f"OK 已把 {source} 的全部 ownership 交接给 {target}: {moved} 条")
+
+
 def _own_list(db: BoardDB, identity: str, args: list[str]) -> None:
     target = args[0].lower() if args else identity.lower()
     rows = db.query(
@@ -91,6 +185,85 @@ def _own_map(db: BoardDB) -> None:
         print(f"    {pattern}")
 
 
+def _own_offboard(db: BoardDB, identity: str, args: list[str]) -> None:
+    requester = identity.lower()
+    target = args[0].lower() if args else requester
+    if target != requester and not is_privileged(requester):
+        print("ERROR: 只有本人、lead 或 dispatcher 可以查看离职清单")
+        raise SystemExit(1)
+
+    validate_identity(db, target)
+    print(f"离职清单: {target}")
+
+    ownership = db.query(
+        "SELECT path_pattern, claimed_at FROM ownership WHERE session=? ORDER BY path_pattern",
+        (target,),
+    )
+    print("\nOwnership:")
+    if ownership:
+        for pattern, claimed in ownership:
+            print(f"  {pattern}  (since {claimed})")
+    else:
+        print("  (none)")
+
+    tasks = db.query(
+        "SELECT id, status, priority, description FROM tasks "
+        "WHERE session=? AND status != 'done' "
+        "ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, priority DESC, id ASC",
+        (target,),
+    )
+    print("\nTasks:")
+    if tasks:
+        for task_id, status, priority, desc in tasks:
+            print(f"  #{task_id} [{status} p{priority}] {desc}")
+    else:
+        print("  (none)")
+
+    print("\nGit:")
+    env = db.env
+    if not env:
+        print("  (当前上下文不可用)")
+        return
+    for line in _git_handoff_summary(env.project_root):
+        print(f"  {line}")
+
+
+def _git_handoff_summary(project_root: Path) -> list[str]:
+    try:
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        ahead = ""
+        if branch:
+            r = subprocess.run(
+                ["git", "rev-list", "--left-right", "--count", f"origin/{branch}...HEAD"],
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            ahead = r.stdout.strip() if r.returncode == 0 else ""
+        result = [f"分支: {branch or '(detached)'}"]
+        result.append(f"脏文件数: {len(dirty.splitlines()) if dirty else 0}")
+        if ahead:
+            behind, ahead_count = ahead.split()
+            result.append(f"未 push commits: {ahead_count} (behind {behind})")
+        return result
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
+        return ["git 摘要不可用"]
+
+
 def find_owner(db: BoardDB, file_path: str) -> str | None:
     """Find the owner of a file path. Longest prefix match wins."""
     rows = db.query("SELECT session, path_pattern FROM ownership ORDER BY LENGTH(path_pattern) DESC")
@@ -98,6 +271,66 @@ def find_owner(db: BoardDB, file_path: str) -> str | None:
         if file_path.startswith(pattern) or file_path == pattern:
             return session
     return None
+
+
+def _parse_heartbeat(value: str) -> datetime | None:
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _orphan_reason(db: BoardDB, session: str, *, hours: int = DEFAULT_ORPHAN_HOURS) -> str | None:
+    row = db.query_one("SELECT last_heartbeat FROM sessions WHERE name=?", (session,))
+    if not row:
+        return "session missing"
+
+    heartbeat = row[0]
+    if not heartbeat:
+        return None
+
+    parsed = _parse_heartbeat(heartbeat)
+    if not parsed:
+        return None
+
+    age_hours = (datetime.now() - parsed).total_seconds() / 3600
+    if age_hours > hours:
+        return f"last heartbeat {heartbeat} ({age_hours:.1f}h ago)"
+    return None
+
+
+def _is_orphaned_owner(db: BoardDB, session: str, *, hours: int = DEFAULT_ORPHAN_HOURS) -> bool:
+    return _orphan_reason(db, session, hours=hours) is not None
+
+
+def _own_orphans(db: BoardDB, args: list[str]) -> None:
+    flags, positional = parse_flags(args, value_flags={"hours": ["--hours"]})
+    if positional:
+        print("Usage: board --as <name> own orphans [--hours N]")
+        raise SystemExit(1)
+
+    try:
+        hours = int(flags["hours"]) if "hours" in flags else DEFAULT_ORPHAN_HOURS
+    except ValueError:
+        print("ERROR: --hours 必须是整数")
+        raise SystemExit(1)
+
+    rows = db.query("SELECT session, path_pattern FROM ownership ORDER BY session, path_pattern")
+    orphaned: list[tuple[str, str, str]] = []
+    for session, pattern in rows:
+        reason = _orphan_reason(db, session, hours=hours)
+        if reason:
+            orphaned.append((session, pattern, reason))
+
+    if not orphaned:
+        print("无 orphaned ownership")
+        return
+
+    print(f"Orphaned ownership（超过 {hours}h 无心跳）:")
+    for session, pattern, reason in orphaned:
+        print(f"  {session}: {pattern} — {reason}")
 
 
 # ---------------------------------------------------------------------------
@@ -234,15 +467,23 @@ def _scan_issues(db: BoardDB, project_root: Path) -> int:
 
         for session, pattern in ownership_rows:
             if pattern.lower() in text:
+                is_orphan = _is_orphaned_owner(db, session)
+                recipient = "all" if is_orphan else session
                 already = db.scalar(
                     "SELECT COUNT(*) FROM messages WHERE body LIKE ? AND recipient=?",
-                    (f"%[ISSUE #{number}]%", session),
+                    (f"%[ISSUE #{number}]%", recipient),
                 )
                 if not already:
+                    if is_orphan:
+                        body = (
+                            f"[ISSUE #{number}] {title} — 原 owner {session} 可能 orphaned，相关 ownership: {pattern}"
+                        )
+                    else:
+                        body = f"[ISSUE #{number}] {title} — 可能与你负责的 {pattern} 相关"
                     db.post_message(
                         "system",
-                        session,
-                        f"[ISSUE #{number}] {title} — 可能与你负责的 {pattern} 相关",
+                        recipient,
+                        body,
                         deliver=True,
                     )
                     routed += 1
