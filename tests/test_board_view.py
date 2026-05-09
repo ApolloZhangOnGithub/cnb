@@ -38,17 +38,17 @@ class TestHeartbeatStatus:
     @patch("lib.board_view.has_session", return_value=False)
     def test_active(self, _mock):
         status, _ago = _heartbeat_status(self._hb(30), "cc", "alice")
-        assert "active" in status
+        assert "alive" in status
 
     @patch("lib.board_view.has_session", return_value=False)
     def test_thinking(self, _mock):
         status, _ago = _heartbeat_status(self._hb(150), "cc", "alice")
-        assert "thinking" in status
+        assert "pulse lag" in status
 
     @patch("lib.board_view.has_session", return_value=False)
     def test_stale(self, _mock):
         status, _ago = _heartbeat_status(self._hb(300), "cc", "alice")
-        assert "stale" in status
+        assert "pulse stale" in status
 
     @patch("lib.board_view.has_session", return_value=False)
     def test_offline_old_heartbeat(self, _mock):
@@ -56,22 +56,38 @@ class TestHeartbeatStatus:
         assert "offline" in status
         assert "h ago" in ago
 
+    @patch("lib.board_view.capture_pane", return_value="idle prompt\n❯ ")
+    @patch("lib.board_view.pane_command", return_value="node")
+    @patch("lib.board_view.has_session", return_value=True)
+    def test_old_heartbeat_tmux_alive_idle(self, _has, _cmd, _pane):
+        status, ago = _heartbeat_status(self._hb(3600), "cc", "alice")
+        assert "alive idle" in status
+        assert "h ago" in ago
+
     @patch("lib.board_view.has_session", return_value=False)
     def test_no_heartbeat_no_tmux(self, _mock):
         status, _ = _heartbeat_status(None, "cc", "alice")
         assert "offline" in status
 
+    @patch("lib.board_view.capture_pane", return_value="normal output\n❯ ")
     @patch("lib.board_view.pane_command", return_value="node")
     @patch("lib.board_view.has_session", return_value=True)
-    def test_no_heartbeat_tmux_running(self, _has, _cmd):
+    def test_no_heartbeat_tmux_alive_idle(self, _has, _cmd, _pane):
         status, _ = _heartbeat_status(None, "cc", "alice")
-        assert "running" in status
+        assert "alive idle" in status
+
+    @patch("lib.board_view.capture_pane", return_value="• Working (12s • esc to interrupt)")
+    @patch("lib.board_view.pane_command", return_value="node")
+    @patch("lib.board_view.has_session", return_value=True)
+    def test_no_heartbeat_tmux_working(self, _has, _cmd, _pane):
+        status, _ = _heartbeat_status(None, "cc", "alice")
+        assert "working" in status
 
     @patch("lib.board_view.pane_command", return_value="zsh")
     @patch("lib.board_view.has_session", return_value=True)
     def test_no_heartbeat_tmux_dead(self, _has, _cmd):
         status, _ = _heartbeat_status(None, "cc", "alice")
-        assert "dead" in status
+        assert "shell" in status
 
     @patch("lib.board_view.has_session", return_value=False)
     def test_invalid_heartbeat_format(self, _mock):

@@ -55,39 +55,43 @@ class TestHeartbeatStatus:
         return (datetime.now() - timedelta(seconds=seconds)).strftime("%Y-%m-%d %H:%M:%S")
 
     def test_active_within_2_minutes(self):
-        status, ago = _heartbeat_status(self._ts_ago(30), "cc", "alice")
-        assert status == "● active"
+        with patch("lib.board_view.has_session", return_value=False):
+            status, ago = _heartbeat_status(self._ts_ago(30), "cc", "alice")
+        assert status == "● alive"
         assert "s ago" in ago
 
     def test_active_boundary(self):
-        status, _ = _heartbeat_status(self._ts_ago(119), "cc", "alice")
-        assert status == "● active"
+        with patch("lib.board_view.has_session", return_value=False):
+            status, _ = _heartbeat_status(self._ts_ago(119), "cc", "alice")
+        assert status == "● alive"
 
     def test_thinking_at_2_minutes(self):
         status, ago = _heartbeat_status(self._ts_ago(121), "cc", "alice")
-        assert status == "◐ thinking"
+        assert status == "◐ pulse lag"
         assert "m ago" in ago
 
     def test_thinking_boundary(self):
         status, _ = _heartbeat_status(self._ts_ago(179), "cc", "alice")
-        assert status == "◐ thinking"
+        assert status == "◐ pulse lag"
 
     def test_stale_at_3_minutes(self):
         status, ago = _heartbeat_status(self._ts_ago(181), "cc", "alice")
-        assert status == "○ stale"
+        assert status == "○ pulse stale"
         assert "m ago" in ago
 
     def test_stale_boundary(self):
         status, _ = _heartbeat_status(self._ts_ago(599), "cc", "alice")
-        assert status == "○ stale"
+        assert status == "○ pulse stale"
 
     def test_offline_at_10_minutes(self):
-        status, ago = _heartbeat_status(self._ts_ago(601), "cc", "alice")
+        with patch("lib.board_view.has_session", return_value=False):
+            status, ago = _heartbeat_status(self._ts_ago(601), "cc", "alice")
         assert status == "· offline"
         assert "ago" in ago
 
     def test_offline_shows_hours_for_old_heartbeat(self):
-        status, ago = _heartbeat_status(self._ts_ago(7200), "cc", "alice")
+        with patch("lib.board_view.has_session", return_value=False):
+            status, ago = _heartbeat_status(self._ts_ago(7200), "cc", "alice")
         assert status == "· offline"
         assert "h ago" in ago
 
@@ -101,9 +105,19 @@ class TestHeartbeatStatus:
         with (
             patch("lib.board_view.has_session", return_value=True),
             patch("lib.board_view.pane_command", return_value="claude"),
+            patch("lib.board_view.capture_pane", return_value="idle prompt\n❯ "),
         ):
             status, _ago = _heartbeat_status(None, "cc", "alice")
-        assert status == "● running"
+        assert status == "● alive idle"
+
+    def test_no_heartbeat_tmux_working(self):
+        with (
+            patch("lib.board_view.has_session", return_value=True),
+            patch("lib.board_view.pane_command", return_value="claude"),
+            patch("lib.board_view.capture_pane", return_value="• Working (12s • esc to interrupt)"),
+        ):
+            status, _ago = _heartbeat_status(None, "cc", "alice")
+        assert status == "● working"
 
     def test_no_heartbeat_tmux_dead_shell(self):
         with (
@@ -111,7 +125,7 @@ class TestHeartbeatStatus:
             patch("lib.board_view.pane_command", return_value="zsh"),
         ):
             status, _ago = _heartbeat_status(None, "cc", "alice")
-        assert status == "○ dead"
+        assert status == "○ shell"
 
     def test_malformed_heartbeat_falls_back(self):
         with patch("lib.board_view.has_session", return_value=False):

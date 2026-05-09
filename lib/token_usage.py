@@ -62,7 +62,7 @@ def estimate_cost(usage: dict) -> float:
         + usage["cache_read"] * prices["cache_read"]
         + usage["cache_create"] * prices["cache_create"]
     ) / 1_000_000
-    return cost
+    return float(cost)
 
 
 def aggregate_by_name(sessions: list[dict]) -> list[dict]:
