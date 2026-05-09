@@ -23,6 +23,12 @@ SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
 DEFAULT_SESSIONS = ["alice", "bob", "charlie"]
 
 
+def pytest_configure(config):
+    # Keep ambient pytest-randomly installs from reseeding third-party plugins with out-of-range seeds.
+    if hasattr(config.option, "randomly_reset_seed"):
+        config.option.randomly_reset_seed = False
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
