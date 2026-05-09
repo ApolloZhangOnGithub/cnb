@@ -20,6 +20,7 @@ Do not use it as a blind cleanup command. `--register` only adds or refreshes di
 cnb projects scan
 cnb projects scan --max-depth 5
 cnb projects scan --root "$HOME/Desktop/Toolbase_Skills" --root "$HOME/Desktop"
+cnb projects scan --mode marker
 cnb projects scan --json
 cnb projects scan --max-depth 5 --register
 ```
@@ -29,8 +30,10 @@ Options:
 - `--root PATH` can be repeated. If omitted, the tool scans `$HOME/Desktop/Toolbase_Skills` and `$HOME/Desktop`.
 - `CNB_SCAN_ROOTS` can override default roots. Use `:`-separated paths on macOS and Linux.
 - `--max-depth N` limits traversal depth from each root. The default is `5`.
+- `--mode board` is the default and only reports real board-backed projects.
+- `--mode marker` audits `.cnb/` and `.claudes/` marker directories even when `board.db` is missing.
 - `--no-legacy` ignores legacy `.claudes/board.db` projects.
-- `--register` writes discovered projects into the global registry.
+- `--register` writes discovered board-backed projects into the global registry. Marker-only entries are never registered.
 - `--json` emits machine-readable output.
 
 ## Scan Model
@@ -39,6 +42,8 @@ The scanner looks for:
 
 - `.cnb/board.db` for current cnb projects.
 - `.claudes/board.db` for legacy projects, unless `--no-legacy` is set.
+
+That is the strict `board` definition of a project and should remain the default. Use `--mode marker` only when auditing filesystem markers or investigating partial initialization. Marker-only entries are labeled `marker-only` in text output and have `"has_board": false` in JSON output.
 
 It is intentionally bounded. The default roots cover the current known project layout without walking the whole home directory. Heavy directories such as `.git`, `.venv`, `node_modules`, build outputs, media folders, and caches are pruned.
 

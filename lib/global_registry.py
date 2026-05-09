@@ -212,8 +212,8 @@ def _count(conn: sqlite3.Connection, table: str, where: str = "") -> int:
         return 0
 
 
-def _inspect_board(board_db: Path) -> dict:
-    summary = {
+def _empty_board_summary() -> dict:
+    return {
         "sessions": 0,
         "messages": 0,
         "unread": 0,
@@ -224,6 +224,10 @@ def _inspect_board(board_db: Path) -> dict:
         "latest_message": "",
         "status_summary": [],
     }
+
+
+def _inspect_board(board_db: Path) -> dict:
+    summary = _empty_board_summary()
     try:
         conn = sqlite3.connect(str(board_db))
         conn.row_factory = sqlite3.Row
@@ -333,8 +337,15 @@ def discover_projects(
     roots: list[str | Path] | None = None,
     max_depth: int = 5,
     include_legacy: bool = True,
+    mode: str = "board",
 ) -> list[dict]:
-    """Discover local cnb projects by scanning bounded roots for board databases."""
+    """Discover local cnb projects by scanning bounded roots.
+
+    mode="board" keeps the project definition strict: marker directory plus board.db.
+    mode="marker" audits marker directories even when board.db is missing.
+    """
+    if mode not in {"board", "marker"}:
+        raise ValueError("mode must be 'board' or 'marker'")
     discovered: list[dict] = []
     seen_roots: set[str] = set()
     tmux = _tmux_sessions()
@@ -349,7 +360,10 @@ def discover_projects(
             # Prefer .cnb over legacy .claudes for the same project root.
             for config_dir in candidates:
                 board_db = config_dir / "board.db"
-                if not board_db.exists():
+                has_board = board_db.exists()
+                if mode == "board" and not has_board:
+                    continue
+                if not config_dir.exists():
                     continue
                 project_root = directory.resolve()
                 key = str(project_root)
@@ -361,13 +375,15 @@ def discover_projects(
                 prefix = str(config.get("prefix") or "")
                 configured_sessions = [str(s) for s in config.get("sessions", []) if isinstance(s, str)]
                 running_sessions = sorted(s for s in tmux if prefix and s.startswith(f"{prefix}-"))
-                summary = _inspect_board(board_db)
+                summary = _inspect_board(board_db) if has_board else _empty_board_summary()
                 discovered.append(
                     {
                         "name": project_root.name,
                         "path": str(project_root),
                         "config_dir": config_dir.name,
-                        "board_db": str(board_db),
+                        "board_db": str(board_db) if has_board else "",
+                        "has_board": has_board,
+                        "discovery": "board" if has_board else "marker",
                         "prefix": prefix,
                         "configured_sessions": configured_sessions,
                         "running_sessions": running_sessions,
@@ -487,9 +503,11 @@ def cleanup(*, registry_path: Path | None = None) -> list[str]:
 
 
 def register_discovered_projects(projects: list[dict], *, registry_path: Path | None = None) -> int:
-    """Register discovered projects in the global registry. Returns count."""
+    """Register board-backed discovered projects in the global registry. Returns count."""
     count = 0
     for project in projects:
+        if not project.get("has_board", True):
+            continue
         register_project(project["path"], project["name"], registry_path=registry_path)
         count += 1
     return count
@@ -503,6 +521,7 @@ def _format_project_line(project: dict) -> str:
     tasks_pending = summary.get("tasks_pending", 0)
     unread = summary.get("unread", 0)
     marker = project.get("config_dir", "")
+    state = "" if project.get("has_board", True) else " marker-only"
     git = project.get("git", {})
     git_bits = ""
     if git.get("root"):
@@ -513,7 +532,7 @@ def _format_project_line(project: dict) -> str:
         f"  {project['name']:32s} {marker:8s} "
         f"sessions={sessions:<2} running={running:<2} "
         f"tasks={tasks_active} active/{tasks_pending} pending unread={unread:<3} "
-        f"{project['path']}{git_bits}"
+        f"{project['path']}{state}{git_bits}"
     )
 
 
@@ -522,15 +541,22 @@ def cmd_projects_scan(argv: list[str] | None = None) -> None:
     parser = ArgumentParser(prog="cnb projects scan")
     parser.add_argument("--root", action="append", default=[], help="root directory to scan; can be repeated")
     parser.add_argument("--max-depth", type=int, default=5, help="maximum directory depth below each root")
+    parser.add_argument(
+        "--mode",
+        choices=("board", "marker"),
+        default="board",
+        help="board=only real board-backed projects; marker=audit .cnb/.claudes markers too",
+    )
     parser.add_argument("--no-legacy", action="store_true", help="ignore legacy .claudes/ projects")
     parser.add_argument("--register", action="store_true", help="upsert discovered projects into ~/.cnb/projects.json")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     args = parser.parse_args(argv)
 
     roots = [Path(root).expanduser() for root in args.root] if args.root else None
-    projects = discover_projects(roots=roots, max_depth=args.max_depth, include_legacy=not args.no_legacy)
+    projects = discover_projects(roots=roots, max_depth=args.max_depth, include_legacy=not args.no_legacy, mode=args.mode)
+    registered = 0
     if args.register:
-        register_discovered_projects(projects)
+        registered = register_discovered_projects(projects)
 
     if args.json:
         print(json.dumps({"projects": projects}, indent=2, ensure_ascii=False))
@@ -541,12 +567,14 @@ def cmd_projects_scan(argv: list[str] | None = None) -> None:
     for root in scan_roots:
         print(f"  {root}")
     print(f"最大深度: {args.max_depth}")
+    print(f"扫描模式: {args.mode}")
     print()
     if not projects:
         print("没有发现 cnb 项目")
         return
 
-    print(f"发现 {len(projects)} 个 cnb 项目:")
+    noun = "cnb 项目" if args.mode == "board" else "cnb marker"
+    print(f"发现 {len(projects)} 个 {noun}:")
     for project in projects:
         print(_format_project_line(project))
         latest = project.get("summary", {}).get("latest_message")
@@ -556,7 +584,7 @@ def cmd_projects_scan(argv: list[str] | None = None) -> None:
         if latest:
             print(f"    latest: {latest}")
     if args.register:
-        print(f"\nOK 已注册/更新 {len(projects)} 个项目")
+        print(f"\nOK 已注册/更新 {registered} 个 board-backed 项目")
 
 
 if __name__ == "__main__":

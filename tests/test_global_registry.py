@@ -334,6 +334,40 @@ class TestDiscoverProjects:
         assert discover_projects(roots=[tmp_path], max_depth=1) == []
         assert len(discover_projects(roots=[tmp_path], max_depth=3)) == 1
 
+    def test_default_board_mode_ignores_marker_without_board(self, tmp_path):
+        proj = tmp_path / "marker-only"
+        (proj / ".cnb").mkdir(parents=True)
+
+        assert discover_projects(roots=[tmp_path], max_depth=1) == []
+
+    def test_marker_mode_includes_marker_without_board(self, tmp_path):
+        proj = tmp_path / "marker-only"
+        (proj / ".cnb").mkdir(parents=True)
+
+        projects = discover_projects(roots=[tmp_path], max_depth=1, mode="marker")
+
+        assert len(projects) == 1
+        assert projects[0]["path"] == str(proj.resolve())
+        assert projects[0]["config_dir"] == ".cnb"
+        assert projects[0]["has_board"] is False
+        assert projects[0]["discovery"] == "marker"
+        assert projects[0]["board_db"] == ""
+
+    def test_register_skips_marker_only_projects(self, registry_file, tmp_path):
+        board_proj = tmp_path / "board"
+        marker_proj = tmp_path / "marker"
+        (board_proj / ".cnb").mkdir(parents=True)
+        (marker_proj / ".cnb").mkdir(parents=True)
+        (board_proj / ".cnb" / "board.db").touch()
+
+        projects = discover_projects(roots=[tmp_path], max_depth=1, mode="marker")
+        count = register_discovered_projects(projects, registry_path=registry_file)
+
+        assert count == 1
+        registered = list_projects(registry_path=registry_file)
+        assert registered[0]["name"] == "board"
+        assert registered[0]["path"] == str(board_proj.resolve())
+
     def test_registers_discovered_projects(self, registry_file, tmp_path):
         proj = tmp_path / "app"
         cnb_dir = proj / ".cnb"
