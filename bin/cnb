@@ -10,24 +10,160 @@ else
     B='' D='' G='' C='' Y='' N=''
 fi
 
-# ---- Version update check (non-blocking, shown only at interactive startup) ----
+# ---- Version update check (non-blocking, user-facing only at interactive startup) ----
 _CACHE="$HOME/.cnb/latest-version"
+_NOTIFIED="$HOME/.cnb/update-notified"
+_in_virtualenv() {
+    [ -n "${VIRTUAL_ENV:-}" ] && return 0
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - <<'PY'
+import sys
+raise SystemExit(0 if sys.prefix != sys.base_prefix else 1)
+PY
+}
+
+_read_update_owner() {
+    if [ -n "${CNB_UPDATE_OWNER:-}" ]; then
+        printf '%s\n' "$CNB_UPDATE_OWNER"
+        return 0
+    fi
+
+    local global_cfg="$HOME/.cnb/config.toml"
+    if [ -f "$global_cfg" ]; then
+        local global_owner
+        global_owner="$(python3 - "$global_cfg" <<'PY'
+import sys
+import tomllib
+from pathlib import Path
+
+try:
+    data = tomllib.loads(Path(sys.argv[1]).read_text())
+except Exception:
+    raise SystemExit(0)
+
+for key in ("update_owner", "cnb_owner", "maintainer", "owner"):
+    value = data.get(key)
+    if isinstance(value, str) and value.strip():
+        print(value.strip())
+        raise SystemExit(0)
+
+cnb = data.get("cnb")
+if isinstance(cnb, dict):
+    for key in ("update_owner", "owner", "maintainer"):
+        value = cnb.get(key)
+        if isinstance(value, str) and value.strip():
+            print(value.strip())
+            raise SystemExit(0)
+PY
+)"
+        if [ -n "$global_owner" ]; then
+            printf '%s\n' "$global_owner"
+            return 0
+        fi
+    fi
+
+    local project_cfg="$CNB_PROJECT/.cnb/config.toml"
+    [ ! -f "$project_cfg" ] && project_cfg="$CNB_PROJECT/.claudes/config.toml"
+    [ -f "$project_cfg" ] || return 0
+    python3 - "$project_cfg" <<'PY'
+import sys
+import tomllib
+from pathlib import Path
+
+try:
+    data = tomllib.loads(Path(sys.argv[1]).read_text())
+except Exception:
+    raise SystemExit(0)
+
+sessions = data.get("session")
+if isinstance(sessions, dict):
+    for name, meta in sessions.items():
+        if isinstance(meta, dict) and meta.get("role") == "lead":
+            print(name)
+            raise SystemExit(0)
+
+names = data.get("sessions")
+if isinstance(names, list):
+    if "lead" in names:
+        print("lead")
+        raise SystemExit(0)
+    for name in names:
+        if isinstance(name, str) and name:
+            print(name)
+            raise SystemExit(0)
+PY
+}
+
+_notify_update_owner() {
+    local latest="$1"
+    local current="$2"
+    local owner
+    owner="$(_read_update_owner 2>/dev/null | head -n 1 || true)"
+    [ -n "$owner" ] || return 0
+    [ -f "$CNB_PROJECT/.cnb/board.db" ] || [ -f "$CNB_PROJECT/.claudes/board.db" ] || return 0
+
+    local key="${owner}:${current}->${latest}"
+    if [ -f "$_NOTIFIED" ] && [ "$(cat "$_NOTIFIED" 2>/dev/null || true)" = "$key" ]; then
+        return 0
+    fi
+
+    local msg="[cnb update] cnb v${latest} 已发布，当前 v${current}。请由本机 cnb 负责人执行：pip install --upgrade claude-nb"
+    if CNB_PROJECT="$CNB_PROJECT" "$CLAUDES_HOME/bin/board" --as dispatcher send "$owner" "$msg" >/dev/null 2>&1; then
+        printf '%s\n' "$key" > "$_NOTIFIED"
+    fi
+}
+
+_version_gt() {
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$1" "$2" <<'PY'
+import re
+import sys
+
+
+def normalize(version: str) -> tuple[int, ...]:
+    version = version.strip().lstrip("vV")
+    version = re.sub(r"\.dev\d*$", "", version)
+    version = re.sub(r"[-+].*$", "", version)
+    parts = []
+    for part in version.split("."):
+        match = re.match(r"\d+", part)
+        parts.append(int(match.group(0)) if match else 0)
+    return tuple(parts + [0] * (4 - len(parts)))
+
+
+raise SystemExit(0 if normalize(sys.argv[1]) > normalize(sys.argv[2]) else 1)
+PY
+}
+
 _check_update() {
+    local mode="${1:-interactive}"
+    _in_virtualenv && return 0
+
     mkdir -p "$HOME/.cnb"
     if [ ! -f "$_CACHE" ] || [ "$(find "$_CACHE" -mmin +60 2>/dev/null)" ]; then
         (npm view claude-nb version 2>/dev/null > "$_CACHE.tmp" && mv "$_CACHE.tmp" "$_CACHE" || rm -f "$_CACHE.tmp") &
     fi
     if [ -f "$_CACHE" ]; then
-        _LATEST=$(cat "$_CACHE" 2>/dev/null | tr -d '[:space:]')
-        _LOCAL=$(echo "$VERSION" | sed 's/-dev$//')
-        if [ -n "$_LATEST" ] && [ "$_LOCAL" != "$_LATEST" ]; then
-            printf "${Y}⬆ cnb v${_LATEST} 已发布，当前 v${VERSION}。运行 pip install --upgrade claude-nb 更新。${N}\n"
+        local latest
+        local current
+        latest=$(cat "$_CACHE" 2>/dev/null | tr -d '[:space:]')
+        current=$(echo "$VERSION" | sed -E 's/-dev$//; s/\.dev[0-9]+$//')
+        if [ -n "$latest" ] && _version_gt "$latest" "$current"; then
+            if [ "$mode" = "notify" ]; then
+                _notify_update_owner "$latest" "$VERSION"
+            else
+                printf "${Y}⬆ cnb v${latest} 已发布，当前 v${VERSION}。运行 pip install --upgrade claude-nb 更新。${N}\n"
+            fi
         fi
     fi
 }
 
 # ---- Export project root so all subprocesses can find .cnb/ ----
 export CNB_PROJECT="${CNB_PROJECT:-$(pwd)}"
+
+if [ $# -gt 0 ]; then
+    _check_update notify
+fi
 
 # ---- Subcommands (exact match, always first) ----
 if [ $# -gt 0 ]; then

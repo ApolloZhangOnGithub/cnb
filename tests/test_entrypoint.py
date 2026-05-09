@@ -207,6 +207,73 @@ class TestSubcommands:
         assert r.returncode == 0
         assert "threebody" in r.stdout
 
+    def test_version_subcommand_notifies_lead_when_outdated(self, board_project, tmp_path):
+        home = tmp_path / "home"
+        cnb_home = home / ".cnb"
+        cnb_home.mkdir(parents=True)
+        (cnb_home / "latest-version").write_text("9.9.9\n")
+
+        env = {**os.environ, "CNB_PROJECT": str(board_project), "HOME": str(home)}
+        r = subprocess.run(
+            ["bash", str(ENTRYPOINT), "version"],
+            cwd=board_project,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert r.returncode == 0
+        assert "cnb v" in r.stdout
+        inbox = _board(board_project, "--as", "lead", "inbox")
+        assert "cnb v9.9.9 已发布" in inbox.stdout
+
+    def test_version_subcommand_does_not_notify_for_older_latest(self, board_project, tmp_path):
+        home = tmp_path / "home"
+        cnb_home = home / ".cnb"
+        cnb_home.mkdir(parents=True)
+        (cnb_home / "latest-version").write_text("0.5.1\n")
+
+        env = {**os.environ, "CNB_PROJECT": str(board_project), "HOME": str(home)}
+        r = subprocess.run(
+            ["bash", str(ENTRYPOINT), "version"],
+            cwd=board_project,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert r.returncode == 0
+        inbox = _board(board_project, "--as", "lead", "inbox")
+        assert "cnb update" not in inbox.stdout
+        assert not (cnb_home / "update-notified").exists()
+
+    def test_version_subcommand_skips_update_check_in_virtualenv(self, board_project, tmp_path):
+        home = tmp_path / "home"
+        cnb_home = home / ".cnb"
+        cnb_home.mkdir(parents=True)
+        (cnb_home / "latest-version").write_text("9.9.9\n")
+
+        env = {
+            **os.environ,
+            "CNB_PROJECT": str(board_project),
+            "HOME": str(home),
+            "VIRTUAL_ENV": str(tmp_path / "venv"),
+        }
+        r = subprocess.run(
+            ["bash", str(ENTRYPOINT), "version"],
+            cwd=board_project,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert r.returncode == 0
+        inbox = _board(board_project, "--as", "lead", "inbox")
+        assert "cnb v9.9.9 已发布" not in inbox.stdout
+        assert not (cnb_home / "update-notified").exists()
+
+
+
 
 # ── Board message validation (found by AI self-play) ──
 
