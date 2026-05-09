@@ -27,6 +27,7 @@ def _git(project_root: Path, *args: str) -> str:
 
 def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tuple[str, str]:
     """Derive agent liveness from heartbeat timestamp, with tmux fallback."""
+    ago = ""
     if last_heartbeat:
         try:
             hb_time = datetime.strptime(last_heartbeat, "%Y-%m-%d %H:%M:%S")
@@ -41,16 +42,15 @@ def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tup
             else:
                 hours = delta / 3600
                 ago = f"[{int(hours)}h ago]" if hours >= 1 else f"[{int(delta / 60)}m ago]"
-                return "· offline", ago
         except ValueError:
             pass
     sess = f"{prefix}-{name}"
     if has_session(sess):
         cmd = pane_command(sess)
         if cmd not in ("zsh", "bash", "sh", "-zsh", "-bash"):
-            return "● running", ""
-        return "○ dead", ""
-    return "· offline", ""
+            return "● running", ago
+        return "○ dead", ago
+    return "· offline", ago
 
 
 def cmd_overview(db: BoardDB) -> None:

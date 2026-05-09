@@ -56,6 +56,13 @@ class TestHeartbeatStatus:
         assert "offline" in status
         assert "h ago" in ago
 
+    @patch("lib.board_view.pane_command", return_value="node")
+    @patch("lib.board_view.has_session", return_value=True)
+    def test_old_heartbeat_tmux_running(self, _has, _cmd):
+        status, ago = _heartbeat_status(self._hb(3600), "cc", "alice")
+        assert "running" in status
+        assert "h ago" in ago
+
     @patch("lib.board_view.has_session", return_value=False)
     def test_no_heartbeat_no_tmux(self, _mock):
         status, _ = _heartbeat_status(None, "cc", "alice")
