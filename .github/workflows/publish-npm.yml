@@ -1,0 +1,217 @@
+name: Publish npm Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Expected release version. Leave blank to use VERSION."
+        required: false
+        default: ""
+      dry_run:
+        description: "Validate and pack, but do not publish."
+        type: boolean
+        required: true
+        default: false
+      mirror_github_package:
+        description: "Mirror the release to GitHub Packages after npmjs publish."
+        type: boolean
+        required: true
+        default: true
+      update_stable_tag:
+        description: "Try to move npm's stable dist-tag to this release."
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+concurrency:
+  group: npm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PACKAGE_NAME: claude-nb
+  GH_PACKAGE: "@apollozhangongithub/cnb"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dry_run: ${{ steps.options.outputs.dry_run }}
+      mirror_github_package: ${{ steps.options.outputs.mirror_github_package }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Use npm with trusted publishing support
+        run: npm install -g npm@^11.10.0
+
+      - name: Resolve workflow options
+        id: options
+        env:
+          DRY_RUN_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          MIRROR_INPUT: ${{ github.event_name != 'workflow_dispatch' || inputs.mirror_github_package }}
+          STABLE_INPUT: ${{ github.event_name != 'workflow_dispatch' || inputs.update_stable_tag }}
+        run: |
+          echo "dry_run=${DRY_RUN_INPUT}" >> "$GITHUB_OUTPUT"
+          echo "mirror_github_package=${MIRROR_INPUT}" >> "$GITHUB_OUTPUT"
+          echo "update_stable_tag=${STABLE_INPUT}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release metadata
+        id: version
+        env:
+          EXPECTED_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
+        run: |
+          set -euo pipefail
+
+          VERSION="$(cat VERSION)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$VERSION" == *-dev ]]; then
+            echo "ERROR: VERSION is ${VERSION}; npm releases must not use -dev versions."
+            exit 1
+          fi
+          if [ -n "$EXPECTED_VERSION" ] && [ "$EXPECTED_VERSION" != "$VERSION" ]; then
+            echo "ERROR: workflow input version ${EXPECTED_VERSION} does not match VERSION ${VERSION}."
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME:-}" != "v${VERSION}" ]; then
+            echo "ERROR: release tag ${GITHUB_REF_NAME} does not match VERSION ${VERSION}; expected v${VERSION}."
+            exit 1
+          fi
+
+          python bin/sync-version --check
+          python bin/check-changelog
+
+          PKG_NAME="$(node -p "require('./package.json').name")"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$PKG_NAME" != "$PACKAGE_NAME" ]; then
+            echo "ERROR: package.json name is ${PKG_NAME}, expected ${PACKAGE_NAME}."
+            exit 1
+          fi
+          if [ "$PKG_VERSION" != "$VERSION" ]; then
+            echo "ERROR: package.json version is ${PKG_VERSION}, expected ${VERSION}."
+            exit 1
+          fi
+
+      - name: Check whether npmjs already has this version
+        id: npmjs
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if npm view "$PACKAGE_NAME@$RELEASE_VERSION" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$PACKAGE_NAME@$RELEASE_VERSION already exists on npmjs; publish step will be skipped."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pack release tarball
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cnb-npm-pack
+          tarball="$(npm pack --pack-destination /tmp/cnb-npm-pack)"
+          tar -tzf "/tmp/cnb-npm-pack/$tarball" > /tmp/cnb-npm-pack/files.txt
+          grep -qx "package/bin/cnb.js" /tmp/cnb-npm-pack/files.txt
+          grep -qx "package/bin/cnb" /tmp/cnb-npm-pack/files.txt
+          grep -qx "package/lib/cli.py" /tmp/cnb-npm-pack/files.txt
+          grep -qx "package/VERSION" /tmp/cnb-npm-pack/files.txt
+
+      - name: Publish to npmjs
+        if: steps.options.outputs.dry_run != 'true' && steps.npmjs.outputs.exists != 'true'
+        run: npm publish --access public
+
+      - name: Try to move stable dist-tag
+        if: steps.options.outputs.dry_run != 'true' && steps.options.outputs.update_stable_tag == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if npm dist-tag add "$PACKAGE_NAME@$RELEASE_VERSION" stable; then
+            exit 0
+          fi
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::notice::Could not update the stable dist-tag. npm trusted publishing covers publish; if dist-tag mutation is not accepted, add a granular NPM_TOKEN secret or move the stable tag manually."
+            exit 0
+          fi
+          exit 1
+
+      - name: Verify npmjs package state
+        if: steps.options.outputs.dry_run != 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm view "$PACKAGE_NAME@$RELEASE_VERSION" version
+          npm view "$PACKAGE_NAME" dist-tags --json
+
+  mirror-github-package:
+    runs-on: ubuntu-latest
+    needs: publish
+    if: needs.publish.outputs.dry_run != 'true' && needs.publish.outputs.mirror_github_package == 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@apollozhangongithub"
+          package-manager-cache: false
+
+      - name: Use current npm
+        run: npm install -g npm@^11.10.0
+
+      - name: Check whether mirror already exists
+        id: mirror
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          if npm view "$GH_PACKAGE@$RELEASE_VERSION" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$GH_PACKAGE@$RELEASE_VERSION already exists; mirror publish will be skipped."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build GitHub Packages mirror
+        if: steps.mirror.outputs.exists != 'true'
+        env:
+          RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir mirror
+          tarball="$(npm pack --pack-destination mirror)"
+          tar -xzf "mirror/$tarball" -C mirror
+          cd mirror/package
+          npm pkg set name="$GH_PACKAGE"
+          npm pkg set repository.type="git"
+          npm pkg set repository.url="git+https://github.com/${GITHUB_REPOSITORY}.git"
+          npm pkg set homepage="https://github.com/${GITHUB_REPOSITORY}#readme"
+          npm pkg set bugs.url="https://github.com/${GITHUB_REPOSITORY}/issues"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+          npm pkg fix
+          test "$(node -p "require('./package.json').version")" = "$RELEASE_VERSION"
+
+      - name: Publish GitHub Packages mirror
+        if: steps.mirror.outputs.exists != 'true'
+        working-directory: mirror/package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --access public --registry=https://npm.pkg.github.com

@@ -13,8 +13,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - run: pip install ruff
@@ -24,8 +24,8 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - run: pip install -e . && pip install mypy
@@ -34,13 +34,13 @@ jobs:
   check-consistency:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # pull_request defaults to a synthetic merge commit whose message lacks
           # project trailers. Check the real head commit instead.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - run: python bin/sync-version --check
@@ -93,11 +93,30 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - run: python bin/secret-scan --all
+
+  package-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Verify npm package tarball
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cnb-npm-pack
+          tarball="$(npm pack --pack-destination /tmp/cnb-npm-pack)"
+          tar -tzf "/tmp/cnb-npm-pack/$tarball" > /tmp/cnb-npm-pack/files.txt
+          grep -qx "package/bin/cnb.js" /tmp/cnb-npm-pack/files.txt
+          grep -qx "package/bin/cnb" /tmp/cnb-npm-pack/files.txt
+          grep -qx "package/lib/cli.py" /tmp/cnb-npm-pack/files.txt
+          grep -qx "package/VERSION" /tmp/cnb-npm-pack/files.txt
 
   test:
     runs-on: ubuntu-latest
@@ -105,8 +124,8 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]" 2>/dev/null || pip install -e .

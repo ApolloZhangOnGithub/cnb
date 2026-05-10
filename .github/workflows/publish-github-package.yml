@@ -19,11 +19,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://npm.pkg.github.com"
           scope: "@apollozhangongithub"
+          package-manager-cache: false
 
       - name: Check whether mirror already exists
         id: exists
