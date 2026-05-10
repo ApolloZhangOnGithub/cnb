@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from lib.board_db import BoardDB, ts
-from lib.common import parse_flags, validate_identity
+from lib.common import is_privileged, parse_flags, validate_identity
 from lib.tmux_utils import capture_pane, has_session, tmux_send
 
 
@@ -140,6 +140,12 @@ def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
 def cmd_inbox(db: BoardDB, identity: str) -> None:
     validate_identity(db, identity)
     name = identity.lower()
+    _print_unread_inbox(db, name, write_ack_marker=True)
+
+    _task_print_queue_short(db, name)
+
+
+def _print_unread_inbox(db: BoardDB, name: str, *, write_ack_marker: bool) -> None:
     count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
     if not count:
         print("收件箱为空")
@@ -155,10 +161,8 @@ def cmd_inbox(db: BoardDB, identity: str) -> None:
             print(f'<message from="{sender}" ts="{msg_ts}">\n{body}\n</message>')
             if msg_id > max_id:
                 max_id = msg_id
-        if max_id > 0:
+        if write_ack_marker and max_id > 0:
             _ack_marker_path(db, name).write_text(str(max_id))
-
-    _task_print_queue_short(db, name)
 
 
 def _task_print_queue_short(db: BoardDB, target: str) -> None:
@@ -175,6 +179,27 @@ def _task_print_queue_short(db: BoardDB, target: str) -> None:
     for tid, status, priority, desc in rows:
         marker = "*" if status == "active" else " "
         print(f"  {marker} #{tid} [{status} p{priority}] {desc}")
+
+
+def cmd_inspect(db: BoardDB, identity: str, args: list[str]) -> None:
+    validate_identity(db, identity)
+    observer = identity.lower()
+    if len(args) != 2 or args[0] not in {"inbox", "task", "tasks"}:
+        print("Usage: ./board --as <lead|dispatcher> inspect {inbox|tasks} <session>")
+        raise SystemExit(1)
+
+    kind = args[0]
+    target = args[1].lower()
+    validate_identity(db, target)
+    if target != observer and not is_privileged(observer):
+        print("ERROR: inspect of another session requires lead or dispatcher")
+        raise SystemExit(1)
+
+    if kind == "inbox":
+        _print_unread_inbox(db, target, write_ack_marker=False)
+        return
+
+    _task_print_queue_short(db, target)
 
 
 def cmd_ack(db: BoardDB, identity: str) -> None:

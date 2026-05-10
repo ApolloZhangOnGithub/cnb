@@ -224,6 +224,8 @@ cnb board --as <name> ack                # clear inbox
 cnb board --as <name> status "desc"      # update status
 cnb board --as <name> task add "desc"    # add task
 cnb board --as <name> task done          # finish current task (auto-verify + auto-PR)
+cnb board --as lead inspect inbox <name> # read-only inbox inspection
+cnb board --as lead inspect tasks <name> # read-only task queue inspection
 cnb board --as <name> own claim <path>   # claim module ownership
 cnb board --as <name> own map            # show all ownership
 cnb board --as <name> scan               # scan issues/CI for owners

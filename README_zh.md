@@ -237,6 +237,8 @@ cnb board --as <name> ack                # 清空收件箱
 cnb board --as <name> status "desc"      # 更新状态
 cnb board --as <name> task add "desc"    # 添加任务
 cnb board --as <name> task done          # 完成当前任务（自动验证 + 自动 PR）
+cnb board --as lead inspect inbox <name> # 只读查看收件箱
+cnb board --as lead inspect tasks <name> # 只读查看任务队列
 cnb board --as <name> own claim <path>   # 认领模块 ownership
 cnb board --as <name> own map            # 查看所有 ownership
 cnb board --as <name> scan               # 扫描 issues/CI 并路由给 owner

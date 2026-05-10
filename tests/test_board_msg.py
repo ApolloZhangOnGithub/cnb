@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.board_msg import cmd_ack, cmd_inbox, cmd_log, cmd_send, cmd_status
+from lib.board_msg import cmd_ack, cmd_inbox, cmd_inspect, cmd_log, cmd_send, cmd_status
 
 
 class TestCmdSend:
@@ -92,6 +92,53 @@ class TestCmdInbox:
         cmd_inbox(db, "alice")
         out = capsys.readouterr().out
         assert "任务队列" in out
+
+
+class TestCmdInspect:
+    def test_inspect_inbox_shows_unread_messages(self, db, capsys):
+        cmd_send(db, "bob", ["alice", "read-only hello"])
+        capsys.readouterr()
+
+        cmd_inspect(db, "lead", ["inbox", "alice"])
+        out = capsys.readouterr().out
+
+        assert "read-only hello" in out
+        assert 'from="bob"' in out
+
+    def test_inspect_tasks_shows_target_queue(self, db, capsys):
+        db.execute(
+            "INSERT INTO tasks(session, description, status, priority) VALUES (?, ?, 'active', 2)",
+            ("alice", "inspect target task"),
+        )
+
+        cmd_inspect(db, "dispatcher", ["tasks", "alice"])
+        out = capsys.readouterr().out
+
+        assert "任务队列" in out
+        assert "inspect target task" in out
+
+    def test_inspect_inbox_does_not_create_ack_marker(self, db, sessions_dir, capsys):
+        cmd_send(db, "bob", ["alice", "do not mark seen"])
+        capsys.readouterr()
+
+        cmd_inspect(db, "lead", ["inbox", "alice"])
+        capsys.readouterr()
+
+        assert not (sessions_dir / ".alice.ack_max_id").exists()
+
+    def test_inspect_inbox_does_not_mark_messages_read(self, db, capsys):
+        cmd_send(db, "bob", ["alice", "remain unread"])
+        capsys.readouterr()
+
+        cmd_inspect(db, "lead", ["inbox", "alice"])
+        capsys.readouterr()
+
+        unread = db.scalar("SELECT COUNT(*) FROM inbox WHERE session='alice' AND read=0")
+        assert unread == 1
+
+    def test_non_privileged_cannot_inspect_other_session(self, db):
+        with pytest.raises(SystemExit):
+            cmd_inspect(db, "bob", ["inbox", "alice"])
 
 
 class TestCmdAck:
