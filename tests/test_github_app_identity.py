@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from typing import Any
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -9,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from lib.github_app_identity import _redact_token, build_app_jwt, resolve_repository_installation_id
 
 
-def _decode_segment(segment: str) -> dict:
+def _decode_segment(segment: str) -> Any:
     padding = "=" * (-len(segment) % 4)
     return json.loads(base64.urlsafe_b64decode(segment + padding))
 

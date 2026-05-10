@@ -36,7 +36,7 @@ def running_server(data_dir: Path, *, token: str = "") -> Iterator[str]:
     thread.start()
     host, port = server.server_address[:2]  # type: ignore[misc]
     try:
-        yield f"http://{host}:{port}"
+        yield f"http://{host}:{port}"  # type: ignore[str-bytes-safe]
     finally:
         server.shutdown()
         server.server_close()
