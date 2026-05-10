@@ -1,6 +1,6 @@
 {
   "name": "claude-nb",
-  "version": "0.5.36-dev",
+  "version": "0.5.37-dev",
   "description": "Multi-agent coordination framework for Claude Code sessions",
   "engines": {
     "node": ">=18"
@@ -28,7 +28,7 @@
     "type": "git",
     "url": "git+https://github.com/ApolloZhangOnGithub/cnb.git"
   },
-  "homepage": "https://github.com/ApolloZhangOnGithub/cnb#readme",
+  "homepage": "https://apollozhangongithub.github.io/cnb/",
   "bugs": {
     "url": "https://github.com/ApolloZhangOnGithub/cnb/issues"
   },
@@ -47,10 +47,16 @@
   ],
   "keywords": [
     "claude",
+    "claude-code",
+    "codex",
+    "feishu",
+    "lark",
     "multi-agent",
     "coordination",
+    "local-first",
     "ai",
-    "coding-agent"
+    "coding-agent",
+    "developer-tools"
   ],
   "license": "LicenseRef-OpenAll-1.0"
 }

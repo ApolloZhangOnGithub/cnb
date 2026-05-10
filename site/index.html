@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="cnb is local-first organizational infrastructure for long-lived Claude Code and Codex teams."
+    >
+    <title>cnb | Project ownership for LLM teams</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="cnb home">
+        <span class="brand-mark" aria-hidden="true">c</span>
+        <span>cnb</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#docs">Docs</a>
+        <a href="#demo">Demo</a>
+        <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/README_zh.md">中文</a>
+        <a href="https://github.com/ApolloZhangOnGithub/cnb">GitHub</a>
+        <a href="https://www.npmjs.com/package/claude-nb">npm</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Local-first coordination for coding agents</p>
+          <h1>cnb</h1>
+          <p class="hero-subtitle">
+            Project ownership for LLM teams. Keep long-running Claude Code and Codex sessions manageable across restarts,
+            shifts, and team changes.
+          </p>
+          <div class="hero-actions" aria-label="Primary actions">
+            <a class="button button-primary" href="#start">Start</a>
+            <a class="button button-secondary" href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/README.md">
+              Read the README
+            </a>
+          </div>
+        </div>
+
+        <div class="console" aria-label="cnb team dashboard preview">
+          <div class="console-bar">
+            <span></span>
+            <span></span>
+            <span></span>
+            <strong>cnb board view</strong>
+          </div>
+          <div class="console-body">
+            <div class="console-grid">
+              <div>
+                <span class="label">team</span>
+                <strong>6 tongxue active</strong>
+              </div>
+              <div>
+                <span class="label">board</span>
+                <strong>SQLite local</strong>
+              </div>
+              <div>
+                <span class="label">owner</span>
+                <strong>notification/*</strong>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>tongxue</th>
+                  <th>scope</th>
+                  <th>state</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>lisa-su</td>
+                  <td>notifications</td>
+                  <td><span class="status live">active</span></td>
+                </tr>
+                <tr>
+                  <td>forge</td>
+                  <td>board db</td>
+                  <td><span class="status work">reviewing</span></td>
+                </tr>
+                <tr>
+                  <td>meridian</td>
+                  <td>release</td>
+                  <td><span class="status idle">waiting</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="message-line">
+              <span>task done</span>
+              <strong>verified locally, owner report saved, PR ready</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-band" id="start">
+        <div class="section-heading">
+          <p class="eyebrow">Install</p>
+          <h2>Start with one global command.</h2>
+        </div>
+        <div class="install-row">
+          <code>npm install -g claude-nb</code>
+          <button class="copy-button" type="button" data-copy="npm install -g claude-nb">Copy</button>
+        </div>
+        <div class="quickstart">
+          <div>
+            <span class="step-number">01</span>
+            <h3>Activate governance</h3>
+            <p>Run <code>/cnb</code> inside a Claude Code session to bring the device supervisor online.</p>
+          </div>
+          <div>
+            <span class="step-number">02</span>
+            <h3>Launch a team</h3>
+            <p>Run <code>cnb</code> in a project to initialize the board, tmux sessions, and dispatcher.</p>
+          </div>
+          <div>
+            <span class="step-number">03</span>
+            <h3>Keep ownership durable</h3>
+            <p>Assign scopes, route work to owners, and preserve handoff evidence outside the model context.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="content-section">
+        <div class="section-heading">
+          <p class="eyebrow">Why it exists</p>
+          <h2>Session managers run agents. cnb manages the organization around them.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <h3>Persistent ownership</h3>
+            <p>Module responsibility survives restarts through ownership maps, session notes, daily reports, and routing.</p>
+          </article>
+          <article>
+            <h3>Board-based coordination</h3>
+            <p>Messages, tasks, status, pending actions, and inboxes live in local SQLite instead of transcript sprawl.</p>
+          </article>
+          <article>
+            <h3>Local operational control</h3>
+            <p>tmux sessions, local files, and explicit checks keep the runtime inspectable on a trusted workstation.</p>
+          </article>
+          <article>
+            <h3>Verification-first handoff</h3>
+            <p>Owners report what changed, which checks ran, and what remains blocked before the next session takes over.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="workflow-section">
+        <div class="section-heading">
+          <p class="eyebrow">Flow</p>
+          <h2>The durable path is outside the context window.</h2>
+        </div>
+        <div class="flow">
+          <div>
+            <span>01</span>
+            <h3>Supervisor</h3>
+            <p>User-facing session receives priorities and high-risk confirmations.</p>
+          </div>
+          <div>
+            <span>02</span>
+            <h3>Board</h3>
+            <p>SQLite stores inboxes, tasks, status, ownership, and pending user actions.</p>
+          </div>
+          <div>
+            <span>03</span>
+            <h3>Tongxue</h3>
+            <p>Claude Code or Codex sessions work independently through scoped ownership.</p>
+          </div>
+          <div>
+            <span>04</span>
+            <h3>Handoff</h3>
+            <p>Reports, checks, issues, and PR evidence preserve continuity for the next run.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="content-section" id="docs">
+        <div class="section-heading">
+          <p class="eyebrow">Documentation</p>
+          <h2>Short paths into the project.</h2>
+        </div>
+        <div class="doc-grid">
+          <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/README.md">
+            <span>Overview</span>
+            <strong>Product overview, install, quick start, and command summary.</strong>
+          </a>
+          <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/README_zh.md">
+            <span>中文文档</span>
+            <strong>中文产品说明、安装路径、快速开始和核心术语。</strong>
+          </a>
+          <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/design-ownership-autonomy.md">
+            <span>Ownership autonomy</span>
+            <strong>The design direction for self-managing module owners.</strong>
+          </a>
+          <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/package-publishing.md">
+            <span>Package publishing</span>
+            <strong>npm release, dist-tags, and GitHub Packages visibility rules.</strong>
+          </a>
+          <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/ROADMAP.md">
+            <span>Roadmap</span>
+            <strong>Organization-first priorities and current development themes.</strong>
+          </a>
+          <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md">
+            <span>Contributing</span>
+            <strong>Issue discipline, verification gates, naming, and release rules.</strong>
+          </a>
+        </div>
+      </section>
+
+      <section class="demo-section" id="demo">
+        <div class="demo-copy">
+          <p class="eyebrow">Demo trace</p>
+          <h2>Silicon Valley Battle</h2>
+          <p>
+            Ten AI leaders debate Python vs Rust, draft an AI constitution, and coordinate entirely through the cnb
+            board. It is a compact stress test for inboxes, status, ownership, and social dynamics.
+          </p>
+          <a class="button button-secondary" href="https://github.com/ApolloZhangOnGithub/cnb/tree/master/instances/silicon_vally_battle">
+            Inspect the demo
+          </a>
+        </div>
+        <div class="metrics" aria-label="Demo metrics">
+          <div>
+            <span>10</span>
+            <strong>tongxue</strong>
+          </div>
+          <div>
+            <span>886</span>
+            <strong>board messages</strong>
+          </div>
+          <div>
+            <span>3h</span>
+            <strong>coordination run</strong>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>cnb is local-first software. Human supervision is still required.</span>
+      <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/SECURITY.md">Security</a>
+      <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/LICENSE">License</a>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
