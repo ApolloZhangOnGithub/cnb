@@ -7,7 +7,7 @@
 [![CI](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml/badge.svg)](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/claude-nb?label=npm)](https://www.npmjs.com/package/claude-nb)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)](pyproject.toml)
-[![Docs](https://img.shields.io/badge/docs-pages-14865d)](https://apollozhangongithub.github.io/cnb/)
+[![Docs](https://img.shields.io/badge/docs-c--n--b.space-14865d)](https://c-n-b.space/)
 [![License](https://img.shields.io/badge/license-OpenAll--1.0-444)](LICENSE)
 
 **LLM 团队的项目负责制。**
@@ -24,7 +24,7 @@ npm install -g claude-nb
 | 引擎 | 默认 Claude Code；Codex 通过 npm peer CLI 支持 |
 | 状态 | 看板数据库、ownership map、issue mirror、日报/轮次报告 |
 | 分发 | 公开 npm 包 `claude-nb`，内部为 Python 3.11+ |
-| 文档 | README 是最短路径，长期文档在 [`docs/`](docs/)，公开站点为 [`apollozhangongithub.github.io/cnb`](https://apollozhangongithub.github.io/cnb/) |
+| 文档 | README 是最短路径，长期文档在 [`docs/`](docs/)，公开站点为 [`c-n-b.space`](https://c-n-b.space/) |
 
 所有多 agent 工具都在解决"怎么同时跑多个 agent"。cnb 解决的是之后的事——怎么让它们跨 session、跨轮次、跨人员变动地**可管理**。
 
@@ -133,7 +133,7 @@ README 是最短路径。长期维护的文档放在 [`docs/`](docs/)：
 
 - [Ownership autonomy](docs/design-ownership-autonomy.md) — 为什么 cnb 把长期模块 ownership 当作核心工作单元。
 - [Package publishing](docs/package-publishing.md) — npm release、dist-tags 和 GitHub Packages 可见性规则。
-- [公开网站](https://apollozhangongithub.github.io/cnb/) — 第一次访问项目时的产品入口和文档导航。
+- [公开网站](https://c-n-b.space/) — 第一次访问项目时的产品入口和文档导航。
 
 <!-- section:slash-commands -->
 ## 斜杠命令

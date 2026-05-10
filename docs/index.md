@@ -6,11 +6,12 @@ cnb documentation should work like product documentation, not like a pile of not
 
 | Page | Purpose |
 |------|---------|
-| [Website](https://apollozhangongithub.github.io/cnb/) | Public GitHub Pages entry for first-time visitors. |
+| [Website](https://c-n-b.space/) | Public GitHub Pages entry for first-time visitors. |
 | [README](../README.md) | Product overview, install, quick start, and the shortest command reference. |
 | [Roadmap](../ROADMAP.md) | Product direction and active development themes. |
 | [Contributing](../CONTRIBUTING.md) | Contributor workflow, style, and review expectations. |
 | [Package publishing](package-publishing.md) | npm release, dist-tags, and GitHub Packages visibility rules. |
+| [Custom domain operations](custom-domain.md) | DNS records and GoDaddy helper for the public site domain. |
 
 ## Concepts
 
