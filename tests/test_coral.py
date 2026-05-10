@@ -63,6 +63,24 @@ class TestCoralManager:
         cm = CoralManager(cfg)
         assert cm.in_grace_period("unknown", int(time.time())) is False
 
+    def test_agent_cmd_defaults_to_claude(self, tmp_path):
+        cfg = make_cfg(tmp_path)
+        cm = CoralManager(cfg)
+        with patch.dict("os.environ", {}, clear=True):
+            cmd = cm._agent_cmd()
+        assert cmd.startswith("claude --name dispatcher")
+
+    def test_agent_cmd_codex_highest_permissions(self, tmp_path):
+        cfg = make_cfg(tmp_path)
+        cm = CoralManager(cfg)
+        with patch.dict("os.environ", {"CNB_AGENT": "codex"}, clear=True):
+            cmd = cm._agent_cmd()
+        assert cmd.startswith("codex ")
+        assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+        assert "--ask-for-approval" not in cmd
+        assert "--sandbox" not in cmd
+        assert "--cd" in cmd
+
     @patch("lib.concerns.coral.is_suspended", return_value=False)
     @patch("lib.concerns.coral.is_claude_running")
     def test_tick_ensures_coral_when_devs_alive(self, mock_running, mock_susp, tmp_path):

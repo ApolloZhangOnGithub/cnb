@@ -1,29 +1,35 @@
-# Admin To Do
+# 管理员待办
 
-This file tracks maintainer-only actions that need registry, repository, or organization credentials.
+这个文件记录需要 registry、仓库或组织凭证才能处理的维护事项。
 
-## Current Release State
+## 写作规范
 
-`v0.5.44` is the current verified release.
+面向用户、状态页、实时活动、灵动岛和 Mac companion 的维护待办标题与摘要必须使用中文。命令、包名、URL、issue 链接、错误码和终端输出可以保留原文，避免破坏可执行信息。新增英文来源内容时，提交前先人工整理成中文可读说明。
+
+后续结构化中文展示问题见：https://github.com/ApolloZhangOnGithub/cnb/issues/145
+
+## 当前发布状态
+
+`v0.5.44` 是当前已验证发布版本。
 
 - GitHub Release: https://github.com/ApolloZhangOnGithub/cnb/releases/tag/v0.5.44
 - npmjs package: `claude-nb@0.5.44`
 - npmjs `latest`: `0.5.44`
 - GitHub Packages mirror: `@apollozhangongithub/cnb@0.5.44`
 - Release workflow: https://github.com/ApolloZhangOnGithub/cnb/actions/runs/25618433161
-- End-to-end publish flow passed: npmjs Trusted Publishing, npmjs readback retry, fresh install smoke, GitHub Packages mirror publish, and GitHub Packages mirror verification.
+- 端到端发布流程已通过：npmjs Trusted Publishing、npmjs readback retry、全新安装 smoke、GitHub Packages mirror publish、GitHub Packages mirror verification。
 
-## npm `stable` Dist-Tag
+## npm `stable` dist-tag
 
-Remaining blocker: `stable` is not set yet.
+剩余阻塞：`stable` 标签还没有设置。
 
-Observed state:
+当前检查方式：
 
 ```bash
 npm view claude-nb dist-tags --json
 ```
 
-Current result:
+当前结果：
 
 ```json
 {
@@ -31,14 +37,14 @@ Current result:
 }
 ```
 
-Local evidence:
+本地证据：
 
-- `~/.npmrc` contains an npmjs auth token line.
-- `NPM_TOKEN` is not present in the shell environment.
-- `npm whoami --registry=https://registry.npmjs.org/` returns `E401`.
-- `npm dist-tag add claude-nb@0.5.44 stable` returns `E401`.
+- `~/.npmrc` 里有 npmjs auth token 行。
+- 当前 shell 环境没有 `NPM_TOKEN`。
+- `npm whoami --registry=https://registry.npmjs.org/` 返回 `E401`。
+- `npm dist-tag add claude-nb@0.5.44 stable` 返回 `E401`。
 
-Next maintainer action:
+下一步维护动作：
 
 ```bash
 npm login --registry=https://registry.npmjs.org/
@@ -47,7 +53,7 @@ npm dist-tag add claude-nb@0.5.44 stable --registry=https://registry.npmjs.org/
 npm view claude-nb dist-tags --json
 ```
 
-Expected final dist-tags:
+期望最终 dist-tags：
 
 ```json
 {
@@ -56,56 +62,56 @@ Expected final dist-tags:
 }
 ```
 
-Tracking issue: https://github.com/ApolloZhangOnGithub/cnb/issues/100
+跟踪 issue: https://github.com/ApolloZhangOnGithub/cnb/issues/100
 
-## Optional GitHub Actions Secret
+## 可选的 GitHub Actions Secret
 
-Trusted Publishing now handles `npm publish` without a local maintainer shell. It does not currently move `stable` because no usable `NPM_TOKEN` secret is available to the workflow.
+Trusted Publishing 现在已经可以在没有本地维护者 shell 的情况下处理 `npm publish`。但它目前不会移动 `stable`，因为 workflow 没有可用的 `NPM_TOKEN` secret。
 
-If maintainers want `stable` to move automatically during release:
+如果维护者希望 release 时自动移动 `stable`：
 
-1. Create a valid npm token that can mutate dist-tags for `claude-nb`.
-2. Add it to the GitHub repository as `NPM_TOKEN`.
-3. Publish the next release normally and confirm the `Try to move stable dist-tag` step no longer reports an auth notice.
+1. 创建一个有效的 npm token，权限需要能修改 `claude-nb` 的 dist-tags。
+2. 把它添加到 GitHub repository secret，名称为 `NPM_TOKEN`。
+3. 正常发布下一个版本，并确认 `Try to move stable dist-tag` 步骤不再报告 auth notice。
 
-Do not store npm tokens in the repository.
+不要把 npm token 存进仓库。
 
-## Future `c-n-b` Package Migration
+## Prepare Release 自动创建 PR
 
-`c-n-b.space` can stay as the website domain, but `c-n-b` is not a published npm package yet. Do not make it the documented install path until the migration is complete.
+`Prepare Release` workflow 可以推送 release branches。当前仓库设置阻止 GitHub Actions 创建 pull request，所以 workflow 会降级为 warning，并把手动 compare link 写到 step summary。
 
-Before changing the canonical npm package name:
+可选维护动作：
 
-1. Confirm `npm view c-n-b` returns 404 or shows this project.
-2. Configure npm Trusted Publishing for package `c-n-b` against `ApolloZhangOnGithub/cnb` and `.github/workflows/publish-npm.yml`.
-3. Change package metadata, release workflows, docs, and site copy in one PR.
-4. Publish a real non-dev release that claims `c-n-b`.
-5. Verify the new npm package installs the `cnb` command from a clean temporary prefix.
-6. Move `latest` and `stable` only after the new package is verified.
+- 如果希望 release PR 完全自动创建，在 repository settings 里允许 GitHub Actions 创建 PR。
 
-Tracking issue: https://github.com/ApolloZhangOnGithub/cnb/issues/132
+保持当前禁用状态也可以接受，因为 release branch 和验证仍然会完成；只是 PR 点击需要人工处理。
 
-## Prepare Release PR Creation
+## GitHub Packages 侧边栏
 
-The `Prepare Release` workflow can push release branches. Repository settings currently block GitHub Actions from creating pull requests, so the workflow degrades gracefully and writes a manual compare link to the step summary.
+当前版本不需要处理。
 
-Optional maintainer action:
+发布 `@apollozhangongithub/cnb@0.5.44` mirror 后，仓库 Packages 侧边栏不应该再显示为空。继续把 npmjs `claude-nb` 作为用户安装的主路径；GitHub Packages 只作为可见性 mirror，除非未来有迁移 issue 改变这个策略。
 
-- Enable GitHub Actions PR creation in repository settings if fully automatic release PR creation is desired.
+## 未来 `c-n-b` 包名迁移
 
-Leaving this disabled is acceptable because the release branch and validation still complete; only the PR click is manual.
+`c-n-b.space` 可以继续作为网站域名，但 `c-n-b` 还不是已发布 npm 包。不要在完成迁移前把它写成安装路径。
 
-## GitHub Packages Sidebar
+改 canonical npm 包名之前必须完成：
 
-No action needed for the current release.
+1. 确认 `npm view c-n-b` 返回 404 或已经指向本项目。
+2. 为 `c-n-b` 配置 npm Trusted Publishing，绑定 `ApolloZhangOnGithub/cnb` 和 `.github/workflows/publish-npm.yml`。
+3. 在同一个 PR 里修改 package metadata、release workflows、docs 和 site copy。
+4. 发布一个真实 non-dev release，占用 `c-n-b` 包名。
+5. 从干净临时 prefix 验证新包能安装 `cnb` 命令。
+6. 验证后再移动 `latest` 和 `stable`。
 
-The repository Packages sidebar should remain populated by the scoped mirror `@apollozhangongithub/cnb`. Keep npmjs `claude-nb` as the canonical user install path until a verified package migration changes that policy.
+跟踪 issue: https://github.com/ApolloZhangOnGithub/cnb/issues/132
 
-## Site HTTPS
+## 站点 HTTPS
 
-`http://c-n-b.space` is already served by GitHub Pages. GitHub Pages health reports the apex and `www` records as valid and served by Pages, but HTTPS enforcement is blocked until GitHub creates the certificate.
+`http://c-n-b.space` 已经由 GitHub Pages 提供服务。GitHub Pages health 显示 apex 和 `www` DNS 记录有效，并由 Pages 服务；HTTPS 强制开启还需要等待 GitHub 证书签发。
 
-Retry after the certificate appears:
+证书出现后重试：
 
 ```bash
 gh api --method PUT repos/ApolloZhangOnGithub/cnb/pages \
@@ -113,25 +119,25 @@ gh api --method PUT repos/ApolloZhangOnGithub/cnb/pages \
   -f cname='c-n-b.space'
 ```
 
-## 2026-05-10 Deployment Closeout
+## 2026-05-10 部署收口
 
-The custom-domain deployment is live as of merge commit `c170c9c8`. The `c-n-b` package rename from that deployment is paused by issue #132 because the npm package does not exist yet.
+custom-domain 部署已在 merge commit `c170c9c8` 后上线。`c-n-b` 包名迁移因 issue #132 暂停，因为 npm 包还不存在。
 
-Completed:
+已完成：
 
-- GitHub About homepage is `c-n-b.space` with no trailing slash.
-- GitHub Pages deploy succeeded, and `http://c-n-b.space` serves the public project site.
-- PR #130 checks passed before merge, and `master` CI, CodeQL, Graph Update, and Pages completed successfully after merge.
-- The current verified package remains `claude-nb@0.5.44`; docs and release workflows should keep using it until #132 is closed by a real migration.
+- GitHub About homepage 是 `c-n-b.space`，没有尾部 slash。
+- GitHub Pages deploy 成功，`http://c-n-b.space` 可以访问公开项目站点。
+- PR #130 merge 前 checks 通过，merge 后 `master` CI、CodeQL、Graph Update 和 Pages 都完成。
+- 当前已验证包仍是 `claude-nb@0.5.44`；docs 和 release workflows 在 #132 完成前继续使用它。
 
-Rollback/restoration follow-up:
+回滚/修复后续：
 
-- Restore GitHub Release titles away from `c-n-b 0.5.44`, `c-n-b 0.5.43`, and `c-n-b 0.5.31` until the package rename is real.
-- Keep public install links on `https://www.npmjs.com/package/claude-nb`.
+- 恢复 GitHub Release 标题，不要在包名真实迁移前显示 `c-n-b 0.5.44`、`c-n-b 0.5.43`、`c-n-b 0.5.31`。
+- 公开安装链接继续指向 `https://www.npmjs.com/package/claude-nb`。
 
-Still pending:
+仍待处理：
 
-1. Wait for GitHub Pages to issue the certificate for `c-n-b.space`.
-2. Re-run the HTTPS enforcement command in the previous section.
-3. Complete issue #132 before advertising `c-n-b` as an npm install path.
-4. Keep warning users not to install the unrelated npm package named `cnb`.
+1. 等 GitHub Pages 为 `c-n-b.space` 签发证书。
+2. 重跑上面的 HTTPS enforcement 命令。
+3. 完成 issue #132 后才能宣传 `c-n-b` 作为 npm 安装包名。
+4. 持续提醒用户不要安装 npm 上无关的 `cnb` 包。

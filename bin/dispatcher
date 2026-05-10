@@ -12,7 +12,6 @@ Concerns (each with independent check intervals):
   BugSLAChecker      — check overdue bugs
   ResourceMonitor    — battery/memory/CPU
   TimeAnnouncer      — hourly/daily announcements
-  FileWatcher        — kqueue-based instant inbox detection (background thread)
   AdaptiveThrottle   — slow down main loop when CPU is high
 """
 
@@ -34,7 +33,6 @@ from lib.concerns import (
     CoralManager,
     CoralPoker,
     DispatcherConfig,
-    FileWatcher,
     HealthChecker,
     IdleDetector,
     IdleKiller,
@@ -107,8 +105,6 @@ def main() -> None:
     poker = CoralPoker(cfg)
     nudge = NudgeCoordinator(cfg, idle)
     throttle = AdaptiveThrottle()
-    file_watcher = FileWatcher(cfg, nudge)
-
     # Order matters: idle must tick before idle_killer / nudge_coordinator
     concerns: list[Concern] = [
         coral,
@@ -121,14 +117,11 @@ def main() -> None:
         BugSLAChecker(cfg, poker),
         HealthChecker(cfg, poker, coral),
         ResourceMonitor(cfg),
-        file_watcher,
         throttle,
     ]
 
     log(f"Starting (base_interval:{base_interval}s concerns:{len(concerns)})")
     log("Ctrl-C to stop")
-
-    file_watcher.start()
 
     running = True
 
@@ -156,7 +149,6 @@ def main() -> None:
                 time.sleep(min(0.5, max(0, deadline - time.time())))
     finally:
         log("Shutting down...")
-        file_watcher.stop()
         pidfile.unlink(missing_ok=True)
         log("Stopped.")
 

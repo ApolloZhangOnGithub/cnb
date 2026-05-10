@@ -1,0 +1,22 @@
+[Unit]
+Description=CNB sync gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cnb-sync
+Group=cnb-sync
+EnvironmentFile=/etc/cnb-sync/env
+WorkingDirectory=/opt/cnb-sync/source
+ExecStart=/usr/bin/env python3 -m lib.cnb_sync_gateway --host ${CNB_SYNC_HOST} --port ${CNB_SYNC_PORT} --data-dir ${CNB_SYNC_DATA_DIR}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/cnb-sync
+
+[Install]
+WantedBy=multi-user.target

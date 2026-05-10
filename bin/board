@@ -170,7 +170,13 @@ COMMANDS: list[Command] = [
     # ── task ──
     Command("task", "lib.board_task", "cmd_task", "task queue management", "task {add|done|list|next}", hidden=True),
     # ── ownership ──
-    Command("own", "lib.board_own", "cmd_own", "ownership registry", "own {claim|list|disown|map}"),
+    Command(
+        "own",
+        "lib.board_own",
+        "cmd_own",
+        "ownership registry",
+        "own {claim|list|disown|transfer|transfer-all|offboard|orphans|map}",
+    ),
     Command("scan", "lib.board_own", "cmd_scan", "scan issues/CI for owners", "scan"),
     # ── heartbeat ──
     Command(

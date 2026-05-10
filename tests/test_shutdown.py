@@ -15,6 +15,7 @@ from lib.shutdown import (
     collect_reports,
     run_shutdown,
     save_shift,
+    stop_dispatcher_session,
     wait_for_acks,
 )
 
@@ -74,6 +75,17 @@ class TestActiveSessions:
         result = _active_sessions(board)
         assert result == sorted(result)
 
+    def test_roster_excludes_historical_sessions(self, tmp_path):
+        board = _setup_db(tmp_path)
+        board.execute("INSERT INTO sessions(name, status) VALUES ('ghost', 'old')")
+        result = _active_sessions(board, ["bob", "alice"])
+        assert result == ["bob", "alice"]
+
+    def test_roster_excludes_unregistered_and_system_sessions(self, tmp_path):
+        board = _setup_db(tmp_path)
+        result = _active_sessions(board, ["alice", "dispatcher", "missing", "all", "alice"])
+        assert result == ["alice"]
+
 
 class TestUnreadCount:
     def test_empty(self, tmp_path):
@@ -97,16 +109,54 @@ class TestUnreadCount:
 
 class TestBroadcastShutdown:
     @patch("lib.shutdown.subprocess.run")
-    def test_sends_to_all(self, mock_run, tmp_path):
+    def test_sends_to_current_sessions_only(self, mock_run, tmp_path):
         broadcast_shutdown("/bin/board", "dispatcher", ["alice", "bob"])
-        mock_run.assert_called_once()
-        args = mock_run.call_args[0][0]
-        assert "all" in args
-        assert "dispatcher" in args
+        assert mock_run.call_count == 2
+        recipients = [call.args[0][4] for call in mock_run.call_args_list]
+        assert recipients == ["alice", "bob"]
+        assert "all" not in recipients
 
     @patch("lib.shutdown.subprocess.run", side_effect=OSError("fail"))
     def test_handles_error(self, mock_run, tmp_path):
         broadcast_shutdown("/bin/board", "dispatcher", ["alice"])
+
+
+class TestStopDispatcherSession:
+    def test_skips_when_not_running(self, tmp_path):
+        class Backend:
+            def is_running(self, prefix, name):
+                return False
+
+        cfg = type(
+            "Cfg",
+            (),
+            {"env": type("Env", (), {"prefix": "cc-test"})(), "install_home": tmp_path, "backend": Backend()},
+        )()
+        assert stop_dispatcher_session(cfg) is False
+
+    def test_stops_dispatcher_session(self, tmp_path):
+        calls = []
+
+        class Backend:
+            def is_running(self, prefix, name):
+                return True
+
+            def stop_session(self, prefix, name, save_cmd):
+                calls.append((prefix, name, save_cmd))
+
+        cfg = type(
+            "Cfg",
+            (),
+            {"env": type("Env", (), {"prefix": "cc-test"})(), "install_home": tmp_path, "backend": Backend()},
+        )()
+        assert stop_dispatcher_session(cfg) is True
+        assert calls == [
+            (
+                "cc-test",
+                "dispatcher",
+                f"'{tmp_path / 'bin' / 'board'}' --as dispatcher status 'shutdown: dispatcher stopped'",
+            )
+        ]
 
 
 class TestWaitForAcks:
@@ -240,6 +290,20 @@ class TestRunShutdown:
         assert (shift_dir / "bob.md").exists()
         out = capsys.readouterr().out
         assert "收工完成" in out
+
+    def test_uses_config_roster_for_reports(self, tmp_path):
+        env = self._make_env(tmp_path)
+        _setup_db_at(env.board_db)
+        conn = sqlite3.connect(str(env.board_db))
+        conn.execute("INSERT INTO sessions(name, status) VALUES ('legacy', 'old')")
+        conn.commit()
+        conn.close()
+
+        shift_dir = run_shutdown(env, skip_broadcast=True, skip_stop=True, timeout=1)
+        assert shift_dir is not None
+        assert (shift_dir / "alice.md").exists()
+        assert (shift_dir / "bob.md").exists()
+        assert not (shift_dir / "legacy.md").exists()
 
     @patch("lib.shutdown.subprocess.run")
     def test_increments_shift_number(self, mock_run, tmp_path):

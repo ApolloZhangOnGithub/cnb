@@ -10,6 +10,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from lib.board_db import BoardDB
 from lib.common import ClaudesEnv
@@ -33,7 +34,28 @@ def _board_send(board_sh: str, sender: str, recipient: str, msg: str) -> bool:
         return False
 
 
-def _active_sessions(board: BoardDB) -> list[str]:
+SYSTEM_SESSIONS: frozenset[str] = frozenset({"all", "dispatcher"})
+
+
+def _active_sessions(board: BoardDB, roster: list[str] | None = None) -> list[str]:
+    """Return the shutdown roster.
+
+    If config.toml provides a roster, it is the authority for the current team.
+    The database may contain historical/offboarded sessions, and shutdown must
+    not broadcast to or wait on those stale identities.
+    """
+    if roster is not None:
+        registered = {r[0] for r in board.query("SELECT name FROM sessions")}
+        seen: set[str] = set()
+        active: list[str] = []
+        for raw_name in roster:
+            name = raw_name.lower()
+            if name in SYSTEM_SESSIONS or name in seen or name not in registered:
+                continue
+            seen.add(name)
+            active.append(name)
+        return active
+
     rows = board.query("SELECT name FROM sessions WHERE name NOT IN ('all', 'dispatcher') ORDER BY name")
     return [r[0] for r in (rows or [])]
 
@@ -50,7 +72,20 @@ def _unread_count(board: BoardDB, session: str) -> int:
 
 def broadcast_shutdown(board_sh: str, sender: str, sessions: list[str]) -> None:
     msg = "收工通知：请保存当前工作，ack 你的收件箱。系统将自动收集日报并关停 session。"
-    _board_send(board_sh, sender, "all", msg)
+    for session in sessions:
+        _board_send(board_sh, sender, session, msg)
+
+
+def stop_dispatcher_session(cfg: Any) -> bool:
+    """Stop the dispatcher UI session as part of shutdown."""
+    prefix = cfg.env.prefix
+    if not cfg.backend.is_running(prefix, "dispatcher"):
+        return False
+
+    board = cfg.install_home / "bin" / "board"
+    save_cmd = f"'{board}' --as dispatcher status 'shutdown: dispatcher stopped'"
+    cfg.backend.stop_session(prefix, "dispatcher", save_cmd)
+    return True
 
 
 def wait_for_acks(
@@ -125,7 +160,7 @@ def run_shutdown(
         raise SystemExit(1)
 
     board = BoardDB(db_path)
-    sessions = _active_sessions(board)
+    sessions = _active_sessions(board, env.sessions if env.sessions else None)
     if not sessions:
         print("无活跃 session")
         return None
@@ -190,6 +225,8 @@ def run_shutdown(
         cfg = SwarmConfig.load()
         mgr = SwarmManager(cfg)
         mgr.stop([], force=True)
+        if stop_dispatcher_session(cfg):
+            print("  dispatcher: stopped")
         print("OK 全部关停")
     else:
         print("\n[5/5] 跳过关停（--no-stop）")

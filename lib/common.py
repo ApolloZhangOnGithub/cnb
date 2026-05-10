@@ -216,8 +216,8 @@ class BaseDB(ABC):
 class DB(BaseDB):
     """Lightweight SQLite wrapper — new connection per call, no pooling.
 
-    Used by: bin/dispatcher, lib/monitor.py, standalone scripts.
-    For board_* modules, use BoardDB (which adds .md file sync helpers).
+    Used by: bin/dispatcher and standalone scripts.
+    For board_* modules, use BoardDB.
     """
 
     def __init__(self, path: Path) -> None:

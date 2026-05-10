@@ -103,16 +103,18 @@ class TestTmuxOk:
 
 class TestTmuxSend:
     @patch("lib.tmux_utils.subprocess.run")
-    def test_sends_text_then_enter(self, mock_run):
+    def test_pastes_text_then_enter(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         result = tmux_send("cc-test-alice", "hello world")
         assert result is True
-        assert mock_run.call_count == 2
+        assert mock_run.call_count == 3
         first_call = mock_run.call_args_list[0]
-        assert "-l" in first_call[0][0]
-        assert "hello world" in first_call[0][0]
+        assert first_call[0][0][:3] == ["tmux", "load-buffer", "-b"]
+        assert first_call.kwargs["input"] == "hello world"
         second_call = mock_run.call_args_list[1]
-        assert "Enter" in second_call[0][0]
+        assert "paste-buffer" in second_call[0][0]
+        third_call = mock_run.call_args_list[2]
+        assert "Enter" in third_call[0][0]
 
     @patch("lib.tmux_utils.subprocess.run")
     def test_returns_false_on_error(self, mock_run):

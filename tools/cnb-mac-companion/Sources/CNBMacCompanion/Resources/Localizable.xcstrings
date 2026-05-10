@@ -1,0 +1,654 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "action.open_cnb_home" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open ~/.cnb" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开 ~/.cnb" } }
+      }
+    },
+    "action.open_companion" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open CNB Companion" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开 CNB Companion" } }
+      }
+    },
+    "action.open_folder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Folder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开文件夹" } }
+      }
+    },
+    "action.open_terminal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Terminal" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开终端" } }
+      }
+    },
+    "action.quit_companion" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit CNB Companion" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "退出 CNB Companion" } }
+      }
+    },
+    "action.reveal_board" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reveal Board" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示看板文件" } }
+      }
+    },
+    "feishu.action.reload_config" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reload Config" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重载配置" } }
+      }
+    },
+    "feishu.action.save" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存" } }
+      }
+    },
+    "feishu.action.send" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送" } }
+      }
+    },
+    "feishu.chat.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feishu Chat" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞书对话" } }
+      }
+    },
+    "feishu.chat.welcome" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected to the Mac companion. Configure the Feishu bot and chat ID to send messages to Feishu, with optional CNB bridge notification for the device supervisor." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接到 Mac companion。配置飞书机器人和 chat_id 后，可以直接把消息发到飞书，并可选通知 CNB bridge 交给设备主管处理。" } }
+      }
+    },
+    "feishu.composer.placeholder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message Feishu..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "给飞书发消息..." } }
+      }
+    },
+    "feishu.delivery.failed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败" } }
+      }
+    },
+    "feishu.delivery.local" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地" } }
+      }
+    },
+    "feishu.delivery.sending" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送中" } }
+      }
+    },
+    "feishu.delivery.sent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sent" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已发送" } }
+      }
+    },
+    "feishu.history.load_more" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Load earlier messages" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "加载更早消息" } }
+      }
+    },
+    "feishu.history.loading" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading history..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在加载历史..." } }
+      }
+    },
+    "feishu.history.no_more" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No earlier history" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有更多历史" } }
+      }
+    },
+    "feishu.settings.app_id" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "App ID" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "App ID" } }
+      }
+    },
+    "feishu.settings.app_secret" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "App Secret" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "App Secret" } }
+      }
+    },
+    "feishu.settings.chat_id" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Chat ID" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Chat ID" } }
+      }
+    },
+    "feishu.settings.hint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bot identity is used. The bot must be in the target chat and have message scopes; Webhook URL is optional for notifying the local CNB bridge." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用机器人身份。机器人必须在目标群内并具备消息权限；Webhook URL 可选，用来通知本机 CNB bridge。" } }
+      }
+    },
+    "feishu.settings.reply_message_id" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reply message ID" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回复消息 ID" } }
+      }
+    },
+    "feishu.settings.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feishu Connection" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞书连接" } }
+      }
+    },
+    "feishu.settings.verification_token" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Verification Token" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "校验 Token" } }
+      }
+    },
+    "feishu.settings.webhook_url" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bridge Webhook URL" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Bridge Webhook URL" } }
+      }
+    },
+    "feishu.status.failed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败：%@" } }
+      }
+    },
+    "feishu.status.needs_settings" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feishu settings required" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要配置飞书" } }
+      }
+    },
+    "feishu.status.ready" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已就绪" } }
+      }
+    },
+    "feishu.status.refreshed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refreshed %d messages" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已刷新 %d 条消息" } }
+      }
+    },
+    "feishu.status.refreshing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refreshing..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刷新中..." } }
+      }
+    },
+    "feishu.status.saved" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已保存" } }
+      }
+    },
+    "feishu.status.sending" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送中..." } }
+      }
+    },
+    "feishu.status.sent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sent: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已发送：%@" } }
+      }
+    },
+    "feishu.status.sent_with_bridge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sent and notified bridge: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已发送并通知 bridge：%@" } }
+      }
+    },
+    "feishu.status.loaded_older" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loaded %d earlier messages" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已加载 %d 条历史消息" } }
+      }
+    },
+    "feishu.status.synced" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Synced %d message changes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已同步 %d 项消息更新" } }
+      }
+    },
+    "feishu.tui.action.open_browser" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open in Browser" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在浏览器打开" } }
+      }
+    },
+    "feishu.tui.action.reload" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reload" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重载" } }
+      }
+    },
+    "feishu.tui.error.cnb_not_found" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "cnb command was not found" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "找不到 cnb 命令" } }
+      }
+    },
+    "feishu.tui.error.launch_failed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not start the read-only Web TUI" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法启动只读 Web TUI" } }
+      }
+    },
+    "feishu.tui.error.no_available_ports" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ports %d-%d are unavailable" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d-%d 端口都不可用" } }
+      }
+    },
+    "feishu.tui.error.port_unavailable" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Port %d is unavailable" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 端口不可用" } }
+      }
+    },
+    "feishu.tui.error.server_not_ready" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The TUI service on port %d did not become ready" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 端口上的 TUI 服务没有就绪" } }
+      }
+    },
+    "feishu.tui.loading.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting to the read-only Web TUI" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在连接只读 Web TUI" } }
+      }
+    },
+    "feishu.tui.status.checking_port" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Checking port %d..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "检查 %d 端口..." } }
+      }
+    },
+    "feishu.tui.status.failed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败：%@" } }
+      }
+    },
+    "feishu.tui.status.idle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not connected" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未连接" } }
+      }
+    },
+    "feishu.tui.status.port_busy" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Port %d is busy, trying the next one..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 已被占用，切换下一个端口..." } }
+      }
+    },
+    "feishu.tui.status.ready" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接：%@" } }
+      }
+    },
+    "feishu.tui.status.starting_port" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Starting local viewer on %d..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动本机 viewer：%d..." } }
+      }
+    },
+    "feishu.tui.status.starting" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Starting..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动中..." } }
+      }
+    },
+    "column.last_active" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Last Active" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最近活动" } }
+      }
+    },
+    "column.pending" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pending" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "待处理" } }
+      }
+    },
+    "column.project" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Project" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "项目" } }
+      }
+    },
+    "column.sessions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sessions" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话" } }
+      }
+    },
+    "column.status" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Status" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "状态" } }
+      }
+    },
+    "column.tasks" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tasks" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务" } }
+      }
+    },
+    "column.unread" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unread" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未读" } }
+      }
+    },
+    "empty.no_boards.description" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Register or open a cnb project to populate this view." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "注册或打开一个 cnb 项目后，这里会显示状态。" } }
+      }
+    },
+    "empty.no_boards.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No CNB Boards" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有 CNB 看板" } }
+      }
+    },
+    "metric.active" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Active" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进行中" } }
+      }
+    },
+    "metric.blocked" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blocked" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "阻塞" } }
+      }
+    },
+    "metric.no_board" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Board" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无看板" } }
+      }
+    },
+    "metric.pending" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pending" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "待处理" } }
+      }
+    },
+    "metric.projects" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Projects" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "项目" } }
+      }
+    },
+    "metric.queued" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Queued" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "排队" } }
+      }
+    },
+    "metric.sessions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sessions" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话" } }
+      }
+    },
+    "metric.stale" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stale" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失效" } }
+      }
+    },
+    "metric.tasks" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tasks" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务" } }
+      }
+    },
+    "metric.unread" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unread" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未读" } }
+      }
+    },
+    "nav.feishu_chat" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feishu Chat" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞书对话" } }
+      }
+    },
+    "nav.feishu_tui" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feishu TUI" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞书 TUI" } }
+      }
+    },
+    "nav.feature_switcher" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch feature" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换功能" } }
+      }
+    },
+    "nav.overview" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Overview" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "总览" } }
+      }
+    },
+    "nav.settings" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置" } }
+      }
+    },
+    "overview.action.open_top_project" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开 %@" } }
+      }
+    },
+    "overview.action.refresh" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh Status" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刷新状态" } }
+      }
+    },
+    "overview.filter.all" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "All" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全部" } }
+      }
+    },
+    "overview.filter.attention" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Needs Attention" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需处理" } }
+      }
+    },
+    "overview.filter.showing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Showing: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前显示：%@" } }
+      }
+    },
+    "overview.filter.smart" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smart" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "智能" } }
+      }
+    },
+    "project.reason.blocked" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d blocked session(s)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个阻塞会话" } }
+      }
+    },
+    "project.reason.idle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not running" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未运行" } }
+      }
+    },
+    "project.reason.no_board" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Registered, no board found" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已注册，但没有看板" } }
+      }
+    },
+    "project.reason.pending" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d pending action(s)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个待处理操作" } }
+      }
+    },
+    "project.reason.sessions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d session(s)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个会话" } }
+      }
+    },
+    "project.reason.tasks" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d active task(s)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个任务" } }
+      }
+    },
+    "project.reason.unread" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d unread message(s)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 条未读消息" } }
+      }
+    },
+    "project.summary" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d pending, %d tasks, %d unread" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 待处理，%d 任务，%d 未读" } }
+      }
+    },
+    "section.actions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Actions" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作" } }
+      }
+    },
+    "section.projects" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Projects" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "项目" } }
+      }
+    },
+    "section.suggested_commands" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Suggested Commands" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "建议命令" } }
+      }
+    },
+    "snapshot.detail" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d pending, %d tasks, %d unread" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 待处理，%d 任务，%d 未读" } }
+      }
+    },
+    "snapshot.detail.empty" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No local cnb project with a board was found" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未找到带看板的本地 cnb 项目" } }
+      }
+    },
+    "snapshot.refreshed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ - refreshed %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ - %@ 刷新" } }
+      }
+    },
+    "snapshot.title.active" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ active" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 运行中" } }
+      }
+    },
+    "snapshot.title.attention" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ needs attention" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 需要处理" } }
+      }
+    },
+    "snapshot.title.quiet" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "CNB quiet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "CNB 安静" } }
+      }
+    },
+    "status.attention" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Needs Attention" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要处理" } }
+      }
+    },
+    "status.blocked" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blocked" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "阻塞" } }
+      }
+    },
+    "status.idle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Idle" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未运行" } }
+      }
+    },
+    "status.no_board" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Board" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无看板" } }
+      }
+    },
+    "status.quiet" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quiet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安静" } }
+      }
+    },
+    "status.updating" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Updating" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新中" } }
+      }
+    },
+    "status.working" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Working" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运行中" } }
+      }
+    },
+    "time.never" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "never" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从未" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

@@ -24,9 +24,25 @@ from pathlib import Path
 REGISTRY_DIR = Path(__file__).resolve().parent.parent / "registry"
 
 
-def _content_hash(entry: dict) -> str:
+def _content_hash_for_json_mode(entry: dict, *, ensure_ascii: bool) -> str:
     stable = {k: v for k, v in sorted(entry.items()) if k != "content_hash"}
-    return hashlib.sha256(json.dumps(stable, sort_keys=True).encode()).hexdigest()[:16]
+    payload = json.dumps(stable, sort_keys=True, ensure_ascii=ensure_ascii)
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _content_hash(entry: dict) -> str:
+    return _content_hash_for_json_mode(entry, ensure_ascii=True)
+
+
+def _legacy_content_hash(entry: dict) -> str:
+    return _content_hash_for_json_mode(entry, ensure_ascii=False)
+
+
+def _content_hash_matches(entry: dict, actual: str) -> bool:
+    # Block #4 was written before the chain guard settled on Python's default
+    # ASCII-escaped JSON representation. Keep existing blocks immutable while
+    # allowing the verifier to recognize that legacy UTF-8 hash.
+    return actual in {_content_hash(entry), _legacy_content_hash(entry)}
 
 
 def _load_chain() -> list[dict]:
@@ -156,7 +172,6 @@ def cmd_verify(args: list[str]) -> None:
         print(f"ERROR: {name} 未注册")
         raise SystemExit(1)
 
-    expected_hash = _content_hash(entry)
     stored_hash = entry.get("content_hash", "")
 
     commit_hash = entry.get("chain", "")
@@ -166,7 +181,7 @@ def cmd_verify(args: list[str]) -> None:
         text=True,
     )
 
-    content_ok = expected_hash == stored_hash
+    content_ok = _content_hash_matches(entry, stored_hash)
     chain_ok = commit_hash and commit_hash in r.stdout
 
     if content_ok and chain_ok:
@@ -195,13 +210,12 @@ def cmd_verify_chain(_args: list[str]) -> None:
         expected_prev = prev_entry.get("content_hash", _content_hash(prev_entry))
         actual_prev = entry.get("prev", "")
 
-        expected_content = _content_hash(entry)
         actual_content = entry.get("content_hash", "")
 
         if actual_prev != expected_prev:
             print(f"  ✗ Block #{block} ({name}): prev hash 不匹配 — 链断裂！")
             fail += 1
-        elif actual_content != expected_content:
+        elif not _content_hash_matches(entry, actual_content):
             print(f"  ✗ Block #{block} ({name}): 内容被篡改！")
             fail += 1
         else:

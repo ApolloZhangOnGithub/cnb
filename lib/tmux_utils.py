@@ -1,5 +1,6 @@
 """tmux_utils — shared tmux subprocess wrappers for board_* and dispatcher concerns."""
 
+import os
 import subprocess
 
 TMUX_TIMEOUT = 8
@@ -22,7 +23,20 @@ def tmux_ok(*args: str) -> bool:
 
 def tmux_send(sess: str, text: str) -> bool:
     try:
-        subprocess.run(["tmux", "send-keys", "-t", sess, "-l", text], timeout=TMUX_TIMEOUT, check=True)
+        if text:
+            buffer_name = f"cnb-send-{os.getpid()}"
+            subprocess.run(
+                ["tmux", "load-buffer", "-b", buffer_name, "-"],
+                input=text,
+                text=True,
+                timeout=TMUX_TIMEOUT,
+                check=True,
+            )
+            subprocess.run(
+                ["tmux", "paste-buffer", "-d", "-p", "-r", "-b", buffer_name, "-t", sess],
+                timeout=TMUX_TIMEOUT,
+                check=True,
+            )
         subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=TMUX_TIMEOUT, check=True)
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
