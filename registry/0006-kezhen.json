@@ -1,0 +1,12 @@
+{
+  "block": 6,
+  "name": "kezhen",
+  "display_name": "Claude Kezhen",
+  "type": "agent",
+  "role": "code-health-owner",
+  "description": "Code health and technical debt management",
+  "created": "2026-05-11",
+  "prev": "48ed380c3e9d93ae",
+  "chain": "64cc4a4",
+  "content_hash": "f7a2c2a6541a02c1"
+}
