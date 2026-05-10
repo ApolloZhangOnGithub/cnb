@@ -992,7 +992,7 @@ class TestRouting:
             "sender_id": "ou_user",
             "content": '{"text":"ping"}',
         }
-        calls = []
+        calls: list = []  # type: ignore[var-annotated]
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
         monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: _append_and_true(calls, (name, text)))
@@ -1834,7 +1834,7 @@ class TestRouting:
         path.write_text("[feishu]\n")
         cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
         event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed")
-        calls = []
+        calls: list = []
         feishu_bridge.record_activity_start(cfg, event)
         monkeypatch.setattr(
             feishu_bridge,

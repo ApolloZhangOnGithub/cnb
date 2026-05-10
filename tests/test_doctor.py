@@ -25,8 +25,10 @@ DOCTOR_PATH = Path(__file__).parent.parent / "bin" / "doctor"
 # Load bin/doctor as a module (no .py extension — need explicit SourceFileLoader)
 _loader = importlib.machinery.SourceFileLoader("doctor", str(DOCTOR_PATH))
 _spec = importlib.util.spec_from_loader("doctor", _loader, origin=str(DOCTOR_PATH))
+assert _spec is not None
 _doctor = importlib.util.module_from_spec(_spec)
 _doctor.__file__ = str(DOCTOR_PATH)
+assert _spec.loader is not None
 _spec.loader.exec_module(_doctor)
 
 check_db = _doctor.check_db

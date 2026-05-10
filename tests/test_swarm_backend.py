@@ -33,7 +33,7 @@ class TestTmuxIsRunning:
             mock.assert_called_once_with(
                 ["tmux", "has-session", "-t", "cnb-alice"],
                 capture_output=True,
-                timeout=5,
+                timeout=8,
             )
 
     def test_not_running_session(self):
@@ -90,7 +90,7 @@ class TestTmuxCapturePane:
         with patch("subprocess.run") as mock:
             mock.return_value = MagicMock(returncode=0, stdout="hello world\n❯ ")
             result = b.capture_pane("cnb", "alice")
-            assert result == "hello world\n❯ "
+            assert result == "hello world\n❯"
 
     def test_capture_failure(self):
         b = TmuxBackend()
@@ -111,7 +111,8 @@ class TestTmuxInject:
         with patch("subprocess.run") as mock:
             mock.return_value = MagicMock(returncode=0)
             b.inject("cnb", "alice", "hello world")
-            assert mock.call_count == 3  # has-session, send-keys -l, send-keys Enter
+            assert mock.call_count == 4  # has-session, load-buffer, paste-buffer, Enter
+            assert mock.call_args_list[1].kwargs["input"] == "hello world"
 
     def test_inject_to_stopped_session_exits(self):
         b = TmuxBackend()
@@ -125,8 +126,7 @@ class TestTmuxInject:
         with patch("subprocess.run") as mock:
             mock.return_value = MagicMock(returncode=0)
             b.inject("cnb", "alice", "line1\nline2")
-            send_keys_call = mock.call_args_list[1]
-            assert "line1 line2" in send_keys_call[0][0]
+            assert mock.call_args_list[1].kwargs["input"] == "line1 line2"
 
 
 class TestTmuxStopSession:
@@ -231,7 +231,7 @@ class TestTmuxStartSession:
         calls = []
 
         def track(cmd, **kwargs):
-            calls.append(cmd)
+            calls.append((cmd, kwargs))
             r = MagicMock()
             r.returncode = 0
             r.stdout = "user@host $ "
@@ -240,7 +240,11 @@ class TestTmuxStartSession:
         with patch("subprocess.run", side_effect=track), patch("time.sleep"):
             result = b.start_session("cnb", "alice", Path("/project"), "claude --name alice")
         assert result == "cnb-alice"
-        assert ["tmux", "new-session", "-d", "-s", "cnb-alice", "-x", "200", "-y", "50"] in calls
+        commands = [cmd for cmd, _ in calls]
+        inputs = [kwargs.get("input") for _, kwargs in calls if "input" in kwargs]
+        assert ["tmux", "new-session", "-d", "-s", "cnb-alice", "-x", "200", "-y", "50"] in commands
+        assert any("cd /project && export CNB_PROJECT=/project" in item for item in inputs)
+        assert "claude --name alice" in inputs
 
 
 class TestTmuxEnableMouse:

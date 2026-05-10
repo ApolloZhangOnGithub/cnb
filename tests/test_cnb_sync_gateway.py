@@ -34,7 +34,7 @@ def running_server(data_dir: Path, *, token: str = "") -> Iterator[str]:
     server = build_server(data_dir=data_dir, host="127.0.0.1", port=0, auth_token=token)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    host, port = server.server_address
+    host, port = server.server_address[:2]  # type: ignore[misc]
     try:
         yield f"http://{host}:{port}"
     finally:

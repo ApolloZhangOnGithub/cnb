@@ -225,6 +225,7 @@ class TestAttendance:
         row = db.query_one(
             "SELECT session, engine, ended_at FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1"
         )
+        assert row is not None
         assert row["session"] == "alice"
         assert row["engine"] == "codex"
         assert row["ended_at"] is None

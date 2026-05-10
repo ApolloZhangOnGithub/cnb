@@ -149,7 +149,6 @@ class TestQueryMethods:
         db_path = _init_db(tmp_path)
         db = BoardDB(db_path)
         row = db.query_one("SELECT name FROM sessions WHERE name=?", ("nonexistent",))
-        assert row is not None
         assert row is None
 
     def test_scalar_returns_value(self, tmp_path):

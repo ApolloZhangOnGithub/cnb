@@ -21,6 +21,7 @@ import types
 registry_path = str(Path(__file__).parent.parent / "bin" / "registry")
 loader = importlib.machinery.SourceFileLoader("registry", registry_path)
 spec = importlib.util.spec_from_loader("registry", loader, origin=registry_path)
+assert spec is not None
 reg = types.ModuleType(spec.name)
 reg.__spec__ = spec
 reg.__file__ = registry_path

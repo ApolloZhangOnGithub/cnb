@@ -9,7 +9,6 @@
 本次梳理覆盖这些面:
 
 - 根目录产品文档: `README.md`, `README_zh.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `SECURITY.md`, `ADMIN_TO_DO.md`.
-- CLI 入口: `bin/cnb`, `bin/claudes-code`, `bin/cnb.js`, `bin/_pip_entry.py`, `bin/board`, `bin/swarm`, `bin/init`, `bin/dispatcher`, `bin/dispatcher-watchdog`, `bin/doctor`, `bin/hygiene`, `bin/notify`, `bin/registry`, `bin/shutdown`, `bin/cnb-sync-gateway`, `bin/secret-scan`, `bin/sync-version`, `bin/check-*`.
 - Python 核心模块: `lib/*.py`, `lib/concerns/*.py`.
 - 数据模型: `schema.sql`, `migrations/*.sql`.
 - 发布和 CI: `package.json`, `pyproject.toml`, `Makefile`, `.github/workflows/*.yml`.
@@ -144,7 +143,6 @@ PATH:cnb
 找到源码 checkout 里的 `bin/cnb` 时, 它用 `bash bin/cnb ...` 执行; 找到全局 binary 时直接 `execvp`。
 
 - `pyproject.toml` 当前指向 `lib.cli:main`。
-- `bin/_pip_entry.py` 是另一份 pip/uv 入口实现, 它寻找 `bin/claudes-code`; 当前没有被 `pyproject.toml` 使用。
 - `bin/claudes-code` 与 `bin/cnb` 当前内容完全一致, 是兼容命名入口。
 
 现状注意: Python wheel 当前只包含 `lib*`, 不包含 `bin/`, `schema.sql`, `migrations/`。如果从 pip wheel 复现, 必须先修 packaging contract: 保留 `lib.cli`, 同时把 runtime 资源打进 wheel; 或者明确把 pip/uv 包定义为源码 checkout 专用入口。源码 checkout 和 npm tarball 是更接近当前真实运行路径的分发形态。
@@ -1199,9 +1197,9 @@ These are not style complaints. They change how faithfully someone can rebuild t
    - It mixes config, webhook, OpenAPI, tmux routing, activity cards, watch server, readback and resource handoff.
    - Small changes risk unrelated formatting/type/test churn.
 
-6. tmux interaction has two implementations.
-   - `tmux_utils.tmux_send()` uses buffer paste.
-   - `swarm_backend` still uses direct `send-keys` and string command construction.
+6. tmux text injection is centralized but lifecycle control remains backend-specific.
+   - `tmux_utils.tmux_send()` owns text injection via buffer paste.
+   - `swarm_backend` uses that helper for pasted commands and prompts, keeping direct `send-keys` for control keys and session lifecycle only.
 
 7. Some tests preserve known bad behavior.
    - Security isolation tests document impersonation and cross-project access limits rather than enforcing the final desired boundary.
@@ -1225,7 +1223,6 @@ These are not style complaints. They change how faithfully someone can rebuild t
 11. Two CLI compatibility names exist.
     - `bin/cnb` and `bin/claudes-code` are currently identical.
     - npm exposes only `cnb`.
-    - `_pip_entry.py` expects `bin/claudes-code`, while `pyproject.toml` expects `lib.cli:main`.
 
 ## 21. Minimal Rebuild Checklist
 
@@ -1234,7 +1231,6 @@ To rebuild the current architecture from scratch, implement in this order:
 1. CLI wrapper layer:
    - Node `bin/cnb.js`.
    - Bash `bin/cnb` and compatibility copy `bin/claudes-code`.
-   - pip/uv entry decision: keep `lib.cli` or replace with `_pip_entry.py`-backed packaging.
    - Python `bin/board`, `bin/swarm`, `bin/init`.
 
 2. Project env:
@@ -1302,7 +1298,6 @@ bin/
   cnb                         main user CLI router
   claudes-code                compatibility copy of cnb
   cnb.js                      npm wrapper
-  _pip_entry.py               unused pip/uv wrapper candidate
   board                       board command registry
   swarm                       session CLI wrapper
   init                        project initializer
@@ -1339,7 +1334,6 @@ lib/
   swarm.py                    high-level session manager
   swarm_backend.py            tmux/screen backends
   tmux_utils.py               shared tmux helpers
-  build_lock.py               mkdir-based build queue lock
   concerns/__init__.py        active concern exports
   concerns/base.py            concern scheduler primitive
   concerns/config.py          dispatcher config dataclass
@@ -1363,8 +1357,6 @@ lib/
   shutdown.py                 shutdown orchestration
   token_usage.py              Claude Code JSONL usage parser
   resources.py                battery/memory/CPU monitor
-  health.py                   standalone tmux health report
-  inject.py                   tmux/screen message injection helper
   migrate.py                  schema migration runner
   crypto.py                   X25519 sealed-box helpers
   theme_profiles.py           built-in team profile data

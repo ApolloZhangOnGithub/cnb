@@ -124,7 +124,9 @@ class TestWorkerClamping:
     def test_overflow_clamped_to_max(self, fake_project):
         r = _run(fake_project, ["99"])
         assert r.returncode == 0
-        count = int(re.search(r"(\d+) 位同学", r.stdout).group(1))
+        m = re.search(r"(\d+) 位同学", r.stdout)
+        assert m is not None
+        count = int(m.group(1))
         assert count <= 20
 
     def test_default_is_two(self, fake_project):
