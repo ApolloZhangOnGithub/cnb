@@ -1,33 +1,76 @@
-name: Feature / Bug / Task
-description: 提交新 issue（必须先检查 ROADMAP）
+name: Feature request
+description: Propose a user-facing feature or capability.
+title: "[Feature]: "
+labels: ["feature"]
 body:
   - type: checkboxes
-    id: roadmap-check
+    id: context-check
     attributes:
-      label: ROADMAP 检查
-      description: 核心团队成员必须在提 issue 前检查 ROADMAP.md
+      label: Context check
+      description: ROADMAP.md is the priority index, not the only source of truth. P0/P1 incidents may be filed first and backfilled later.
       options:
-        - label: 已阅读 ROADMAP.md，确认本 issue 不与现有计划冲突或重复
+        - label: I checked ROADMAP.md and understand how this relates to current priorities, or this is a P0/P1 incident that will be backfilled.
+          required: true
+        - label: I searched open issues and did not find an obvious duplicate or issue I can extend.
+          required: true
+        - label: I searched relevant docs, PRs, and branches, or documented why that was skipped for an urgent incident.
+          required: true
+        - label: Any remaining uncertainty is called out below.
           required: true
   - type: textarea
-    id: roadmap-relation
+    id: context-relation
     attributes:
-      label: 与 ROADMAP 的关系
-      description: 说明本 issue 与 ROADMAP 中哪些 phase/issue 有关联，或为什么属于 ROADMAP 之外的范围
-      placeholder: "与 #42 有关联但不重叠，因为..."
+      label: Relationship to existing context
+      description: Link related roadmap items, issues, PRs, design docs, or branches. If none were found, list the keywords you searched.
+      placeholder: "Related to #42 but does not overlap because... Searched: ownership handoff / transfer / offboard."
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase label
+      description: Apply the matching label after opening the issue if GitHub does not add it automatically.
+      options:
+        - phase:1
+        - phase:2
+        - phase:3
+    validations:
+      required: true
+  - type: dropdown
+    id: type-label
+    attributes:
+      label: Type label
+      description: Apply the matching label after opening the issue if GitHub does not add it automatically.
+      options:
+        - feature
+        - infra
+        - ownership
+        - org-design
+        - experiment
     validations:
       required: true
   - type: textarea
     id: description
     attributes:
-      label: 描述
-      description: 要做什么、为什么
+      label: Problem and goal
+      description: What should change, and why?
     validations:
       required: true
   - type: textarea
     id: design
     attributes:
-      label: 设计要点
-      description: 技术方案、影响面、风险
+      label: Design notes
+      description: Proposed approach, affected areas, tradeoffs, and risks.
     validations:
       required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete checks that prove the feature is complete.
+      placeholder: |
+        - Command X does Y.
+        - Existing workflow Z still works.
+        - Tests cover the default path and one boundary case.
+    validations:
+      required: true
