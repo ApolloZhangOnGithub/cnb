@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Configure GoDaddy DNS records for the cnb GitHub Pages site."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+GITHUB_PAGES_A = [
+    "185.199.108.153",
+    "185.199.109.153",
+    "185.199.110.153",
+    "185.199.111.153",
+]
+
+GITHUB_PAGES_AAAA = [
+    "2606:50c0:8000::153",
+    "2606:50c0:8001::153",
+    "2606:50c0:8002::153",
+    "2606:50c0:8003::153",
+]
+
+DEFAULT_DOMAIN = "c-n-b.space"
+DEFAULT_PROFILE = "godaddy-no"
+DEFAULT_GODADDY_BASE = "https://api.godaddy.com"
+DEFAULT_WWW_TARGET = "apollozhangongithub.github.io"
+DEFAULT_TTL = 600
+
+
+class ConfigError(RuntimeError):
+    """Raised when a required GoDaddy profile cannot be loaded."""
+
+
+def _profile_prefix(profile: str) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9]+", "_", profile).strip("_").upper()
+    if not normalized:
+        normalized = "DEFAULT"
+    if normalized.startswith("GODADDY_"):
+        return normalized
+    return f"GODADDY_{normalized}"
+
+
+def _load_profile_file(path: Path, profile: str) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    profiles = data.get("profiles", data)
+    value = profiles.get(profile, {})
+    if not isinstance(value, dict):
+        raise ConfigError(f"profile {profile!r} in {path} must be an object")
+    return value
+
+
+def load_profile(profile: str, config_path: Path | None = None) -> dict[str, str]:
+    prefix = _profile_prefix(profile)
+    paths = []
+    if config_path is not None:
+        paths.append(config_path)
+    env_config = os.environ.get("CNB_GODADDY_PROFILES")
+    if env_config:
+        paths.append(Path(env_config).expanduser())
+    paths.append(Path("~/.config/cnb/godaddy-profiles.json").expanduser())
+
+    file_profile: dict[str, Any] = {}
+    for path in paths:
+        file_profile.update(_load_profile_file(path, profile))
+
+    def get_value(key: str, default: str = "") -> str:
+        env_key = f"{prefix}_{key.upper()}"
+        return os.environ.get(env_key) or os.environ.get(f"GODADDY_{key.upper()}") or str(file_profile.get(key, default))
+
+    api_key = get_value("api_key")
+    api_sec = get_value("api_" + "secret")
+    if not api_key or not api_sec:
+        raise ConfigError(
+            "missing GoDaddy credentials for profile "
+            f"{profile!r}; set {prefix}_API_KEY/{prefix}_API_SECRET, "
+            "or add the profile to ~/.config/cnb/godaddy-profiles.json"
+        )
+
+    return {
+        "api_key": api_key,
+        "api_secret": api_sec,
+        "api_base": get_value("api_base", DEFAULT_GODADDY_BASE).rstrip("/"),
+    }
+
+
+def request_json(
+    *,
+    method: str,
+    base_url: str,
+    path: str,
+    api_key: str,
+    api_sec: str,
+    body: Any | None = None,
+) -> Any:
+    url = f"{base_url}{path}"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"sso-key {api_key}:{api_sec}",
+    }
+    data = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body, separators=(",", ":")).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = response.read().decode("utf-8")
+            return json.loads(payload) if payload else None
+    except urllib.error.HTTPError as err:
+        payload = err.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"GoDaddy API {method} {path} failed: HTTP {err.code} {payload}") from err
+
+
+def record_path(domain: str, record_type: str, name: str) -> str:
+    return "/v1/domains/{}/records/{}/{}".format(
+        urllib.parse.quote(domain, safe=""),
+        urllib.parse.quote(record_type, safe=""),
+        urllib.parse.quote(name, safe=""),
+    )
+
+
+def put_records(args: argparse.Namespace, profile: dict[str, str], record_type: str, name: str, values: list[str]) -> None:
+    body = [{"data": value, "ttl": args.ttl} for value in values]
+    path = record_path(args.domain, record_type, name)
+    if args.dry_run:
+        print(f"DRY-RUN PUT {path} {json.dumps(body, ensure_ascii=False)}")
+        return
+    request_json(
+        method="PUT",
+        base_url=profile["api_base"],
+        path=path,
+        api_key=profile["api_key"],
+        api_sec=profile["api_secret"],
+        body=body,
+    )
+    print(f"OK {record_type} {name} -> {', '.join(values)}")
+
+
+def delete_records(args: argparse.Namespace, profile: dict[str, str], record_type: str, name: str) -> None:
+    path = record_path(args.domain, record_type, name)
+    if args.dry_run:
+        print(f"DRY-RUN DELETE {path}")
+        return
+    try:
+        request_json(
+            method="DELETE",
+            base_url=profile["api_base"],
+            path=path,
+            api_key=profile["api_key"],
+            api_sec=profile["api_secret"],
+        )
+        print(f"OK deleted {record_type} {name}")
+    except RuntimeError as err:
+        if "HTTP 404" not in str(err):
+            raise
+        print(f"OK no existing {record_type} {name}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--domain", default=DEFAULT_DOMAIN)
+    parser.add_argument("--profile", default=os.environ.get("GODADDY_PROFILE", DEFAULT_PROFILE))
+    parser.add_argument("--config", type=Path, help="Path to a GoDaddy profile JSON file")
+    parser.add_argument("--ttl", type=int, default=int(os.environ.get("GODADDY_TTL", DEFAULT_TTL)))
+    parser.add_argument("--www-target", default=DEFAULT_WWW_TARGET)
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+
+    try:
+        profile = load_profile(args.profile, args.config)
+    except ConfigError as err:
+        if not args.dry_run:
+            print(f"ERROR {err}", file=sys.stderr)
+            return 2
+        print(f"WARN {err}; using placeholder credentials for dry-run", file=sys.stderr)
+        profile = {
+            "api_key": "dry-run",
+            "api_secret": "dry-run",
+            "api_base": DEFAULT_GODADDY_BASE,
+        }
+
+    print(f"Using GoDaddy profile {args.profile!r} for {args.domain}")
+    delete_records(args, profile, "CNAME", "@")
+    delete_records(args, profile, "A", "www")
+    delete_records(args, profile, "AAAA", "www")
+    put_records(args, profile, "A", "@", GITHUB_PAGES_A)
+    put_records(args, profile, "AAAA", "@", GITHUB_PAGES_AAAA)
+    put_records(args, profile, "CNAME", "www", [args.www_target])
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

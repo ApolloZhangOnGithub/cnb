@@ -7,7 +7,7 @@
 [![CI](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml/badge.svg)](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/claude-nb?label=npm)](https://www.npmjs.com/package/claude-nb)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)](pyproject.toml)
-[![Docs](https://img.shields.io/badge/docs-pages-14865d)](https://apollozhangongithub.github.io/cnb/)
+[![Docs](https://img.shields.io/badge/docs-c--n--b.space-14865d)](https://c-n-b.space/)
 [![License](https://img.shields.io/badge/license-OpenAll--1.0-444)](LICENSE)
 
 **Project ownership for LLM teams.**
@@ -24,7 +24,7 @@ npm install -g claude-nb
 | Engines | Claude Code by default; Codex supported through the npm peer CLI |
 | State | Board database, ownership map, issue mirror, daily/shift reports |
 | Distribution | Public npm package `claude-nb`, Python 3.11+ internals |
-| Documentation | README short path, durable docs in [`docs/`](docs/), public site at [`apollozhangongithub.github.io/cnb`](https://apollozhangongithub.github.io/cnb/) |
+| Documentation | README short path, durable docs in [`docs/`](docs/), public site at [`c-n-b.space`](https://c-n-b.space/) |
 
 Every multi-agent tool solves "how to run multiple agents." cnb solves what happens after — how to make them **manageable** across sessions, shifts, and team changes.
 
@@ -120,7 +120,7 @@ The README is the short path. Longer-lived documentation lives under [`docs/`](d
 
 - [Ownership autonomy](docs/design-ownership-autonomy.md) — why cnb treats long-lived module ownership as the core unit of work.
 - [Package publishing](docs/package-publishing.md) — npm release, dist-tags, and GitHub Packages visibility rules.
-- [Public website](https://apollozhangongithub.github.io/cnb/) — first-visit product entry and documentation links.
+- [Public website](https://c-n-b.space/) — first-visit product entry and documentation links.
 
 <!-- section:slash-commands -->
 ## Slash commands
