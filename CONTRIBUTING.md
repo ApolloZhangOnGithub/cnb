@@ -251,4 +251,12 @@ npm view claude-nb version dist-tags
 
 GitHub's repository Packages sidebar is separate from npmjs.com. It only shows packages published to GitHub Packages and connected to the repository. The current `claude-nb` package is intentionally unscoped for `npm install -g claude-nb`; GitHub Packages npm publishing requires a scoped package name such as `@namespace/package-name`, so do not add `publishConfig.registry=https://npm.pkg.github.com` or rename the package without an explicit migration issue.
 
+The repository uses a low-risk GitHub Packages mirror for sidebar visibility:
+
+```bash
+gh workflow run publish-github-package.yml -f version=<npmjs-release-version>
+```
+
+That workflow downloads the already-published npmjs `claude-nb` release, rewrites package metadata to `@apollozhangongithub/cnb`, and publishes the scoped mirror with `GITHUB_TOKEN`. Use it for release versions only.
+
 CI warns when the npmjs package version is behind the local `VERSION`.

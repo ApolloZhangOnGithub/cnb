@@ -1,0 +1,68 @@
+name: Publish GitHub Package Mirror
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published npmjs claude-nb version to mirror"
+        required: true
+        default: "0.5.1"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  GH_PACKAGE: "@apollozhangongithub/cnb"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@apollozhangongithub"
+
+      - name: Check whether mirror already exists
+        id: exists
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MIRROR_VERSION: ${{ inputs.version }}
+        run: |
+          if npm view "$GH_PACKAGE@$MIRROR_VERSION" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "$GH_PACKAGE@$MIRROR_VERSION already exists"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download npmjs package
+        if: steps.exists.outputs.publish == 'true'
+        env:
+          MIRROR_VERSION: ${{ inputs.version }}
+        run: |
+          mkdir mirror
+          npm pack "claude-nb@$MIRROR_VERSION" --pack-destination mirror
+          tarball="$(ls mirror/claude-nb-*.tgz)"
+          tar -xzf "$tarball" -C mirror
+
+      - name: Rewrite package metadata for GitHub Packages
+        if: steps.exists.outputs.publish == 'true'
+        working-directory: mirror/package
+        run: |
+          npm pkg set name="$GH_PACKAGE"
+          npm pkg set repository.type="git"
+          npm pkg set repository.url="git+https://github.com/${GITHUB_REPOSITORY}.git"
+          npm pkg set homepage="https://github.com/${GITHUB_REPOSITORY}#readme"
+          npm pkg set bugs.url="https://github.com/${GITHUB_REPOSITORY}/issues"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+          npm pkg fix
+
+      - name: Publish GitHub Packages mirror
+        if: steps.exists.outputs.publish == 'true'
+        working-directory: mirror/package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --access public --registry=https://npm.pkg.github.com

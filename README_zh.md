@@ -57,7 +57,7 @@ cnb 聚焦的是 session **之间**发生的事——当一个同学重启后失
 npm install -g claude-nb
 ```
 
-公开包是 npmjs.com 上的 [`claude-nb`](https://www.npmjs.com/package/claude-nb)。GitHub 仓库侧边栏里的 **Packages** 只显示发布到 GitHub Packages 的包；即使 npmjs 包存在，这里也可能为空。发布和可见性规则见 [Package publishing](docs/package-publishing.md)。
+标准公开包是 npmjs.com 上的 [`claude-nb`](https://www.npmjs.com/package/claude-nb)。GitHub Packages 也可能显示 scoped 镜像 `@apollozhangongithub/cnb`；npmjs 仍然是受支持的安装路径。发布和可见性规则见 [Package publishing](docs/package-publishing.md)。
 
 依赖：Python 3.11+、tmux、Claude Code CLI。
 
