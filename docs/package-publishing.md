@@ -38,18 +38,19 @@ Do not add unused npm packages just to make the dependency count nonzero. If a d
 
 Publish only after the release PR is merged to `master`.
 
-1. Set a release version without a `-dev` suffix in `VERSION`.
-2. Run `python bin/sync-version` to update `package.json` and `pyproject.toml`.
-3. Add a dated `CHANGELOG.md` section for the release.
-4. Run:
+1. Run the `Prepare Release` workflow with the release version and changelog body, or make the same edits manually.
+2. Confirm the release PR sets a version without a `-dev` suffix in `VERSION`.
+3. Confirm `python bin/sync-version` updated `package.json` and `pyproject.toml`.
+4. Confirm `CHANGELOG.md` has a dated section for the release.
+5. Run:
 
 ```bash
 python bin/sync-version --check
 python bin/check-changelog
-npm pack --dry-run
+bin/check-npm-package --install-smoke
 ```
 
-5. Create a GitHub Release for the matching tag, for example `v0.5.39`.
+6. Create a GitHub Release for the matching tag, for example `v0.5.43`.
 
 The `Publish npm Release` workflow then publishes `claude-nb` to npmjs and mirrors the same release to GitHub Packages. It can also be run manually in dry-run mode:
 
@@ -57,7 +58,15 @@ The `Publish npm Release` workflow then publishes `claude-nb` to npmjs and mirro
 gh workflow run publish-npm.yml -f version=<version> -f dry_run=true
 ```
 
+The `Prepare Release` workflow dispatches CI and CodeQL for the generated release branch because commits made by `GITHUB_TOKEN` may not automatically trigger normal push or pull request checks.
+
 `npm publish` updates `latest` by default unless a non-default `--tag` is used. The workflow also tries to move the `stable` dist-tag to the same version. If npm accepts OIDC only for the publish operation in the current registry behavior, add a granular `NPM_TOKEN` repository secret for dist-tag mutation or move `stable` manually after verifying the release.
+
+The release workflow performs three package checks:
+
+- CI packs the local tarball and rejects missing entrypoints or secret-looking paths.
+- Release publishing installs the just-published npmjs package from the public registry and runs `cnb --version`.
+- GitHub Packages mirroring verifies that `@apollozhangongithub/cnb@<version>` is visible in the GitHub npm registry.
 
 ## One-time npm Trusted Publishing setup
 

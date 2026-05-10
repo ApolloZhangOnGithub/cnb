@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-nb"
-version = "0.5.42.dev0"
+version = "0.5.43.dev0"
 description = "Multi-agent coordination framework for Claude Code sessions"
 requires-python = ">=3.11"
 license = "LicenseRef-OpenAll-1.0"
@@ -21,9 +21,9 @@ include = ["lib*"]
 # ---------- pytest ----------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
 addopts = "-v --tb=short"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",

@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: bin/check-npm-package [--install-smoke] [--tarball PATH]
+
+Build or inspect the npm package tarball, verify required files are present,
+reject obvious secret-bearing paths, and optionally install the packed tarball
+globally in a temporary prefix to prove the cnb entrypoint is runnable.
+EOF
+}
+
+INSTALL_SMOKE=false
+TARBALL=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --install-smoke)
+            INSTALL_SMOKE=true
+            shift
+            ;;
+        --tarball)
+            if [ $# -lt 2 ]; then
+                echo "ERROR: --tarball requires a path" >&2
+                exit 2
+            fi
+            TARBALL="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "ERROR: unknown argument: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+WORK_DIR="$(mktemp -d)"
+cleanup() {
+    rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
+
+if [ -z "$TARBALL" ]; then
+    tarball_name="$(npm pack --pack-destination "$WORK_DIR")"
+    TARBALL="$WORK_DIR/$tarball_name"
+fi
+
+if [ ! -f "$TARBALL" ]; then
+    echo "ERROR: tarball not found: $TARBALL" >&2
+    exit 1
+fi
+
+tar -tzf "$TARBALL" > "$WORK_DIR/files.txt"
+
+required_files=(
+    "package/bin/cnb.js"
+    "package/bin/cnb"
+    "package/lib/cli.py"
+    "package/VERSION"
+    "package/package.json"
+)
+
+for file in "${required_files[@]}"; do
+    if ! grep -qx "$file" "$WORK_DIR/files.txt"; then
+        echo "ERROR: npm package is missing required file: $file" >&2
+        exit 1
+    fi
+done
+
+if grep -E '(^|/)(\.env($|[._-])|\.npmrc$|id_(rsa|dsa|ecdsa|ed25519)$|[^/]+\.(pem|p12|pfx|key)$|credentials?($|[._-]))' "$WORK_DIR/files.txt"; then
+    echo "ERROR: npm package includes a path that looks secret-bearing" >&2
+    exit 1
+fi
+
+if [ "$INSTALL_SMOKE" = true ]; then
+    prefix="$WORK_DIR/install"
+    project="$WORK_DIR/project"
+    mkdir -p "$prefix" "$project"
+    npm install --global --ignore-scripts --no-audit --no-fund --prefix "$prefix" "$TARBALL"
+    PATH="$prefix/bin:$PATH" CNB_PROJECT="$project" cnb --version | grep -E '^cnb v[0-9]+\.[0-9]+\.[0-9]+' >/dev/null
+fi
+
+echo "OK npm package tarball passed checks: $TARBALL"

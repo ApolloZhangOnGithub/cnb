@@ -5,6 +5,7 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -108,15 +109,7 @@ jobs:
           node-version: "24"
           package-manager-cache: false
       - name: Verify npm package tarball
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/cnb-npm-pack
-          tarball="$(npm pack --pack-destination /tmp/cnb-npm-pack)"
-          tar -tzf "/tmp/cnb-npm-pack/$tarball" > /tmp/cnb-npm-pack/files.txt
-          grep -qx "package/bin/cnb.js" /tmp/cnb-npm-pack/files.txt
-          grep -qx "package/bin/cnb" /tmp/cnb-npm-pack/files.txt
-          grep -qx "package/lib/cli.py" /tmp/cnb-npm-pack/files.txt
-          grep -qx "package/VERSION" /tmp/cnb-npm-pack/files.txt
+        run: bin/check-npm-package --install-smoke
 
   test:
     runs-on: ubuntu-latest
