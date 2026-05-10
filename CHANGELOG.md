@@ -15,6 +15,7 @@
 
 ### Bug Fixes
 
+- **Package visibility documentation** — Clarified that the installable `claude-nb` package lives on npmjs.com while GitHub's repository Packages sidebar only shows GitHub Packages. Added npm release tag guidance and package metadata links.
 - **BBS LIKE wildcard injection** — Thread ID prefix matching (`LIKE ?`) did not escape `%` and `_` wildcards in user input. Added `_escape_like()` helper.
 - **BBS reply atomicity** — `cmd_reply` insert and notification message were in separate transactions; wrapped in single `with db.conn()` block.
 - **board_lock pgrep timeout** — `subprocess.run(["pgrep", ...])` in `cmd_git_unlock` had no timeout. Added `timeout=5`.

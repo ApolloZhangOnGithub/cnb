@@ -44,6 +44,8 @@ cnb's specific focus is what happens **between** sessions — when a tongxue res
 npm install -g claude-nb
 ```
 
+The public package is [`claude-nb`](https://www.npmjs.com/package/claude-nb) on npmjs.com. GitHub's repository **Packages** sidebar only lists packages published to GitHub Packages; it can be empty even when the npmjs package exists. See [Package publishing](docs/package-publishing.md) for release and visibility rules.
+
 Requires: Python 3.11+, tmux, Claude Code CLI.
 
 <!-- section:quickstart -->
