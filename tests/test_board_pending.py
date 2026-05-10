@@ -221,6 +221,7 @@ class TestPendingVerify:
         assert "1 通过" in out
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=1")
+        assert row is not None
         assert row[0] == "done"
 
     @patch("lib.board_pending.subprocess.run")
@@ -239,6 +240,7 @@ class TestPendingVerify:
         assert "重试结果: 1 成功, 0 失败, 0 跳过" in out
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row is not None
         assert row[0] == "retried"
         assert mock_run.call_args_list[0].args[0] == ["gcloud", "auth", "print-access-token"]
         assert mock_run.call_args_list[1].args[0] == ["npm", "publish"]
@@ -259,6 +261,7 @@ class TestPendingVerify:
         assert "publish denied" in out
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row is not None
         assert row[0] == "failed"
 
     @patch("lib.board_pending.subprocess.run")
@@ -271,6 +274,7 @@ class TestPendingVerify:
         assert "验证失败" in out
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=1")
+        assert row is not None
         assert row[0] == "reminded"
 
     @patch("lib.board_pending.subprocess.run")
@@ -284,7 +288,9 @@ class TestPendingVerify:
         assert "#1" in out
 
         row1 = db.query_one("SELECT status FROM pending_actions WHERE id=1")
+        assert row1 is not None
         row2 = db.query_one("SELECT status FROM pending_actions WHERE id=2")
+        assert row2 is not None
         assert row1[0] == "done"
         assert row2[0] == "pending"
 
@@ -299,6 +305,7 @@ class TestPendingVerify:
             out = capsys.readouterr().out
             assert "超时" in out
             row = db.query_one("SELECT status FROM pending_actions WHERE id=1")
+            assert row is not None
             assert row[0] == "reminded"
 
     def test_verify_invalid_id_exits(self, tmp_path):
@@ -327,6 +334,7 @@ class TestPendingRetry:
         assert "重试成功" in out
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row is not None
         assert row[0] == "retried"
 
     @patch("lib.board_pending.subprocess.run")
@@ -343,6 +351,7 @@ class TestPendingRetry:
         assert "重试失败" in out
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row is not None
         assert row[0] == "failed"
 
     @patch("lib.board_pending.subprocess.run")
@@ -357,6 +366,7 @@ class TestPendingRetry:
         assert "重试成功" in out
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row is not None
         assert row[0] == "retried"
 
     def test_retry_invalid_id_exits(self, tmp_path):
@@ -375,6 +385,7 @@ class TestPendingResolve:
         assert "已手动标记为完成" in out
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=1")
+        assert row is not None
         assert row[0] == "done"
 
     def test_resolves_reminded(self, tmp_path, capsys):

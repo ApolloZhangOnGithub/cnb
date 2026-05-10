@@ -96,6 +96,7 @@ class TestMailSend:
         out = capsys.readouterr().out
         assert "OK" in out
         row = db.query_one("SELECT body FROM mail WHERE id=1")
+        assert row is not None
         assert row[0] == "body from positional"
 
 
@@ -174,6 +175,7 @@ class TestMailRead:
         _send_mail(db, sender="alice", to="bob")
         cmd_mail(db, "bob", ["read", "1"])
         row = db.query_one("SELECT read_by FROM mail WHERE id=1")
+        assert row is not None
         read_by = json.loads(row[0])
         assert "bob" in read_by
 
@@ -183,6 +185,7 @@ class TestMailRead:
         cmd_mail(db, "bob", ["read", "1"])
         cmd_mail(db, "bob", ["read", "1"])
         row = db.query_one("SELECT read_by FROM mail WHERE id=1")
+        assert row is not None
         read_by = json.loads(row[0])
         assert read_by.count("bob") == 1
 
@@ -237,6 +240,7 @@ class TestMailReply:
         _send_mail(db, sender="alice", to="bob")
         cmd_mail(db, "bob", ["reply", "1", "reply body"])
         row = db.query_one("SELECT thread_id, sender, body FROM mail WHERE id=2")
+        assert row is not None
         assert row[0] == 1
         assert row[1] == "bob"
         assert row[2] == "reply body"
@@ -247,6 +251,7 @@ class TestMailReply:
         cmd_mail(db, "bob", ["reply", "1", "first reply"])
         cmd_mail(db, "alice", ["reply", "2", "second reply"])
         row = db.query_one("SELECT thread_id FROM mail WHERE id=3")
+        assert row is not None
         assert row[0] == 1
 
     def test_reply_includes_all_parties(self, tmp_path, capsys):
@@ -258,6 +263,7 @@ class TestMailReply:
         cmd_mail(db, "bob", ["reply", "1", "agreed"])
         capsys.readouterr()
         row = db.query_one("SELECT recipients FROM mail WHERE id=2")
+        assert row is not None
         recipients = json.loads(row[0])
         assert "alice" in recipients
         assert "charlie" in recipients
@@ -286,6 +292,7 @@ class TestMailReply:
         _send_mail(db, sender="alice", to="bob")
         cmd_mail(db, "bob", ["reply", "1", "noted"])
         row = db.query_one("SELECT read_by FROM mail WHERE id=2")
+        assert row is not None
         read_by = json.loads(row[0])
         assert "bob" in read_by
 
@@ -297,4 +304,5 @@ class TestMailReply:
         )
         cmd_mail(db, "bob", ["reply", "1", "got it"])
         row = db.query_one("SELECT subject FROM mail WHERE id=2")
+        assert row is not None
         assert row[0] == "Re: Original"

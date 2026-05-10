@@ -149,6 +149,7 @@ class TestQueryMethods:
         db_path = _init_db(tmp_path)
         db = BoardDB(db_path)
         row = db.query_one("SELECT name FROM sessions WHERE name=?", ("nonexistent",))
+        assert row is not None
         assert row is None
 
     def test_scalar_returns_value(self, tmp_path):
@@ -338,6 +339,7 @@ class TestPostMessage:
         msg_id = db.post_message("alice", "bob", "hello")
         assert msg_id > 0
         row = db.query_one("SELECT sender, recipient, body FROM messages WHERE id=?", (msg_id,))
+        assert row is not None
         assert row["sender"] == "alice"
         assert row["recipient"] == "bob"
         assert row["body"] == "hello"
@@ -347,6 +349,7 @@ class TestPostMessage:
         db = BoardDB(db_path)
         msg_id = db.post_message("alice", "all", "broadcast")
         row = db.query_one("SELECT ts FROM messages WHERE id=?", (msg_id,))
+        assert row is not None
         assert row["ts"] is not None
         assert len(row["ts"]) >= 10
 
@@ -381,6 +384,7 @@ class TestPostMessage:
         with db.conn() as c:
             msg_id = db.post_message("alice", "bob", "in txn", c=c)
         row = db.query_one("SELECT body FROM messages WHERE id=?", (msg_id,))
+        assert row is not None
         assert row["body"] == "in txn"
 
     def test_system_sender(self, tmp_path):
@@ -388,4 +392,5 @@ class TestPostMessage:
         db = BoardDB(db_path)
         msg_id = db.post_message("SYSTEM", "all", "announcement")
         row = db.query_one("SELECT sender FROM messages WHERE id=?", (msg_id,))
+        assert row is not None
         assert row["sender"] == "SYSTEM"

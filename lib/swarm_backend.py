@@ -2,11 +2,20 @@
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
+
+from lib.tmux_utils import (
+    capture_pane as tmux_capture_pane,
+    has_session as tmux_has_session,
+    is_agent_running as tmux_is_agent_running,
+    pane_command as tmux_pane_command,
+    tmux_send,
+)
 
 
 class SessionBackend(ABC):
@@ -51,36 +60,16 @@ class TmuxBackend(SessionBackend):
         return f"{prefix}-{name}"
 
     def is_running(self, prefix: str, name: str) -> bool:
-        r = subprocess.run(
-            ["tmux", "has-session", "-t", self._sess(prefix, name)],
-            capture_output=True,
-            timeout=5,
-        )
-        return r.returncode == 0
+        return tmux_has_session(self._sess(prefix, name))
 
     def _pane_command(self, prefix: str, name: str) -> str:
-        r = subprocess.run(
-            ["tmux", "list-panes", "-t", self._sess(prefix, name), "-F", "#{pane_current_command}"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return r.stdout.strip().split("\n")[0] if r.returncode == 0 else ""
+        return tmux_pane_command(self._sess(prefix, name))
 
     def is_agent_active(self, prefix: str, name: str) -> bool:
-        if not self.is_running(prefix, name):
-            return False
-        cmd = self._pane_command(prefix, name)
-        return cmd not in ("zsh", "bash", "sh", "-zsh", "-bash", "")
+        return tmux_is_agent_running(self._sess(prefix, name))
 
     def capture_pane(self, prefix: str, name: str) -> str:
-        r = subprocess.run(
-            ["tmux", "capture-pane", "-t", self._sess(prefix, name), "-p"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return r.stdout if r.returncode == 0 else ""
+        return tmux_capture_pane(self._sess(prefix, name))
 
     def wait_for_shell(self, prefix: str, name: str, timeout: int = 15) -> bool:
         waited = 0
@@ -137,19 +126,15 @@ class TmuxBackend(SessionBackend):
         sess = self._sess(prefix, name)
         subprocess.run(["tmux", "new-session", "-d", "-s", sess, "-x", "200", "-y", "50"], timeout=10)
         self.wait_for_shell(prefix, name, timeout=10)
-        subprocess.run(
-            [
-                "tmux",
-                "send-keys",
-                "-t",
-                sess,
-                f"source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; cd '{project_root}' && export CNB_PROJECT='{project_root}'",
-                "Enter",
-            ],
-            timeout=10,
+        project_arg = shlex.quote(str(project_root))
+        tmux_send(
+            sess,
+            "source ~/.zprofile 2>/dev/null; "
+            "source ~/.zshrc 2>/dev/null; "
+            f"cd {project_arg} && export CNB_PROJECT={project_arg}",
         )
         self.wait_for_shell(prefix, name, timeout=10)
-        subprocess.run(["tmux", "send-keys", "-t", sess, agent_cmd, "Enter"], timeout=10)
+        tmux_send(sess, agent_cmd)
         return sess
 
     def stop_session(self, prefix: str, name: str, save_cmd: str) -> None:
@@ -182,16 +167,16 @@ class TmuxBackend(SessionBackend):
             print(f"  {name}: not running")
             raise SystemExit(1)
         oneline = message.replace("\n", " ")
-        subprocess.run(["tmux", "send-keys", "-t", sess, "-l", oneline], timeout=10)
-        subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=10)
+        if not tmux_send(sess, oneline):
+            print(f"  {name}: inject failed")
+            raise SystemExit(1)
         print(f"  {name}: injected")
 
     def inject_initial_prompt(self, prefix: str, name: str, prompt: str, log_dir: Path) -> None:
         if self.wait_for_prompt(prefix, name, timeout=60):
             sess = self._sess(prefix, name)
             time.sleep(1)
-            subprocess.run(["tmux", "send-keys", "-t", sess, "-l", prompt], timeout=10)
-            subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=10)
+            tmux_send(sess, prompt)
         else:
             with open(log_dir / f"{name}.log", "a") as f:
                 f.write(f"[WARN] {name}: prompt not detected after 60s, skipping injection\n")

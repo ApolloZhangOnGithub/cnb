@@ -237,6 +237,7 @@ class TestAttendance:
         mgr.clock_out("alice")
         db = BoardDB(mgr._env)
         row = db.query_one("SELECT engine, ended_at FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1")
+        assert row is not None
         assert row["engine"] == "codex"
         assert row["ended_at"] is not None
 
@@ -255,6 +256,7 @@ class TestAttendance:
         assert mgr.recorded_engine("alice") == "codex"
         db = BoardDB(mgr._env)
         row = db.query_one("SELECT engine FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1")
+        assert row is not None
         assert row["engine"] == "codex"
 
     def test_clock_out_writes_log(self, mgr):
