@@ -153,6 +153,16 @@ class TestSeal:
         with pytest.raises(SystemExit):
             cmd_seal(db, "alice", ["bob"])
 
+    def test_seal_unregistered_sender_guides_with_sessions_and_keygen(self, mailbox_db, capsys):
+        with pytest.raises(SystemExit):
+            cmd_seal(mailbox_db, "ritchie", ["bob", "hello"])
+
+        out = capsys.readouterr().out
+        assert "'ritchie' is not a registered session" in out
+        assert "已注册 session" in out
+        assert "alice" in out
+        assert "board --as ritchie keygen" in out
+
 
 class TestUnseal:
     def test_unseal_decrypts_message(self, keyed_pair, capsys):

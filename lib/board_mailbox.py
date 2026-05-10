@@ -8,7 +8,7 @@ from pathlib import Path
 from cryptography.exceptions import InvalidTag
 
 from lib.board_db import BoardDB, ts
-from lib.common import validate_identity
+from lib.common import is_privileged
 from lib.crypto import (
     generate_keypair,
     load_private_key,
@@ -70,9 +70,25 @@ def _find_pubkey(name: str, db: BoardDB | None = None) -> str | None:
     return None
 
 
-def cmd_keygen(db: BoardDB, identity: str) -> None:
-    validate_identity(db, identity)
+def _registered_sessions(db: BoardDB) -> list[str]:
+    return [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all' ORDER BY name")]
+
+
+def _validate_mailbox_identity(db: BoardDB, identity: str) -> str:
     name = identity.lower()
+    if is_privileged(name):
+        return name
+    if db.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (name,)):
+        return name
+    sessions = ", ".join(_registered_sessions(db)) or "(none)"
+    print(f"ERROR: '{name}' is not a registered session")
+    print(f"  已注册 session: {sessions}")
+    print(f"  如需使用加密邮箱，先初始化/注册该 session，然后运行: board --as {name} keygen")
+    raise SystemExit(1)
+
+
+def cmd_keygen(db: BoardDB, identity: str) -> None:
+    name = _validate_mailbox_identity(db, identity)
     kd = _keys_dir(db)
 
     if (kd / f"{name}.pem").exists():
@@ -125,8 +141,7 @@ def cmd_keygen_all(db: BoardDB) -> None:
 
 
 def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
-    validate_identity(db, identity)
-    name = identity.lower()
+    name = _validate_mailbox_identity(db, identity)
     if len(args) < 2:
         print("Usage: ./board --as <name> seal <recipient> <message>")
         raise SystemExit(1)
@@ -155,8 +170,7 @@ def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_unseal(db: BoardDB, identity: str) -> None:
-    validate_identity(db, identity)
-    name = identity.lower()
+    name = _validate_mailbox_identity(db, identity)
     kd = _keys_dir(db)
 
     try:
@@ -192,8 +206,7 @@ def cmd_unseal(db: BoardDB, identity: str) -> None:
 
 
 def cmd_mailbox_log(db: BoardDB, identity: str) -> None:
-    validate_identity(db, identity)
-    name = identity.lower()
+    name = _validate_mailbox_identity(db, identity)
     kd = _keys_dir(db)
 
     try:
