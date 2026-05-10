@@ -49,3 +49,23 @@ gh api --method PUT repos/ApolloZhangOnGithub/cnb/pages \
   -F https_enforced=true \
   -f cname='c-n-b.space'
 ```
+
+## 2026-05-10 Deployment Closeout
+
+The custom-domain and package-rename deployment is live as of merge commit `c170c9c8`.
+
+Completed:
+
+- GitHub About homepage is `c-n-b.space` with no trailing slash.
+- GitHub Pages deploy succeeded, and `http://c-n-b.space` serves the updated `c-n-b` introduction page.
+- The public site links npm to `https://www.npmjs.com/package/c-n-b` and warns that the npm package `cnb` is unrelated.
+- Release titles were normalized to `c-n-b 0.5.44`, `c-n-b 0.5.43`, and `c-n-b 0.5.31`.
+- PR #130 checks passed before merge, and `master` CI, CodeQL, Graph Update, and Pages completed successfully after merge.
+
+Still pending:
+
+1. Wait for GitHub Pages to issue the certificate for `c-n-b.space`.
+2. Re-run the HTTPS enforcement command in the previous section.
+3. Create the first real `c-n-b` npmjs release through the release workflow so the package name is claimed.
+4. Verify `npm install -g c-n-b` exposes `cnb --version`.
+5. Keep warning users not to install the unrelated npm package named `cnb`.
