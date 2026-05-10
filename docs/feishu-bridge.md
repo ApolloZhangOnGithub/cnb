@@ -73,6 +73,7 @@ watch_public_url = "https://your-tunnel.example/watch"
 watch_token = "..."
 watch_tool = "builtin"
 watch_refresh_ms = 250
+caffeine_enabled = true
 readback_enabled = false
 resource_handoff_enabled = true
 resource_handoff_max_bytes = 26214400
@@ -141,6 +142,18 @@ redacts the token.
 The Web TUI refreshes every `watch_refresh_ms` milliseconds, updates the DOM only
 when screen text changes, and keeps the viewport pinned to the bottom unless the
 user has scrolled away.
+
+## Mac Keep-Awake
+
+On macOS, `cnb feishu start` starts a lifecycle-scoped `caffeinate -di` process
+when `caffeine_enabled = true` and the `caffeinate` command is available. This
+prevents idle system sleep and display sleep while the device supervisor bridge
+is on duty without changing Energy Saver or Lock Screen settings.
+
+`cnb feishu stop` stops the companion caffeine process, and
+`cnb feishu status` reports `active`, `inactive`, `disabled`, or `unavailable`.
+Non-macOS hosts and machines without `caffeinate` keep running the bridge and
+report caffeine as unavailable.
 
 ## Deployment Checklist
 

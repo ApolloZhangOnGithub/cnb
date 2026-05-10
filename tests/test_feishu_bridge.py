@@ -43,6 +43,7 @@ activity_updates = true
 activity_update_seconds = [1, 2]
 activity_update_repeat_seconds = 45
 activity_render_style = "codex"
+caffeine_enabled = false
 """
         )
 
@@ -61,6 +62,7 @@ activity_render_style = "codex"
         assert cfg.activity_update_seconds == (1, 2)
         assert cfg.activity_update_repeat_seconds == 45
         assert cfg.activity_render_style == "codex"
+        assert cfg.caffeine_enabled is False
         assert cfg.transport == "local_openapi"
 
     def test_loads_device_supervisor_aliases(self, tmp_path):
@@ -77,6 +79,82 @@ device_supervisor_tmux = "cnb-mac-owner"
 
         assert cfg.pilot_name == "mac-owner"
         assert cfg.pilot_tmux == "cnb-mac-owner"
+
+    def test_caffeine_status_disabled(self, tmp_path):
+        cfg = _cfg(tmp_path, caffeine_enabled=False)
+
+        assert feishu_bridge.caffeine_status(cfg) == "disabled"
+
+    def test_caffeine_status_unavailable_off_mac(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        monkeypatch.setattr(feishu_bridge.sys, "platform", "linux")
+
+        assert feishu_bridge.caffeine_status(cfg) == "unavailable (non-macOS)"
+
+    def test_start_bridge_starts_caffeine_on_mac(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, bridge_tmux="cnb-feishu-test")
+        calls = []
+
+        class FakePopen:
+            pid = 4321
+
+            def __init__(self, args, **kwargs):
+                calls.append(("popen", args, kwargs))
+
+        def fake_run(args, **kwargs):
+            calls.append(("run", args, kwargs))
+            if args[:2] == ["ps", "-p"]:
+                return SimpleNamespace(returncode=0, stdout="/usr/bin/caffeinate\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.sys, "platform", "darwin")
+        monkeypatch.setattr(
+            feishu_bridge.shutil, "which", lambda name: "/usr/bin/caffeinate" if name == "caffeinate" else None
+        )
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+        monkeypatch.setattr(feishu_bridge.subprocess, "Popen", FakePopen)
+        monkeypatch.setattr(feishu_bridge.os, "kill", lambda pid, sig: None)
+
+        result = feishu_bridge.start_bridge_daemon(cfg)
+
+        assert result.handled is True
+        assert "started cnb-feishu-test" in result.detail
+        assert "caffeine active (pid 4321)" in result.detail
+        assert feishu_bridge.caffeine_pid_path(cfg).read_text() == "4321"
+        assert calls[0][1][:4] == ["tmux", "new-session", "-d", "-s"]
+        assert calls[-1][1] == ["caffeinate", "-di"]
+
+    def test_stop_bridge_stops_caffeine_on_mac(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, bridge_tmux="cnb-feishu-test")
+        feishu_bridge.caffeine_pid_path(cfg).parent.mkdir(parents=True)
+        feishu_bridge.caffeine_pid_path(cfg).write_text("4321")
+        killed = []
+
+        def fake_run(args, **kwargs):
+            if args[:2] == ["ps", "-p"]:
+                return SimpleNamespace(returncode=0, stdout="/usr/bin/caffeinate\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        def fake_kill(pid, sig):
+            if sig != 0:
+                killed.append((pid, sig))
+
+        monkeypatch.setattr(feishu_bridge.sys, "platform", "darwin")
+        monkeypatch.setattr(
+            feishu_bridge.shutil, "which", lambda name: "/usr/bin/caffeinate" if name == "caffeinate" else None
+        )
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+        monkeypatch.setattr(feishu_bridge.os, "kill", fake_kill)
+
+        result = feishu_bridge.stop_bridge_daemon(cfg)
+
+        assert result.handled is True
+        assert "stopped cnb-feishu-test" in result.detail
+        assert "caffeine stopped" in result.detail
+        assert killed == [(4321, feishu_bridge.signal.SIGTERM)]
+        assert not feishu_bridge.caffeine_pid_path(cfg).exists()
 
     def test_loads_tui_and_watch_settings(self, tmp_path):
         path = tmp_path / "config.toml"
