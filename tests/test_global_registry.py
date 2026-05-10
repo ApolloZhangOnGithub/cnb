@@ -213,6 +213,7 @@ class TestCredentials:
         update_credential("lark", "expired", credentials_path=credentials_file)
 
         result = check_credential("lark", credentials_path=credentials_file)
+        assert result is not None
         assert result["status"] == "expired"
 
     def test_multiple_credentials(self, credentials_file):
@@ -220,9 +221,15 @@ class TestCredentials:
         update_credential("lark", "expired", credentials_path=credentials_file)
         update_credential("docker", "unknown", credentials_path=credentials_file)
 
-        assert check_credential("npm", credentials_path=credentials_file)["status"] == "valid"
-        assert check_credential("lark", credentials_path=credentials_file)["status"] == "expired"
-        assert check_credential("docker", credentials_path=credentials_file)["status"] == "unknown"
+        r = check_credential("npm", credentials_path=credentials_file)
+        assert r is not None
+        assert r["status"] == "valid"
+        r = check_credential("lark", credentials_path=credentials_file)
+        assert r is not None
+        assert r["status"] == "expired"
+        r = check_credential("docker", credentials_path=credentials_file)
+        assert r is not None
+        assert r["status"] == "unknown"
 
     def test_invalid_status_rejected(self, credentials_file):
         with pytest.raises(SystemExit):
@@ -242,6 +249,7 @@ class TestCredentials:
     def test_updated_by_optional(self, credentials_file):
         update_credential("npm", "valid", credentials_path=credentials_file)
         result = check_credential("npm", credentials_path=credentials_file)
+        assert result is not None
         assert result["updated_by"] == ""
 
 
