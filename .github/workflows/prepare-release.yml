@@ -121,16 +121,30 @@ jobs:
             --base "$DEFAULT_BRANCH" \
             --state open \
             --json number \
-            --jq '.[0].number // empty')"
+            --jq '.[0].number // empty' || true)"
+          pr_status=0
           if [ -n "$pr_number" ]; then
-            gh pr edit "$pr_number" --repo "$GITHUB_REPOSITORY" --title "Release v$RELEASE_VERSION" --body "$pr_body"
+            gh pr edit "$pr_number" --repo "$GITHUB_REPOSITORY" --title "Release v$RELEASE_VERSION" --body "$pr_body" || pr_status=$?
           else
             gh pr create \
               --repo "$GITHUB_REPOSITORY" \
               --base "$DEFAULT_BRANCH" \
               --head "$branch" \
               --title "Release v$RELEASE_VERSION" \
-              --body "$pr_body"
+              --body "$pr_body" || pr_status=$?
+          fi
+
+          if [ "$pr_status" -ne 0 ]; then
+            compare_url="https://github.com/$GITHUB_REPOSITORY/compare/$DEFAULT_BRANCH...$branch?expand=1"
+            echo "::warning::Release branch $branch was pushed, but GitHub Actions could not create or update the PR. Open it manually: $compare_url"
+            {
+              echo "### Release branch ready"
+              echo
+              echo "- Branch: \`$branch\`"
+              echo "- Manual PR URL: $compare_url"
+              echo
+              echo "The repository may have disabled GitHub Actions PR creation. The release branch and validation commit were still created."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch" || {
