@@ -152,8 +152,24 @@ jobs:
           NPMJS_EXISTED: ${{ steps.npmjs.outputs.exists }}
         run: |
           set -euo pipefail
-          npm view "$PACKAGE_NAME@$RELEASE_VERSION" version
-          tags="$(npm view "$PACKAGE_NAME" dist-tags --json)"
+
+          package_version=""
+          tags=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if package_version="$(npm view "$PACKAGE_NAME@$RELEASE_VERSION" version 2>/tmp/npm-version.err)" &&
+              tags="$(npm view "$PACKAGE_NAME" dist-tags --json 2>/tmp/npm-tags.err)"; then
+              break
+            fi
+            if [ "$attempt" = 12 ]; then
+              cat /tmp/npm-version.err || true
+              cat /tmp/npm-tags.err || true
+              exit 1
+            fi
+            echo "::notice::npmjs has not exposed $PACKAGE_NAME@$RELEASE_VERSION yet; retrying in 10s ($attempt/12)."
+            sleep 10
+          done
+
+          echo "$package_version"
           echo "$tags"
           latest="$(node -e "const tags = JSON.parse(process.argv[1]); process.stdout.write(tags.latest || '')" "$tags")"
           stable="$(node -e "const tags = JSON.parse(process.argv[1]); process.stdout.write(tags.stable || '')" "$tags")"
