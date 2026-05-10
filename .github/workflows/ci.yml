@@ -48,9 +48,17 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+            RANGE="origin/$GITHUB_BASE_REF...HEAD"
             PREV=$(git show "origin/$GITHUB_BASE_REF:VERSION" 2>/dev/null || echo "")
           else
+            RANGE="HEAD~1..HEAD"
             PREV=$(git show HEAD~1:VERSION 2>/dev/null || echo "")
+          fi
+          CHANGED_FILES=$(git diff --name-only "$RANGE")
+          NON_ISSUE_FILES=$(printf '%s\n' "$CHANGED_FILES" | grep -Ev '^(issues/|$)' || true)
+          if [ -z "$NON_ISSUE_FILES" ]; then
+            echo "Only generated issue mirror files changed; skipping VERSION bump requirement."
+            exit 0
           fi
           CURR=$(cat VERSION)
           if [ "$PREV" = "$CURR" ] && [ -n "$PREV" ]; then
