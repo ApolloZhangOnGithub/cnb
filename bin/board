@@ -43,6 +43,13 @@ COMMANDS: list[Command] = [
     Command("inbox", "lib.board_msg", "cmd_inbox", "check unread messages", "inbox", takes_rest=False, hidden=True),
     Command("ack", "lib.board_msg", "cmd_ack", "clear inbox", "ack", takes_rest=False, hidden=True),
     Command("log", "lib.board_msg", "cmd_log", "message history", "log [n] [--mine]"),
+    Command(
+        "inspect",
+        "lib.board_inspect",
+        "cmd_inspect",
+        "read-only session inspection",
+        "inspect {inbox|tasks} <session> [--done]",
+    ),
     # ── views ──
     Command("view", "lib.board_view", "cmd_view", "session dashboard", "view", takes_rest=False),
     Command(

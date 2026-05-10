@@ -408,17 +408,22 @@ class TestSubcommands:
 def board_project(tmp_path):
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
+    home_dir = project_dir / "home"
+    home_dir.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
-    subprocess.run(
+    result = subprocess.run(
         [str(CLAUDES_HOME / "bin" / "init"), "lead", "alpha", "bravo"],
         cwd=project_dir,
         capture_output=True,
+        text=True,
+        env={**os.environ, "HOME": str(home_dir)},
     )
+    assert result.returncode == 0, result.stderr
     return project_dir
 
 
 def _board(project_dir, *args):
-    env = {**os.environ, "CNB_PROJECT": str(project_dir)}
+    env = {**os.environ, "CNB_PROJECT": str(project_dir), "HOME": str(project_dir / "home")}
     return subprocess.run(
         [str(BOARD), *args],
         cwd=project_dir,

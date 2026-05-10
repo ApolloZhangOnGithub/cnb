@@ -36,7 +36,7 @@ LEGACY_DEFAULT_PILOT_TMUX = "cnb-terminal-supervisor"
 LEGACY_ACK_PREFIX = f"已转给这台 Mac 的{LEGACY_SUPERVISOR_LABEL}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class PilotRole:
     """Role-specific defaults for a pilot (supervisor or chief)."""
 
@@ -50,6 +50,19 @@ class PilotRole:
     status_title: str
     name_config_keys: tuple[str, ...]
     tmux_config_keys: tuple[str, ...]
+
+    def __str__(self) -> str:
+        return self.role_id
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, PilotRole):
+            return self.role_id == other.role_id
+        if isinstance(other, str):
+            return self.role_id == other.strip().lower().replace("-", "_")
+        return False
+
+    def __hash__(self) -> int:
+        return hash(self.role_id)
 
 
 SUPERVISOR_ROLE = PilotRole(
@@ -102,6 +115,8 @@ CHIEF_ROLE = PilotRole(
     ),
 )
 
+DEVICE_SUPERVISOR_LABEL = SUPERVISOR_ROLE.label
+DEVICE_CHIEF_LABEL = CHIEF_ROLE.label
 DEFAULT_PILOT_ROLE = SUPERVISOR_ROLE.role_id
 DEVICE_CHIEF_ROLE = CHIEF_ROLE.role_id
 DEFAULT_PILOT_NAME = SUPERVISOR_ROLE.default_name
@@ -231,7 +246,7 @@ class FeishuBridgeConfig:
     bot_name: str = ""
     group_message_routing: str = DEFAULT_GROUP_MESSAGE_ROUTING
     group_message_routing_chat_ids: frozenset[str] = frozenset()
-    pilot_role: PilotRole = SUPERVISOR_ROLE
+    pilot_role: str = DEFAULT_PILOT_ROLE
     pilot_name: str = SUPERVISOR_ROLE.default_name
     pilot_tmux: str = SUPERVISOR_ROLE.default_tmux
     bridge_tmux: str = SUPERVISOR_ROLE.default_bridge_tmux
@@ -346,7 +361,7 @@ class FeishuBridgeConfig:
                     "group_routing_chat_ids",
                 )
             ),
-            pilot_role=role,
+            pilot_role=role.role_id,
             pilot_name=str(
                 _first_value(section, *role.name_config_keys)
                 or section.get("supervisor_name")
@@ -506,21 +521,42 @@ _ROLE_ALIASES: dict[str, PilotRole] = {
 
 
 def _resolve_role(value: Any) -> PilotRole:
+    if isinstance(value, PilotRole):
+        return value
     text = str(value or "").strip().lower().replace("-", "_")
     return _ROLE_ALIASES.get(text, SUPERVISOR_ROLE)
 
 
+def _pilot_role(value: Any) -> PilotRole:
+    return _resolve_role(value)
+
+
+def _default_pilot_name(role: Any) -> str:
+    return _resolve_role(role).default_name
+
+
+def _default_pilot_tmux(role: Any) -> str:
+    return _resolve_role(role).default_tmux
+
+
+def _default_bridge_tmux(role: Any) -> str:
+    return _resolve_role(role).default_bridge_tmux
+
+
+def _default_watch_tmux(role: Any) -> str:
+    return _resolve_role(role).default_watch_tmux
+
+
 def role_label(cfg: FeishuBridgeConfig | None) -> str:
-    role = cfg.pilot_role if cfg else SUPERVISOR_ROLE
-    return role.label
+    return _resolve_role(cfg.pilot_role if cfg else SUPERVISOR_ROLE).label
 
 
 def role_status_title(cfg: FeishuBridgeConfig) -> str:
-    return cfg.pilot_role.status_title
+    return _resolve_role(cfg.pilot_role).status_title
 
 
 def ack_prefix(cfg: FeishuBridgeConfig) -> str:
-    return cfg.pilot_role.ack_prefix
+    return _resolve_role(cfg.pilot_role).ack_prefix
 
 
 def feishu_command_prefix(cfg: FeishuBridgeConfig) -> str:
@@ -784,7 +820,8 @@ def referenced_message_owned_by_this_bridge(event: FeishuInboundEvent, cfg: Feis
 def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
     projects = _project_lines(cfg)
     project_block = "\n".join(projects) if projects else "(~/.cnb/projects.json 里还没有注册项目)"
-    if cfg.pilot_role == DEVICE_CHIEF_ROLE:
+    role = _resolve_role(cfg.pilot_role)
+    if role is CHIEF_ROLE:
         feishu = feishu_command_prefix(cfg)
         return (
             f"你是 CNB 的{DEVICE_CHIEF_LABEL}，身份名是 {cfg.pilot_name}。\n"
@@ -3212,11 +3249,12 @@ def _snippet(text: str) -> str:
 
 def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeResult:
     has_chat_id = bool(args.chat_id or base.allowed_chat_ids)
-    role = _pilot_role(getattr(args, "role", "") or base.pilot_role)
-    default_bridge_tmux = _default_bridge_tmux(role)
-    default_watch_tmux = _default_watch_tmux(role)
-    default_pilot_name = _default_pilot_name(role)
-    default_pilot_tmux = _default_pilot_tmux(role)
+    role = _resolve_role(getattr(args, "role", "") or base.pilot_role.role_id)
+    base_role = base.pilot_role
+    default_bridge_tmux = role.default_bridge_tmux
+    default_watch_tmux = role.default_watch_tmux
+    default_pilot_name = role.default_name
+    default_pilot_tmux = role.default_tmux
     device_supervisor_name = getattr(args, "device_supervisor_name", "")
     device_supervisor_tmux = getattr(args, "device_supervisor_tmux", "")
     device_chief_name = getattr(args, "device_chief_name", "")
@@ -3229,13 +3267,13 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         device_chief_name
         or device_supervisor_name
         or terminal_supervisor_name
-        or (base.pilot_name if base.pilot_role == role else default_pilot_name)
+        or (base.pilot_name if base_role is role else default_pilot_name)
     )
     pilot_tmux = (
         device_chief_tmux
         or device_supervisor_tmux
         or terminal_supervisor_tmux
-        or (base.pilot_tmux if base.pilot_role == role else default_pilot_tmux)
+        or (base.pilot_tmux if base_role is role else default_pilot_tmux)
     )
     group_routing_chat_ids = list(base.group_message_routing_chat_ids)
     explicit_group_chats = getattr(args, "group_routing_chat_id", None) or []
@@ -3243,7 +3281,7 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         group_routing_chat_ids = [str(item) for item in explicit_group_chats if str(item)]
     group_routing = getattr(args, "group_message_routing", "") or base.group_message_routing
     section = {
-        "role": role,
+        "role": role.role_id,
         "transport": "local_openapi",
         "app_id": args.app_id or base.app_id,
         "app_secret": args.app_secret or base.app_secret,
@@ -3259,7 +3297,7 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "bot_name": getattr(args, "bot_name", "") or base.bot_name,
         "group_message_routing": _group_message_routing(group_routing),
         "group_message_routing_chat_ids": sorted(set(group_routing_chat_ids)),
-        "bridge_tmux": base.bridge_tmux if base.pilot_role == role else default_bridge_tmux,
+        "bridge_tmux": base.bridge_tmux if base_role is role else default_bridge_tmux,
         "agent": "codex",
         "notification_policy": base.notification_policy,
         "ack": True,
@@ -3272,7 +3310,7 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "startup_wait_seconds": base.startup_wait_seconds,
         "tui_capture_lines": base.tui_capture_lines,
         "watch_tool": "builtin",
-        "watch_tmux": base.watch_tmux if base.pilot_role == role else default_watch_tmux,
+        "watch_tmux": base.watch_tmux if base_role is role else default_watch_tmux,
         "watch_host": base.watch_host,
         "watch_port": base.watch_port,
         "watch_public_url": watch_public_url,
@@ -3285,7 +3323,7 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "resource_handoff_enabled": base.resource_handoff_enabled,
         "resource_handoff_max_bytes": base.resource_handoff_max_bytes,
     }
-    if role == DEVICE_CHIEF_ROLE:
+    if role is CHIEF_ROLE:
         section["device_chief_name"] = pilot_name
         section["device_chief_tmux"] = pilot_tmux
     else:
@@ -3362,7 +3400,7 @@ def _ngrok_tunnels() -> list[dict[str, Any]]:
     request = urllib.request.Request("http://127.0.0.1:4040/api/tunnels")
     try:
         with urllib.request.urlopen(request, timeout=1) as response:
-            payload = json.loads(response.read().decode())
+            payload: dict[str, Any] = json.loads(response.read().decode())
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         return []
     tunnels = payload.get("tunnels")

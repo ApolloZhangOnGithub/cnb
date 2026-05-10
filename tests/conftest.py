@@ -4,15 +4,15 @@ Provides temporary project directories with initialized .claudes/ structure,
 database connections, and helper utilities used across all test modules.
 """
 
-import sqlite3
-import sys
-from pathlib import Path
+from __future__ import annotations
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+import sqlite3
+from pathlib import Path
 
 import pytest
 
 from lib.common import ts  # noqa: F401 — re-export for tests
+from lib.concerns.config import DispatcherConfig
 
 # ---------------------------------------------------------------------------
 # Schema path (relative to this file's location)
@@ -150,3 +150,35 @@ def sessions_dir(tmp_project):
 def files_dir(tmp_project):
     """Return the shared files directory path."""
     return tmp_project / ".claudes" / "files"
+
+
+# ---------------------------------------------------------------------------
+# Shared test helpers
+# ---------------------------------------------------------------------------
+
+
+def make_dispatcher_config(tmp_path: Path, sessions: list[str] | None = None) -> DispatcherConfig:
+    """Create a DispatcherConfig for concern tests.
+
+    Extracted from duplicated make_cfg helpers in test_idle_concerns.py
+    and test_notifications.py.
+    """
+    sessions = sessions or ["alice"]
+    cd = tmp_path / ".claudes"
+    cd.mkdir(exist_ok=True)
+    db_path = cd / "board.db"
+    db_path.touch()
+    return DispatcherConfig(
+        prefix="cc-test",
+        project_root=tmp_path,
+        claudes_dir=cd,
+        sessions_dir=cd / "sessions",
+        board_db=db_path,
+        suspended_file=cd / "suspended",
+        board_sh="./board",
+        coral_sess="cc-test-lead",
+        dispatcher_session="cc-test-dispatcher",
+        log_dir=cd / "logs",
+        okr_dir=cd / "okr",
+        dev_sessions=sessions,
+    )

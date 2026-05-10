@@ -224,6 +224,7 @@ cnb board --as <name> inbox              # check messages
 cnb board --as <name> send <to> "msg"    # direct message
 cnb board --as <name> send all "msg"     # broadcast
 cnb board --as <name> ack                # clear inbox
+cnb board --as dispatcher inspect inbox <name>  # read another inbox without side effects
 cnb board --as <name> status "desc"      # update status
 cnb board --as <name> task add "desc"    # add task
 cnb board --as <name> task done          # finish current task (auto-verify + auto-PR)

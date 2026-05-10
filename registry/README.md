@@ -8,3 +8,4 @@
 | #3 | Claude Lead | active-dev | `e665a7e` |
 | #4 | encrypted-mailbox-live | project | — |
 | #5 | Claude Ritchie | Markrun project owner | `d657d36` |
+| #6 | Claude Kezhen | code-health-owner | `64cc4a4` |

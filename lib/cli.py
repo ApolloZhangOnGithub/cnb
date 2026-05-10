@@ -23,7 +23,11 @@ def _candidate_entrypoints() -> list[Path]:
 def main() -> None:
     for entrypoint in _candidate_entrypoints():
         if entrypoint.exists():
-            if entrypoint.name == "cnb" and entrypoint.parent.name == "bin" and entrypoint.parent.parent != Path("/opt/homebrew"):
+            if (
+                entrypoint.name == "cnb"
+                and entrypoint.parent.name == "bin"
+                and entrypoint.parent.parent != Path("/opt/homebrew")
+            ):
                 os.execvp("bash", ["bash", str(entrypoint), *sys.argv[1:]])
             os.execvp(str(entrypoint), [str(entrypoint), *sys.argv[1:]])
 

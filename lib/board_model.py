@@ -4,6 +4,7 @@ import json
 import os
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from lib.common import ClaudesEnv
 
@@ -30,14 +31,14 @@ def _resolve_value(value: str) -> str | None:
     return value
 
 
-def _load_config(env: ClaudesEnv) -> dict:
+def _load_config(env: ClaudesEnv) -> dict[str, Any]:
     toml_file = env.claudes_dir / "config.toml"
     if toml_file.exists():
         return tomllib.loads(toml_file.read_text())
     return {}
 
 
-def _load_profiles(env: ClaudesEnv) -> dict:
+def _load_profiles(env: ClaudesEnv) -> dict[str, Any]:
     config = _load_config(env)
     custom_path = config.get("model_profiles", "")
     if custom_path:
@@ -51,10 +52,11 @@ def _load_profiles(env: ClaudesEnv) -> dict:
         raise SystemExit(1)
 
     with open(profiles_path) as f:
-        return json.load(f)
+        result: dict[str, Any] = json.load(f)
+        return result
 
 
-def _resolve_profile(profiles: dict, name: str) -> str | None:
+def _resolve_profile(profiles: dict[str, Any], name: str) -> str | None:
     """Resolve profile name via exact match or alias lookup."""
     if name in profiles:
         return name
@@ -66,7 +68,7 @@ def _resolve_profile(profiles: dict, name: str) -> str | None:
 
 def _default_scope(env: ClaudesEnv) -> str:
     config = _load_config(env)
-    return config.get("model_scope", "global")
+    return str(config.get("model_scope", "global"))
 
 
 def _find_project_settings() -> Path | None:

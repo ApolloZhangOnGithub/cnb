@@ -60,6 +60,13 @@ class TestKeygen:
         assert "OK" in output
         assert (mailbox_db.env.claudes_dir / "keys" / "alice.pem").exists()
 
+    def test_defaults_to_project_pubkeys_file(self, mailbox_db):
+        cmd_keygen(mailbox_db, "alice")
+
+        pubkeys_file = mailbox_db.env.claudes_dir / "pubkeys.json"
+        data = json.loads(pubkeys_file.read_text())
+        assert "alice" in data
+
     def test_registers_pubkey(self, mailbox_db, pubkeys_file):
         with _mock_registry(pubkeys_file):
             cmd_keygen(mailbox_db, "alice")

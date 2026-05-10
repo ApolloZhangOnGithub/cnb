@@ -237,6 +237,7 @@ cnb board --as <name> inbox              # 查看消息
 cnb board --as <name> send <to> "msg"    # 私信
 cnb board --as <name> send all "msg"     # 广播
 cnb board --as <name> ack                # 清空收件箱
+cnb board --as dispatcher inspect inbox <name>  # 无副作用查看别人的收件箱
 cnb board --as <name> status "desc"      # 更新状态
 cnb board --as <name> task add "desc"    # 添加任务
 cnb board --as <name> task done          # 完成当前任务

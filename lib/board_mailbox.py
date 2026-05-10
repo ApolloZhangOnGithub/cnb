@@ -2,6 +2,7 @@
 
 import binascii
 import json
+import os
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
@@ -20,6 +21,7 @@ from lib.crypto import (
 
 REGISTRY_DIR = Path(__file__).resolve().parent.parent / "registry"
 PUBKEYS_FILE = REGISTRY_DIR / "pubkeys.json"
+_DEFAULT_PUBKEYS_FILE = PUBKEYS_FILE
 
 
 def _keys_dir(db: BoardDB) -> Path:
@@ -27,20 +29,45 @@ def _keys_dir(db: BoardDB) -> Path:
     return db.env.claudes_dir / "keys"
 
 
-def _load_pubkeys() -> dict[str, str]:
-    if PUBKEYS_FILE.exists():
-        data: dict[str, str] = json.loads(PUBKEYS_FILE.read_text())
+def _pubkeys_file(db: BoardDB | None = None, *, claudes_dir: Path | None = None) -> Path:
+    override = os.environ.get("CNB_PUBKEYS_FILE")
+    if override:
+        return Path(override).expanduser()
+    if PUBKEYS_FILE != _DEFAULT_PUBKEYS_FILE:
+        return PUBKEYS_FILE
+    if claudes_dir is not None:
+        return claudes_dir / "pubkeys.json"
+    if db is not None and db.env is not None:
+        return db.env.claudes_dir / "pubkeys.json"
+    return PUBKEYS_FILE
+
+
+def _read_pubkeys(path: Path) -> dict[str, str]:
+    if path.exists():
+        data: dict[str, str] = json.loads(path.read_text())
         return data
     return {}
 
 
-def _save_pubkeys(data: dict[str, str]) -> None:
-    PUBKEYS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+def _load_pubkeys(db: BoardDB | None = None, *, claudes_dir: Path | None = None) -> dict[str, str]:
+    return _read_pubkeys(_pubkeys_file(db, claudes_dir=claudes_dir))
 
 
-def _find_pubkey(name: str) -> str | None:
+def _save_pubkeys(data: dict[str, str], db: BoardDB | None = None, *, claudes_dir: Path | None = None) -> None:
+    path = _pubkeys_file(db, claudes_dir=claudes_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
+def _find_pubkey(name: str, db: BoardDB | None = None) -> str | None:
     """Look up public_key from pubkeys.json (separate from immutable chain blocks)."""
-    return _load_pubkeys().get(name)
+    target = _pubkeys_file(db)
+    pubkey = _read_pubkeys(target).get(name)
+    if pubkey:
+        return pubkey
+    if target != PUBKEYS_FILE:
+        return _read_pubkeys(PUBKEYS_FILE).get(name)
+    return None
 
 
 def cmd_keygen(db: BoardDB, identity: str) -> None:
@@ -56,14 +83,15 @@ def cmd_keygen(db: BoardDB, identity: str) -> None:
     save_keypair(kd, name, private, public)
     pubkey_hex = public_key_to_hex(public)
 
-    pubkeys = _load_pubkeys()
+    pubkeys = _load_pubkeys(db)
     pubkeys[name] = pubkey_hex
-    _save_pubkeys(pubkeys)
+    _save_pubkeys(pubkeys, db)
+    pubkeys_file = _pubkeys_file(db)
 
     print("OK 密钥已生成")
     print(f"  私钥: {kd / f'{name}.pem'} (勿泄露)")
     print(f"  公钥: {pubkey_hex[:16]}...")
-    print(f"  已写入 {PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)}")
+    print(f"  已写入 {pubkeys_file}")
 
 
 def cmd_keygen_all(db: BoardDB) -> None:
@@ -74,7 +102,7 @@ def cmd_keygen_all(db: BoardDB) -> None:
         print("ERROR: 无注册会话")
         raise SystemExit(1)
 
-    pubkeys = _load_pubkeys()
+    pubkeys = _load_pubkeys(db)
     generated = 0
     skipped = 0
 
@@ -88,12 +116,12 @@ def cmd_keygen_all(db: BoardDB) -> None:
         generated += 1
 
     if generated:
-        _save_pubkeys(pubkeys)
+        _save_pubkeys(pubkeys, db)
 
     print(f"OK keygen-all: {generated} 生成, {skipped} 跳过 (已有密钥)")
     if generated:
         print(f"  密钥目录: {kd}")
-        print(f"  公钥注册: {PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)}")
+        print(f"  公钥注册: {_pubkeys_file(db)}")
 
 
 def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -110,7 +138,7 @@ def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
         print("ERROR: 消息不能为空")
         raise SystemExit(1)
 
-    recipient_pubkey_hex = _find_pubkey(recipient)
+    recipient_pubkey_hex = _find_pubkey(recipient, db)
     if not recipient_pubkey_hex:
         print(f"ERROR: {recipient} 未注册公钥 (需先运行 keygen)")
         raise SystemExit(1)
