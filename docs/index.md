@@ -1,0 +1,33 @@
+# cnb Docs
+
+cnb documentation should work like product documentation, not like a pile of notes. Keep the README short, then move durable operating details into docs pages with stable links.
+
+## Start Here
+
+| Page | Purpose |
+|------|---------|
+| [Website](https://apollozhangongithub.github.io/cnb/) | Public GitHub Pages entry for first-time visitors. |
+| [README](../README.md) | Product overview, install, quick start, and the shortest command reference. |
+| [Roadmap](../ROADMAP.md) | Product direction and active development themes. |
+| [Contributing](../CONTRIBUTING.md) | Contributor workflow, style, and review expectations. |
+| [Package publishing](package-publishing.md) | npm release, dist-tags, and GitHub Packages visibility rules. |
+
+## Concepts
+
+| Page | Purpose |
+|------|---------|
+| [Ownership autonomy](design-ownership-autonomy.md) | Why cnb treats long-lived module ownership as the core unit of work. |
+
+## Documentation System
+
+Use this information architecture as the docs grow:
+
+| Section | What belongs here |
+|---------|-------------------|
+| Getting Started | Installation, quick start, first team, first task. |
+| Using cnb | Board commands, slash commands, swarm control, shutdown flow. |
+| Concepts | Tongxue model, ownership, task lifecycle, inbox, dispatcher, security model. |
+| Configuration | `.claudes/config.toml`, engines, roles, permissions, registries, hooks. |
+| Operations | Health checks, usage/cost control, recovery, migrations, upgrades. |
+| Reference | CLI command reference, schema, environment variables, file layout. |
+| Development | Roadmap, architecture notes, contributing, release process. |

@@ -4,13 +4,59 @@
 
 # claude-nb
 
+[![CI](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml/badge.svg)](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/claude-nb?label=npm)](https://www.npmjs.com/package/claude-nb)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)](pyproject.toml)
+[![Docs](https://img.shields.io/badge/docs-pages-14865d)](https://apollozhangongithub.github.io/cnb/)
+[![License](https://img.shields.io/badge/license-OpenAll--1.0-444)](LICENSE)
+
 **Project ownership for LLM teams.**
+
+`cnb` is local-first organizational infrastructure for long-lived Claude Code and Codex teams. It gives AI coding sessions a shared board, durable ownership, handoff records, and operational checks so a restarted session does not become a new hire with no memory.
+
+```bash
+npm install -g claude-nb
+```
+
+| Surface | Current shape |
+|---------|---------------|
+| Runtime | Local tmux sessions, SQLite board, dispatcher, filesystem reports |
+| Engines | Claude Code by default; Codex supported through the npm peer CLI |
+| State | Board database, ownership map, issue mirror, daily/shift reports |
+| Distribution | Public npm package `claude-nb`, Python 3.11+ internals |
+| Documentation | README short path, durable docs in [`docs/`](docs/), public site at [`apollozhangongithub.github.io/cnb`](https://apollozhangongithub.github.io/cnb/) |
 
 Every multi-agent tool solves "how to run multiple agents." cnb solves what happens after — how to make them **manageable** across sessions, shifts, and team changes.
 
 LLM sessions are stateless. Every restart is a new hire who knows nothing. Without organizational infrastructure, you get temporary workers who split tasks, finish, and forget. cnb gives them **permanent module ownership**: lisa-su owns the notification system across 11 commits and 3 restarts. When a bug surfaces, you don't re-explain the module to a blank session — you find the owner's daily report and pick up where they left off.
 
 This is not about speed or context isolation. Those are side effects. The core problem is: [42% of multi-agent failures are specification and system design issues](https://arxiv.org/abs/2503.13657) — role ambiguity, task misinterpretation, poor decomposition (Cemri et al., NeurIPS 2025 Spotlight). Not capability — organization. cnb is organizational infrastructure for AI teams.
+
+<!-- section:start-here -->
+## Start here
+
+| Need | Path |
+|------|------|
+| Install the CLI | `npm install -g claude-nb` |
+| Understand the model | [How cnb fits in](#how-cnb-fits-in), [Glossary](#glossary), [Ownership autonomy](docs/design-ownership-autonomy.md) |
+| Start a team | [Quick start](#quick-start), then `cnb` inside a project |
+| Inspect a real run | [Silicon Valley Battle](instances/silicon_vally_battle/) |
+| Publish or verify package metadata | [Package publishing](docs/package-publishing.md) |
+| Contribute safely | [Contributing](CONTRIBUTING.md), [Security](SECURITY.md), [Roadmap](ROADMAP.md) |
+
+<!-- section:status -->
+## Project status
+
+cnb is no longer a single-script experiment, but it is still an active local-first system that expects a trusted workstation and human supervision.
+
+| Area | Current state | Evidence |
+|------|---------------|----------|
+| CLI packaging | npm entrypoint wraps the Python CLI | [`package.json`](package.json), [`pyproject.toml`](pyproject.toml), [`bin/cnb`](bin/cnb) |
+| Board runtime | SQLite schema, migrations, task/inbox/status/ownership commands | [`schema.sql`](schema.sql), [`migrations/`](migrations/), [`lib/board_*.py`](lib/) |
+| Quality gates | ruff, mypy, pytest, version sync, changelog, CodeQL, and secret scanning | [`.github/workflows/ci.yml`](.github/workflows/ci.yml), [`Makefile`](Makefile) |
+| Governance | issue-first workflow, ownership rules, Co-Authored-By policy | [`CONTRIBUTING.md`](CONTRIBUTING.md), [`ROADMAP.md`](ROADMAP.md), [`registry/`](registry/) |
+| Docs | bilingual README, durable product docs, and public GitHub Pages site | [`README_zh.md`](README_zh.md), [`docs/`](docs/), [`site/`](site/) |
+| Boundaries | local-first, high-permission options, human-supervised automation | [`SECURITY.md`](SECURITY.md), [FAQ](#faq) |
 
 <!-- section:why -->
 ## How cnb fits in
@@ -66,6 +112,15 @@ cnb
 This initializes the project (creates `.claudes/` with SQLite DB and config), launches a team of tongxue in tmux, starts a dispatcher, and drops you into the lead tongxue's Claude Code session.
 
 The lead tongxue talks to the user directly. Background tongxue work independently and report back through the board.
+
+<!-- section:docs -->
+## Docs
+
+The README is the short path. Longer-lived documentation lives under [`docs/`](docs/):
+
+- [Ownership autonomy](docs/design-ownership-autonomy.md) — why cnb treats long-lived module ownership as the core unit of work.
+- [Package publishing](docs/package-publishing.md) — npm release, dist-tags, and GitHub Packages visibility rules.
+- [Public website](https://apollozhangongithub.github.io/cnb/) — first-visit product entry and documentation links.
 
 <!-- section:slash-commands -->
 ## Slash commands
@@ -152,11 +207,29 @@ A 6-tongxue team running for a full shift typically spends <2% of total tokens o
 <!-- section:architecture -->
 ## Architecture
 
-- **SQLite (WAL mode)** — all state in `.claudes/board.db`, one DB per project
-- **Board** — message bus (inbox, broadcast, direct), task queue, status tracking
-- **Dispatcher** — background process that monitors health, nudges idle tongxue
-- **Encrypted mailbox** — X25519 sealed-box private messaging between tongxue
-- **tmux** — one session per tongxue, all local
+| Layer | Responsibility | Implementation |
+|-------|----------------|----------------|
+| CLI entrypoints | User commands, package launch, health checks | [`bin/`](bin/), [`lib/cli.py`](lib/cli.py) |
+| Board | Inbox, broadcast, direct messages, tasks, status, pending actions | [`lib/board_*.py`](lib/), [`schema.sql`](schema.sql) |
+| Ownership | Path ownership, owner lookup, verification, scan routing | [`lib/board_own.py`](lib/board_own.py), [`migrations/008_ownership.sql`](migrations/008_ownership.sql) |
+| Runtime | One local session per tongxue, dispatcher nudges, process health | [`lib/swarm.py`](lib/swarm.py), [`lib/concerns/`](lib/concerns/) |
+| Persistence | SQLite WAL database plus filesystem reports and issue mirrors | `.claudes/`, [`issues/`](issues/), shift/daily docs |
+| Integrations | npm packaging, GitHub issue mirror, GitHub Packages mirror, notification delivery | [`.github/workflows/`](.github/workflows/), [`lib/notification_delivery.py`](lib/notification_delivery.py), [`docs/package-publishing.md`](docs/package-publishing.md) |
+
+<!-- section:repository-map -->
+## Repository map
+
+| Path | Purpose |
+|------|---------|
+| [`bin/`](bin/) | Executable entrypoints and release/consistency helper scripts |
+| [`lib/`](lib/) | Python implementation for board, swarm, ownership, notifications, registry, and health |
+| [`migrations/`](migrations/) + [`schema.sql`](schema.sql) | SQLite schema evolution |
+| [`tests/`](tests/) | Unit and integration coverage for runtime behavior |
+| [`docs/`](docs/) | Durable product, package, and ownership docs |
+| [`site/`](site/) | GitHub Pages project site source |
+| [`issues/`](issues/) | GitHub issue mirror for CLI-less agent sessions |
+| [`registry/`](registry/) | Contributor/tongxue registry and chain guard |
+| [`instances/`](instances/) | Demo project snapshots that are safe to inspect |
 
 <!-- section:team -->
 ## Team

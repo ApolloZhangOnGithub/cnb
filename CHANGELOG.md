@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.37-dev (unreleased)
+
+### Documentation
+
+- **GitHub Pages site** — Added a public project site under `site/` with a lightweight static publishing workflow to keep the product entrypoint separate from the README.
+- **README maturity pass** — Added badges, start-here routing, project status evidence, architecture layers, and a repository map for both English and Chinese README files.
+- **Metadata refresh** — Pointed package homepage metadata at the Pages site and expanded npm keywords to cover Codex, Feishu/Lark, local-first coordination, and developer tools.
+
 ## 0.5.36-dev (unreleased)
 
 ### Bug Fixes
