@@ -6,22 +6,26 @@ VERSION = $(shell cat VERSION)
 SCRIPTS = bin/cnb bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init
 
 # All python sources (bin + lib)
-PY_SOURCES = bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init lib/ tests/
+PY_SOURCES = bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/init bin/check-site-docs bin/check-registry-pr-guard lib/ tests/
 
-.PHONY: all install uninstall test lint typecheck format check ci clean version sync-version check-version
+.PHONY: all install uninstall test lint typecheck format check ci clean version sync-version check-version check-docs check-registry-guard
 
 all: check
 
-check: lint test
+check: lint test check-docs
 
-ci: lint typecheck test check-version
+ci: lint typecheck test check-version check-docs check-registry-guard
 
 lint:
 	@echo "=== ruff ==="
 	ruff check $(PY_SOURCES)
 	@echo ""
 	@echo "=== shellcheck ==="
-	shellcheck -s bash -S warning bin/cnb
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		shellcheck -s bash -S warning bin/cnb; \
+	else \
+		echo "SKIP shellcheck (not installed)"; \
+	fi
 	@echo ""
 	@echo "OK"
 
@@ -61,6 +65,13 @@ sync-version:
 
 check-version:
 	python3 bin/sync-version --check
+
+check-docs:
+	python3 bin/check-readme-sync
+	python3 bin/check-site-docs
+
+check-registry-guard:
+	python3 bin/check-registry-pr-guard
 
 version:
 	@echo $(VERSION)

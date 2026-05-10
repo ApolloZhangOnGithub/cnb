@@ -62,8 +62,8 @@ Run the narrowest check while iterating, then run the relevant full gates before
 Core gates:
 
 ```bash
-ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog tests/
-ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog tests/
+ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-site-docs bin/check-registry-pr-guard tests/
+ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-site-docs bin/check-registry-pr-guard tests/
 mypy lib/
 python -m pytest tests/ -v --tb=short
 python bin/sync-version --check
@@ -78,7 +78,19 @@ README changes must keep the English and Chinese structure synchronized:
 bin/check-readme-sync
 ```
 
-`make ci` runs the local lint, typecheck, test, and version checks. CI also enforces commit trailers and release changelog rules.
+Static site entrypoints must stay smoke-testable and must not duplicate canonical Markdown docs:
+
+```bash
+bin/check-site-docs
+```
+
+Registry PR branches must run the same immutable-block guard that GitHub Actions runs:
+
+```bash
+bin/check-registry-pr-guard
+```
+
+`make ci` runs the local lint, typecheck, test, version, docs/site, and registry PR guard checks. CI also enforces commit trailers and release changelog rules.
 
 ## Code Style
 

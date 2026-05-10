@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Mirror the Registry Chain Guard PR path locally."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=ROOT,
+        check=check,
+        capture_output=True,
+        text=True,
+    )
+
+
+def fetch_base(base_ref: str) -> None:
+    if not base_ref.startswith("origin/"):
+        return
+    branch = base_ref.removeprefix("origin/")
+    subprocess.run(["git", "fetch", "--no-tags", "origin", branch], cwd=ROOT, check=True)
+
+
+def file_exists_at(ref: str, path: str) -> bool:
+    return git("cat-file", "-e", f"{ref}:{path}", check=False).returncode == 0
+
+
+def changed_registry_json(base_sha: str) -> list[str]:
+    result = git("diff", "--name-only", base_sha, "HEAD", "--", "registry/*.json")
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--base-ref",
+        default=f"origin/{os.environ.get('GITHUB_BASE_REF', 'master')}",
+        help="base ref to compare against (default: origin/${GITHUB_BASE_REF:-master})",
+    )
+    parser.add_argument("--no-fetch", action="store_true", help="do not refresh origin/<base> before checking")
+    args = parser.parse_args()
+
+    subprocess.run(["python3", "bin/registry", "verify-chain"], cwd=ROOT, check=True)
+    if not args.no_fetch:
+        fetch_base(args.base_ref)
+
+    base_sha = git("merge-base", "HEAD", args.base_ref).stdout.strip()
+    modified_existing = [path for path in changed_registry_json(base_sha) if file_exists_at(base_sha, path)]
+    if modified_existing:
+        print("FAIL: existing registry blocks were modified:")
+        for path in modified_existing:
+            print(path)
+        print()
+        print("Registry blocks are immutable. Only new blocks can be added.")
+        raise SystemExit(1)
+
+    print(f"OK registry PR guard passed against {args.base_ref}")
+
+
+if __name__ == "__main__":
+    main()

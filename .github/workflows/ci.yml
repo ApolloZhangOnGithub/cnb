@@ -19,8 +19,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
-      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding tests/
-      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding tests/
+      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding bin/check-site-docs bin/check-registry-pr-guard tests/
+      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding bin/check-site-docs bin/check-registry-pr-guard tests/
 
   typecheck:
     runs-on: ubuntu-latest
@@ -46,6 +46,9 @@ jobs:
           python-version: "3.11"
       - run: python bin/sync-version --check
       - run: python bin/check-branding
+      - run: python bin/check-readme-sync
+      - run: python bin/check-site-docs
+      - run: python bin/check-registry-pr-guard
       - name: Version must change on every push
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
