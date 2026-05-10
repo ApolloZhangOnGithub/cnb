@@ -509,14 +509,19 @@ def _notification_policy(value: Any) -> str:
     return policy if policy in SUPPORTED_NOTIFICATION_POLICIES else DEFAULT_NOTIFICATION_POLICY
 
 
-_ROLE_ALIASES: dict[str, PilotRole] = {
-    "chief": CHIEF_ROLE,
-    "devicechief": CHIEF_ROLE,
-    "device_chief": CHIEF_ROLE,
-    "machine_chief": CHIEF_ROLE,
-    "supervisor": SUPERVISOR_ROLE,
-    "device_supervisor": SUPERVISOR_ROLE,
-    "terminal_supervisor": SUPERVISOR_ROLE,
+_ROLES_BY_ID: dict[str, PilotRole] = {
+    SUPERVISOR_ROLE.role_id: SUPERVISOR_ROLE,
+    CHIEF_ROLE.role_id: CHIEF_ROLE,
+}
+
+_ROLE_ALIASES: dict[str, str] = {
+    "chief": CHIEF_ROLE.role_id,
+    "devicechief": CHIEF_ROLE.role_id,
+    "device_chief": CHIEF_ROLE.role_id,
+    "machine_chief": CHIEF_ROLE.role_id,
+    "supervisor": SUPERVISOR_ROLE.role_id,
+    "device_supervisor": SUPERVISOR_ROLE.role_id,
+    "terminal_supervisor": SUPERVISOR_ROLE.role_id,
 }
 
 
@@ -524,7 +529,8 @@ def _resolve_role(value: Any) -> PilotRole:
     if isinstance(value, PilotRole):
         return value
     text = str(value or "").strip().lower().replace("-", "_")
-    return _ROLE_ALIASES.get(text, SUPERVISOR_ROLE)
+    role_id = _ROLE_ALIASES.get(text, text)
+    return _ROLES_BY_ID.get(role_id, SUPERVISOR_ROLE)
 
 
 def _pilot_role(value: Any) -> PilotRole:
