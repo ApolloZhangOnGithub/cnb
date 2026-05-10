@@ -228,7 +228,7 @@ github_app_installation_id = "optional"
 bin/init -> schema.sql -> board.db -> meta.schema_version -> lib.migrate.run_migrations()
 ```
 
-现状注意: `schema.sql` 已经包含 009 之前的表, 但 `bin/init` 仍把新库标成 schema version 4, 然后再跑 005 到 009。重建时要么保留这个行为, 要么显式设定 schema baseline 版本并修迁移测试。
+现状注意: `schema.sql` 是当前完整基线; `bin/init` 从 `migrations/` 读取最高版本并写入 `meta.schema_version`, 然后只运行真正 pending 的迁移。重建时要保留这个显式基线行为, 避免初始化新库时重复套用已在 `schema.sql` 内的迁移。
 
 ## 5. Project State And Database Model
 
@@ -1180,10 +1180,10 @@ These are not style complaints. They change how faithfully someone can rebuild t
    - `lib.cli` expects `bin/cnb`, `/opt/homebrew/bin/cnb`, or `PATH:cnb`.
    - wheel installs can miss runtime resources.
 
-2. Schema baseline is ambiguous.
-   - `schema.sql` contains tables through migration 009.
-   - new init still records schema version 4.
-   - fixtures sometimes set schema version 7.
+2. Schema baseline is explicit but must stay synchronized.
+   - `schema.sql` contains tables through the latest numbered migration.
+   - new init records the highest migration version from `migrations/`.
+   - fixtures use the same helper instead of hard-coding an older schema version.
 
 3. `.cnb` and `.claudes` are half-migrated.
    - Product docs prefer `.cnb`.
@@ -1209,7 +1209,7 @@ These are not style complaints. They change how faithfully someone can rebuild t
 
 8. Current worktree can contain generated/local state.
    - `bin/hygiene --json` reports generated/cache files and local runtime state.
-   - Current snapshot also reports marked backup/duplicate files: `lib/cli 2.py`, `lib/github_issues_sync 2.py`, `tests/test_cli 2.py`, `tests/test_github_issues_sync 2.py`.
+   - Marked backup/duplicate files should be zero before release; this check previously caught `* 2.py` duplicates under `lib/` and `tests/`.
    - legacy key material can still exist in source-level `registry/pubkeys.json`.
    - Do not treat the dirty checkout as a clean release artifact.
 

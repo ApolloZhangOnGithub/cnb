@@ -17,6 +17,7 @@ from lib.board_db import BoardDB
 from lib.board_msg import cmd_ack, cmd_inbox, cmd_send, cmd_status
 from lib.board_task import cmd_task
 from lib.common import ClaudesEnv
+from tests.conftest import SCHEMA_VERSION
 
 pytestmark = pytest.mark.security
 
@@ -40,7 +41,7 @@ def _make_project(tmp_path: Path, name: str, sessions: list[str]) -> BoardDB:
     conn.executescript(schema.read_text())
     for s in sessions:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (s,))
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
     conn.commit()
     conn.close()
 

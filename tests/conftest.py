@@ -13,11 +13,14 @@ import pytest
 
 from lib.common import ts  # noqa: F401 — re-export for tests
 from lib.concerns.config import DispatcherConfig
+from lib.migrate import latest_migration_version
 
 # ---------------------------------------------------------------------------
 # Schema path (relative to this file's location)
 # ---------------------------------------------------------------------------
-SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
+INSTALL_HOME = Path(__file__).parent.parent
+SCHEMA_PATH = INSTALL_HOME / "schema.sql"
+SCHEMA_VERSION = str(latest_migration_version(INSTALL_HOME))
 
 # Default test sessions
 DEFAULT_SESSIONS = ["alice", "bob", "charlie"]
@@ -83,7 +86,7 @@ def tmp_project(tmp_path):
     for name in DEFAULT_SESSIONS:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (name,))
     # Mark schema as fully up-to-date so auto-migrate won't re-apply
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
     conn.commit()
     conn.close()
 

@@ -17,6 +17,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from tests.conftest import SCHEMA_VERSION
+
 SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
 DOCTOR_PATH = Path(__file__).parent.parent / "bin" / "doctor"
 
@@ -44,7 +46,7 @@ def doctor_db(tmp_path):
     conn.executescript(SCHEMA_PATH.read_text())
     conn.execute("INSERT INTO sessions(name) VALUES ('alice')")
     conn.execute("INSERT INTO sessions(name) VALUES ('bob')")
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
     conn.commit()
     conn.close()
     return db_path

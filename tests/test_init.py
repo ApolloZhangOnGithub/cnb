@@ -8,12 +8,13 @@ CLAUDE.md generation, idempotency, and session name validation.
 import importlib.util
 import re
 import sqlite3
+import sys
 import types
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import DEFAULT_SESSIONS, SCHEMA_PATH
+from tests.conftest import DEFAULT_SESSIONS, SCHEMA_PATH, SCHEMA_VERSION
 
 _init_script = Path(__file__).parent.parent / "bin" / "init"
 _spec = importlib.util.spec_from_loader("init_mod", loader=None, origin=str(_init_script))
@@ -130,6 +131,32 @@ class TestDatabaseInitialization:
 
         for row in rows:
             assert row[0] == row[0].lower()
+
+    def test_fixture_schema_version_matches_current_migrations(self, tmp_project):
+        """Fixture databases use the same schema baseline as current migrations."""
+        db_path = tmp_project / ".claudes" / "board.db"
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        conn.close()
+
+        assert row[0] == SCHEMA_VERSION
+
+    def test_init_main_records_current_schema_version(self, tmp_path, monkeypatch, capsys):
+        """Real init should not create a fresh DB at an old migration version."""
+        project = tmp_path / "project"
+        project.mkdir()
+        monkeypatch.chdir(project)
+        monkeypatch.setattr(sys, "argv", ["init", "alice"])
+
+        init_mod.main()
+
+        conn = sqlite3.connect(str(project / ".cnb" / "board.db"))
+        row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        conn.close()
+        out = capsys.readouterr().out
+
+        assert row[0] == SCHEMA_VERSION
+        assert "Applied " not in out
 
 
 class TestSessionFiles:

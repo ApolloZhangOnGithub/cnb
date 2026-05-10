@@ -324,14 +324,17 @@ def main() -> None:
         md_content = f"# {n}\n{persona_section}\n## Current task\n(none)\n"
         (claudes_dir / "sessions" / f"{n}.md").write_text(md_content)
     conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('dispatcher_session', 'dispatcher')")
-    # Record schema version so migration runner knows where we are
-    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '4')")
+    from lib.migrate import latest_migration_version, run_migrations
+
+    schema_version = str(latest_migration_version(claudes_home))
+    conn.execute(
+        "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)",
+        (schema_version,),
+    )
     conn.commit()
     conn.close()
 
     # Run any pending migrations (idempotent)
-    from lib.migrate import run_migrations
-
     applied = run_migrations(db_path, claudes_home)
     if applied:
         print(f"Applied {applied} schema migration(s).")

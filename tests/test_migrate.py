@@ -12,7 +12,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.migrate import _applied_versions, _discover_migrations, _record_version, run_migrations
+from lib.migrate import (
+    _applied_versions,
+    _discover_migrations,
+    _record_version,
+    latest_migration_version,
+    run_migrations,
+)
 
 SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
 
@@ -71,6 +77,24 @@ class TestDiscoverMigrations:
 
         result = _discover_migrations(mig_dir)
         assert len(result) == 1
+
+
+class TestLatestMigrationVersion:
+    def test_returns_highest_numbered_migration(self, tmp_path):
+        mig_dir = tmp_path / "migrations"
+        mig_dir.mkdir()
+        (mig_dir / "001_first.sql").write_text("SELECT 1;")
+        (mig_dir / "009_latest.sql").write_text("SELECT 9;")
+        (mig_dir / "readme.txt").write_text("not a migration")
+
+        assert latest_migration_version(tmp_path) == 9
+
+    def test_returns_zero_without_numbered_migrations(self, tmp_path):
+        mig_dir = tmp_path / "migrations"
+        mig_dir.mkdir()
+        (mig_dir / "readme.sql").write_text("SELECT 1;")
+
+        assert latest_migration_version(tmp_path) == 0
 
 
 class TestAppliedVersions:

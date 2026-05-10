@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import SCHEMA_VERSION
+
 _script = Path(__file__).parent.parent / "bin" / "notify"
 _spec = importlib.util.spec_from_loader("notify_cli", loader=None, origin=str(_script))
 notify_mod = types.ModuleType("notify_cli")
@@ -49,7 +51,7 @@ def _init_db(db_path):
     conn.executescript(schema.read_text())
     conn.execute("INSERT INTO sessions(name) VALUES ('alice')")
     conn.execute("INSERT INTO sessions(name) VALUES ('bob')")
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
     conn.commit()
     conn.close()
 
@@ -227,7 +229,7 @@ class TestCmdLog:
         e = _make_env(tmp_path)
         conn = sqlite3.connect(str(e.board_db))
         conn.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', '7')")
+        conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
         conn.commit()
         conn.close()
         monkeypatch.setattr(notify_mod, "_env", lambda: e)

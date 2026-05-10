@@ -8,6 +8,7 @@ import pytest
 
 from lib.board_db import BoardDB
 from lib.board_mail import cmd_mail
+from tests.conftest import SCHEMA_VERSION
 
 SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
 
@@ -18,7 +19,7 @@ def _setup_db(tmp_path: Path) -> BoardDB:
     conn.executescript(SCHEMA_PATH.read_text())
     for name in ("alice", "bob", "charlie"):
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (name,))
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
     conn.commit()
     conn.close()
     return BoardDB(db_path)

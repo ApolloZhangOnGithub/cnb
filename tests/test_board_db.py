@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from lib.board_db import BoardDB, inbox_delivered
+from tests.conftest import SCHEMA_VERSION
 
 SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
 
@@ -18,7 +19,7 @@ def _init_db(tmp_path: Path, sessions: list[str] | None = None) -> Path:
     conn.executescript(SCHEMA_PATH.read_text())
     for name in sessions:
         conn.execute("INSERT INTO sessions(name) VALUES (?)", (name,))
-    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '7')")
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
     conn.commit()
     conn.close()
     return db_path

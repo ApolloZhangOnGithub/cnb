@@ -46,6 +46,14 @@ def _discover_migrations(mdir: Path) -> list[tuple[int, Path]]:
     return migs
 
 
+def latest_migration_version(claudes_home: Path) -> int:
+    """Return the highest migration version for the installed schema."""
+    migrations = _discover_migrations(_migrations_dir(claudes_home))
+    if not migrations:
+        return 0
+    return migrations[-1][0]
+
+
 def run_migrations(db_path: Path, claudes_home: Path) -> int:
     """Apply all pending migrations. Returns number of migrations applied."""
     mdir = _migrations_dir(claudes_home)
