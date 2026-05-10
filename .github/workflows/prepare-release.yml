@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PACKAGE_NAME: c-n-b
+  PACKAGE_NAME: claude-nb
 
 jobs:
   prepare:

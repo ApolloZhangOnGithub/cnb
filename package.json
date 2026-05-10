@@ -1,6 +1,6 @@
 {
-  "name": "c-n-b",
-  "version": "0.5.46-dev",
+  "name": "claude-nb",
+  "version": "0.5.47-dev",
   "description": "Multi-agent coordination framework for Claude Code sessions",
   "engines": {
     "node": ">=18"

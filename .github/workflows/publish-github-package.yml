@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Published npmjs c-n-b version to mirror"
+        description: "Published npmjs claude-nb version to mirror"
         required: true
         default: "0.5.1"
 
@@ -45,8 +45,8 @@ jobs:
           MIRROR_VERSION: ${{ inputs.version }}
         run: |
           mkdir mirror
-          npm pack "c-n-b@$MIRROR_VERSION" --pack-destination mirror
-          tarball="$(ls mirror/c-n-b-*.tgz)"
+          npm pack "claude-nb@$MIRROR_VERSION" --pack-destination mirror
+          tarball="$(ls mirror/claude-nb-*.tgz)"
           tar -xzf "$tarball" -C mirror
 
       - name: Rewrite package metadata for GitHub Packages

@@ -50,12 +50,12 @@ Use `--dry-run` before changing records when moving a domain between accounts.
 
 `c-n-b.space` is configured as the repository Pages custom domain. Keep the repository About homepage display as `c-n-b.space` without a trailing slash; path-specific URLs may still include their normal path component.
 
-Verified after PR #130 merged:
+Verified after PR #130 merged, then corrected by the package-fact restoration tracked in issue #132:
 
 - `http://c-n-b.space` returns GitHub Pages content.
 - The deployed page title is `c-n-b | Project ownership for LLM teams`.
-- The deployed homepage install command is `npm install -g c-n-b`.
-- The deployed homepage links npm to `https://www.npmjs.com/package/c-n-b`.
+- The homepage install command must stay `npm install -g claude-nb` until a real `c-n-b` npm package migration is completed.
+- The homepage npm link must stay `https://www.npmjs.com/package/claude-nb` until that migration is completed.
 
 HTTPS is not enforced yet because GitHub Pages still reports:
 
