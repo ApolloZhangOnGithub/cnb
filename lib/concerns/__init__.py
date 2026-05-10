@@ -9,8 +9,8 @@ from .config import DispatcherConfig
 from .coral import CoralManager, CoralPoker
 from .health import HealthChecker, ResourceMonitor, SessionKeepAlive
 from .helpers import log, tmux_ok, warn
-from .idle import IdleDetector, IdleKiller, IdleNudger
-from .notifications import BugSLAChecker, InboxNudger, QueuedMessageFlusher, TimeAnnouncer
+from .idle import IdleDetector, IdleKiller
+from .notifications import BugSLAChecker, TimeAnnouncer
 from .nudge_coordinator import NudgeCoordinator
 
 __all__ = [
@@ -23,10 +23,7 @@ __all__ = [
     "HealthChecker",
     "IdleDetector",
     "IdleKiller",
-    "IdleNudger",
-    "InboxNudger",
     "NudgeCoordinator",
-    "QueuedMessageFlusher",
     "ResourceMonitor",
     "SessionKeepAlive",
     "TimeAnnouncer",

@@ -90,7 +90,7 @@ Global machine state
     feishu_chat.json
 ```
 
-` .cnb/` 是当前产品语言中的 canonical 项目目录, 但大量测试和兼容代码仍支持旧 `.claudes/`。复现时必须保留 fallback, 否则现有测试、历史 demo 和部分 hook 会断。
+`.cnb/` 是当前产品语言中的 canonical 项目目录, 但大量测试和兼容代码仍支持旧 `.claudes/`。复现时必须保留 fallback, 否则现有测试、历史 demo 和部分 hook 会断。
 
 ## 3. Distribution And Entrypoints
 

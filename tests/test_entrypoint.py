@@ -20,6 +20,17 @@ ENTRYPOINT = CLAUDES_HOME / "bin" / "cnb"
 BOARD = CLAUDES_HOME / "bin" / "board"
 
 
+def _env_without_active_venv(**overrides):
+    env = {**os.environ, **overrides}
+    venv = env.pop("VIRTUAL_ENV", "")
+    path_parts = env.get("PATH", "").split(os.pathsep)
+    venv_bin = str(Path(venv) / "bin") if venv else ""
+    env["PATH"] = os.pathsep.join(
+        part for part in path_parts if part and part != venv_bin and not part.endswith("/.venv/bin")
+    )
+    return env
+
+
 @pytest.fixture
 def fake_project(tmp_path):
     """A temp dir with fake agent binaries that dump their args."""
@@ -330,7 +341,7 @@ class TestSubcommands:
         cnb_home.mkdir(parents=True)
         (cnb_home / "latest-version").write_text("9.9.9\n")
 
-        env = {**os.environ, "CNB_PROJECT": str(board_project), "HOME": str(home)}
+        env = _env_without_active_venv(CNB_PROJECT=str(board_project), HOME=str(home))
         r = subprocess.run(
             ["bash", str(ENTRYPOINT), "version"],
             cwd=board_project,
@@ -350,7 +361,7 @@ class TestSubcommands:
         cnb_home.mkdir(parents=True)
         (cnb_home / "latest-version").write_text("0.5.1\n")
 
-        env = {**os.environ, "CNB_PROJECT": str(board_project), "HOME": str(home)}
+        env = _env_without_active_venv(CNB_PROJECT=str(board_project), HOME=str(home))
         r = subprocess.run(
             ["bash", str(ENTRYPOINT), "version"],
             cwd=board_project,

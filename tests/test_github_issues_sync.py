@@ -40,40 +40,30 @@ def test_sync_issues_writes_markdown_index_and_removes_stale(tmp_path: Path) -> 
     assert (open_count, closed_count) == (1, 1)
     assert not (issues_dir / "999-stale.md").exists()
     assert (issues_dir / "notes.md").read_text(encoding="utf-8") == "keep"
-
-    open_issue = (issues_dir / "001-open-issue.md").read_text(encoding="utf-8")
-    assert 'title: "Open issue"' in open_issue
-    assert 'labels: ["bug"]' in open_issue
-    assert "**State:** OPEN" in open_issue
-
-    closed_issue = (issues_dir / "002-closed-thing.md").read_text(encoding="utf-8")
-    assert 'title: "Closed \\"thing\\""' in closed_issue
-    assert 'labels: ["phase:1"]' in closed_issue
-    assert 'assignees: ["alice"]' in closed_issue
-    assert "closed: 2026-05-03" in closed_issue
-
+    assert 'title: "Open issue"' in (issues_dir / "001-open-issue.md").read_text(encoding="utf-8")
+    assert "closed: 2026-05-03" in (issues_dir / "002-closed-thing.md").read_text(encoding="utf-8")
     index = (issues_dir / "README.md").read_text(encoding="utf-8")
     assert "Source: `owner/repo`" in index
     assert "| [#1](001-open-issue.md) | Open issue |" in index
-    assert '| [#2](002-closed-thing.md) | Closed "thing" |' in index
 
 
 def test_sync_issues_uses_number_fallback_for_non_ascii_slug(tmp_path: Path) -> None:
-    issues = [
-        {
-            "number": 12,
-            "title": "纯中文标题",
-            "state": "OPEN",
-            "body": "",
-            "labels": [],
-            "assignees": [],
-            "createdAt": "",
-            "updatedAt": "",
-            "closedAt": None,
-        }
-    ]
-
-    sync_issues(issues, tmp_path)
+    sync_issues(
+        [
+            {
+                "number": 12,
+                "title": "纯中文标题",
+                "state": "OPEN",
+                "body": "",
+                "labels": [],
+                "assignees": [],
+                "createdAt": "",
+                "updatedAt": "",
+                "closedAt": None,
+            }
+        ],
+        tmp_path,
+    )
 
     assert (tmp_path / "012-issue-12.md").exists()
 

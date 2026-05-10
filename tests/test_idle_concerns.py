@@ -1,11 +1,11 @@
-"""Tests for idle detection, killing, and nudging concerns."""
+"""Tests for idle detection and killing concerns."""
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from lib.concerns.base import Concern
 from lib.concerns.config import DispatcherConfig
-from lib.concerns.idle import IdleDetector, IdleKiller, IdleNudger
+from lib.concerns.idle import IdleDetector, IdleKiller
 
 PREFIX = "cc-test"
 
@@ -273,119 +273,3 @@ class TestIdleKiller:
         killer.tick(1000)
         killer.tick(1000 + IdleKiller.THRESHOLD - 1)
         mock_tmux.assert_not_called()
-
-
-# ===========================================================================
-# IdleNudger
-# ===========================================================================
-
-
-class TestIdleNudger:
-    @patch("lib.concerns.idle.tmux_send", return_value=True)
-    @patch("lib.concerns.idle.tmux_ok", return_value=True)
-    @patch("lib.concerns.idle.is_claude_running", return_value=True)
-    @patch("lib.concerns.idle.get_dev_sessions", return_value=["alice"])
-    @patch("lib.concerns.idle.is_suspended", return_value=False)
-    def test_nudges_idle_session(self, mock_susp, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
-        cfg = make_cfg(tmp_path, ["alice"])
-        idle = MagicMock()
-        idle.is_idle.return_value = True
-        nudger = IdleNudger(cfg, idle)
-
-        nudger.tick(1000)
-        assert mock_send.call_count == 1
-        sent_text = mock_send.call_args[0][1]
-        assert "继续工作" in sent_text
-
-    @patch("lib.concerns.idle.tmux_send", return_value=True)
-    @patch("lib.concerns.idle.tmux_ok", return_value=True)
-    @patch("lib.concerns.idle.is_claude_running", return_value=True)
-    @patch("lib.concerns.idle.get_dev_sessions", return_value=["alice"])
-    @patch("lib.concerns.idle.is_suspended", return_value=False)
-    def test_cooldown_suppresses_repeat(self, mock_susp, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
-        cfg = make_cfg(tmp_path, ["alice"])
-        idle = MagicMock()
-        idle.is_idle.return_value = True
-        nudger = IdleNudger(cfg, idle)
-
-        nudger.tick(1000)
-        assert mock_send.call_count == 1
-
-        mock_send.reset_mock()
-        nudger.tick(1000 + IdleNudger.COOLDOWN - 1)
-        assert mock_send.call_count == 0
-
-    @patch("lib.concerns.idle.tmux_send", return_value=True)
-    @patch("lib.concerns.idle.tmux_ok", return_value=True)
-    @patch("lib.concerns.idle.is_claude_running", return_value=True)
-    @patch("lib.concerns.idle.get_dev_sessions", return_value=["alice"])
-    @patch("lib.concerns.idle.is_suspended", return_value=False)
-    def test_nudge_allowed_after_cooldown(self, mock_susp, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
-        cfg = make_cfg(tmp_path, ["alice"])
-        idle = MagicMock()
-        idle.is_idle.return_value = True
-        nudger = IdleNudger(cfg, idle)
-
-        nudger.tick(1000)
-        mock_send.reset_mock()
-
-        nudger.tick(1000 + IdleNudger.COOLDOWN)
-        assert mock_send.call_count == 1
-
-    @patch("lib.concerns.idle.tmux_send", return_value=True)
-    @patch("lib.concerns.idle.tmux_ok", return_value=True)
-    @patch("lib.concerns.idle.is_claude_running", return_value=True)
-    @patch("lib.concerns.idle.get_dev_sessions", return_value=["alice"])
-    @patch("lib.concerns.idle.is_suspended", return_value=False)
-    def test_non_idle_not_nudged(self, mock_susp, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
-        cfg = make_cfg(tmp_path, ["alice"])
-        idle = MagicMock()
-        idle.is_idle.return_value = False
-        nudger = IdleNudger(cfg, idle)
-
-        nudger.tick(1000)
-        assert mock_send.call_count == 0
-
-    @patch("lib.concerns.idle.tmux_send", return_value=True)
-    @patch("lib.concerns.idle.tmux_ok", return_value=True)
-    @patch("lib.concerns.idle.is_claude_running", return_value=False)
-    @patch("lib.concerns.idle.get_dev_sessions", return_value=["alice"])
-    @patch("lib.concerns.idle.is_suspended", return_value=False)
-    def test_offline_not_nudged(self, mock_susp, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
-        cfg = make_cfg(tmp_path, ["alice"])
-        idle = MagicMock()
-        idle.is_idle.return_value = True
-        nudger = IdleNudger(cfg, idle)
-
-        nudger.tick(1000)
-        assert mock_send.call_count == 0
-
-    @patch("lib.concerns.idle.tmux_send", return_value=True)
-    @patch("lib.concerns.idle.tmux_ok", return_value=True)
-    @patch("lib.concerns.idle.is_claude_running", return_value=True)
-    @patch("lib.concerns.idle.get_dev_sessions", return_value=["alice"])
-    @patch("lib.concerns.idle.is_suspended", return_value=True)
-    def test_suspended_not_nudged(self, mock_susp, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
-        cfg = make_cfg(tmp_path, ["alice"])
-        idle = MagicMock()
-        idle.is_idle.return_value = True
-        nudger = IdleNudger(cfg, idle)
-
-        nudger.tick(1000)
-        assert mock_send.call_count == 0
-
-    @patch("lib.concerns.idle.tmux_send", return_value=True)
-    @patch("lib.concerns.idle.tmux_ok", return_value=True)
-    @patch("lib.concerns.idle.is_claude_running", return_value=True)
-    @patch("lib.concerns.idle.get_dev_sessions", return_value=["alice"])
-    @patch("lib.concerns.idle.is_suspended", return_value=False)
-    def test_nudge_text_includes_okr_path(self, mock_susp, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
-        cfg = make_cfg(tmp_path, ["alice"])
-        idle = MagicMock()
-        idle.is_idle.return_value = True
-        nudger = IdleNudger(cfg, idle)
-
-        nudger.tick(1000)
-        sent_text = mock_send.call_args[0][1]
-        assert str(cfg.okr_dir) in sent_text
-        assert "alice" in sent_text
