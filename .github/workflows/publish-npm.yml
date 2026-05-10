@@ -35,7 +35,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PACKAGE_NAME: claude-nb
+  PACKAGE_NAME: c-n-b
   GH_PACKAGE: "@apollozhangongithub/cnb"
 
 jobs:
@@ -97,6 +97,7 @@ jobs:
           fi
 
           python bin/sync-version --check
+          python bin/check-branding
           python bin/check-changelog
 
           PKG_NAME="$(node -p "require('./package.json').name")"
