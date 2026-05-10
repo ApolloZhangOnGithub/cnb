@@ -2,6 +2,7 @@
 
 import binascii
 import json
+import os
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
@@ -18,8 +19,8 @@ from lib.crypto import (
     unseal_b64,
 )
 
-REGISTRY_DIR = Path(__file__).resolve().parent.parent / "registry"
-PUBKEYS_FILE = REGISTRY_DIR / "pubkeys.json"
+REGISTRY_DIR = Path(os.environ.get("CNB_REGISTRY_DIR", Path(__file__).resolve().parent.parent / "registry"))
+PUBKEYS_FILE = Path(os.environ.get("CNB_PUBKEYS_FILE", REGISTRY_DIR / "pubkeys.json"))
 
 
 def _keys_dir(db: BoardDB) -> Path:
@@ -35,7 +36,15 @@ def _load_pubkeys() -> dict[str, str]:
 
 
 def _save_pubkeys(data: dict[str, str]) -> None:
+    PUBKEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
     PUBKEYS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
+def _pubkeys_display_path() -> Path:
+    try:
+        return PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)
+    except ValueError:
+        return PUBKEYS_FILE
 
 
 def _find_pubkey(name: str) -> str | None:
@@ -63,7 +72,7 @@ def cmd_keygen(db: BoardDB, identity: str) -> None:
     print("OK 密钥已生成")
     print(f"  私钥: {kd / f'{name}.pem'} (勿泄露)")
     print(f"  公钥: {pubkey_hex[:16]}...")
-    print(f"  已写入 {PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)}")
+    print(f"  已写入 {_pubkeys_display_path()}")
 
 
 def cmd_keygen_all(db: BoardDB) -> None:
@@ -93,7 +102,7 @@ def cmd_keygen_all(db: BoardDB) -> None:
     print(f"OK keygen-all: {generated} 生成, {skipped} 跳过 (已有密钥)")
     if generated:
         print(f"  密钥目录: {kd}")
-        print(f"  公钥注册: {PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)}")
+        print(f"  公钥注册: {_pubkeys_display_path()}")
 
 
 def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
