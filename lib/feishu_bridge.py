@@ -31,20 +31,87 @@ from lib.swarm import CODEX_PERMISSION_FLAGS
 from lib.tmux_utils import has_session, tmux_send
 
 DEFAULT_EVENT_KEY = "im.message.receive_v1"
-DEVICE_SUPERVISOR_LABEL = "设备主管同学"
-DEVICE_CHIEF_LABEL = "机器总管同学"
 LEGACY_SUPERVISOR_LABEL = "终端主管同学"
-DEFAULT_PILOT_ROLE = "device_supervisor"
-DEVICE_CHIEF_ROLE = "device_chief"
-DEFAULT_PILOT_NAME = "device-supervisor"
-DEFAULT_CHIEF_NAME = "device-chief"
-DEFAULT_PILOT_TMUX = "cnb-device-supervisor"
-DEFAULT_CHIEF_TMUX = "cnb-device-chief"
 LEGACY_DEFAULT_PILOT_TMUX = "cnb-terminal-supervisor"
-DEFAULT_BRIDGE_TMUX = "cnb-feishu-bridge"
-DEFAULT_CHIEF_BRIDGE_TMUX = "cnb-feishu-chief-bridge"
-DEFAULT_WATCH_TMUX = "cnb-feishu-watch"
-DEFAULT_CHIEF_WATCH_TMUX = "cnb-feishu-chief-watch"
+LEGACY_ACK_PREFIX = f"已转给这台 Mac 的{LEGACY_SUPERVISOR_LABEL}"
+
+
+@dataclass(frozen=True)
+class PilotRole:
+    """Role-specific defaults for a pilot (supervisor or chief)."""
+
+    role_id: str
+    label: str
+    default_name: str
+    default_tmux: str
+    default_bridge_tmux: str
+    default_watch_tmux: str
+    ack_prefix: str
+    status_title: str
+    name_config_keys: tuple[str, ...]
+    tmux_config_keys: tuple[str, ...]
+
+
+SUPERVISOR_ROLE = PilotRole(
+    role_id="device_supervisor",
+    label="设备主管同学",
+    default_name="device-supervisor",
+    default_tmux="cnb-device-supervisor",
+    default_bridge_tmux="cnb-feishu-bridge",
+    default_watch_tmux="cnb-feishu-watch",
+    ack_prefix="已转给这台 Mac 的设备主管同学",
+    status_title="CNB 设备状态",
+    name_config_keys=(
+        "device_supervisor_name",
+        "terminal_supervisor_name",
+        "device_chief_name",
+        "device-chief-name",
+    ),
+    tmux_config_keys=(
+        "device_supervisor_tmux",
+        "terminal_supervisor_tmux",
+        "device_chief_tmux",
+        "device-chief-tmux",
+    ),
+)
+
+CHIEF_ROLE = PilotRole(
+    role_id="device_chief",
+    label="机器总管同学",
+    default_name="device-chief",
+    default_tmux="cnb-device-chief",
+    default_bridge_tmux="cnb-feishu-chief-bridge",
+    default_watch_tmux="cnb-feishu-chief-watch",
+    ack_prefix="已转给 CNB 机器总管同学",
+    status_title="CNB 机器总管状态",
+    name_config_keys=(
+        "device_chief_name",
+        "device-chief-name",
+        "chief_name",
+        "chief-name",
+        "device_supervisor_name",
+        "terminal_supervisor_name",
+    ),
+    tmux_config_keys=(
+        "device_chief_tmux",
+        "device-chief-tmux",
+        "chief_tmux",
+        "chief-tmux",
+        "device_supervisor_tmux",
+        "terminal_supervisor_tmux",
+    ),
+)
+
+DEFAULT_PILOT_ROLE = SUPERVISOR_ROLE.role_id
+DEVICE_CHIEF_ROLE = CHIEF_ROLE.role_id
+DEFAULT_PILOT_NAME = SUPERVISOR_ROLE.default_name
+DEFAULT_CHIEF_NAME = CHIEF_ROLE.default_name
+DEFAULT_PILOT_TMUX = SUPERVISOR_ROLE.default_tmux
+DEFAULT_CHIEF_TMUX = CHIEF_ROLE.default_tmux
+DEFAULT_BRIDGE_TMUX = SUPERVISOR_ROLE.default_bridge_tmux
+DEFAULT_CHIEF_BRIDGE_TMUX = CHIEF_ROLE.default_bridge_tmux
+DEFAULT_WATCH_TMUX = SUPERVISOR_ROLE.default_watch_tmux
+DEFAULT_CHIEF_WATCH_TMUX = CHIEF_ROLE.default_watch_tmux
 DEFAULT_WATCH_HOST = "127.0.0.1"
 DEFAULT_WATCH_PORT = 8765
 DEFAULT_WATCH_REFRESH_MS = 250
@@ -65,9 +132,8 @@ DEFAULT_RESOURCE_HANDOFF_MAX_BYTES = 25 * 1024 * 1024
 MAX_RESOURCE_HANDOFF_BYTES = 100 * 1024 * 1024
 SHORT_REPLY_MAX_CHARS = 280
 SHORT_REPLY_MAX_LINES = 4
-ACK_PREFIX = f"已转给这台 Mac 的{DEVICE_SUPERVISOR_LABEL}"
-CHIEF_ACK_PREFIX = f"已转给 CNB {DEVICE_CHIEF_LABEL}"
-LEGACY_ACK_PREFIX = f"已转给这台 Mac 的{LEGACY_SUPERVISOR_LABEL}"
+ACK_PREFIX = SUPERVISOR_ROLE.ack_prefix
+CHIEF_ACK_PREFIX = CHIEF_ROLE.ack_prefix
 ACK_PREFIXES = frozenset({ACK_PREFIX, CHIEF_ACK_PREFIX, LEGACY_ACK_PREFIX})
 TUI_COMMANDS = frozenset({"/cnb_tui", "/c_tui"})
 WATCH_COMMANDS = frozenset({"/cnb_watch", "/c_watch"})
@@ -165,10 +231,10 @@ class FeishuBridgeConfig:
     bot_name: str = ""
     group_message_routing: str = DEFAULT_GROUP_MESSAGE_ROUTING
     group_message_routing_chat_ids: frozenset[str] = frozenset()
-    pilot_role: str = DEFAULT_PILOT_ROLE
-    pilot_name: str = DEFAULT_PILOT_NAME
-    pilot_tmux: str = DEFAULT_PILOT_TMUX
-    bridge_tmux: str = DEFAULT_BRIDGE_TMUX
+    pilot_role: PilotRole = SUPERVISOR_ROLE
+    pilot_name: str = SUPERVISOR_ROLE.default_name
+    pilot_tmux: str = SUPERVISOR_ROLE.default_tmux
+    bridge_tmux: str = SUPERVISOR_ROLE.default_bridge_tmux
     agent: str = "codex"
     auto_start: bool = True
     startup_wait_seconds: float = 2.0
@@ -207,9 +273,9 @@ class FeishuBridgeConfig:
         agent = str(section.get("agent") or os.environ.get("CNB_AGENT") or "codex")
         if agent not in SUPPORTED_PILOT_AGENTS:
             agent = "codex"
-        role = _pilot_role(_first_value(section, "role", "pilot_role", "cnb_role", "supervisor_role"))
-        if role == DEFAULT_PILOT_ROLE and _first_value(section, "device_chief_name", "device-chief-name"):
-            role = DEVICE_CHIEF_ROLE
+        role = _resolve_role(_first_value(section, "role", "pilot_role", "cnb_role", "supervisor_role"))
+        if role is SUPERVISOR_ROLE and _first_value(section, "device_chief_name", "device-chief-name"):
+            role = CHIEF_ROLE
         activity_repeat_raw = section.get("activity_update_repeat_seconds")
         if activity_repeat_raw is None:
             activity_repeat_raw = section.get("activity_repeat_seconds")
@@ -265,9 +331,7 @@ class FeishuBridgeConfig:
                 _strings(section, "allowed_sender_ids", "allowed-sender-ids", "sender_ids", "sender_id")
             ),
             ignored_sender_ids=frozenset(_strings(section, "ignored_sender_ids", "ignored-sender-ids")),
-            bot_open_id=str(
-                _first_value(section, "bot_open_id", "bot-open-id", "app_bot_open_id", "app_bot_id") or ""
-            ),
+            bot_open_id=str(_first_value(section, "bot_open_id", "bot-open-id", "app_bot_open_id", "app_bot_id") or ""),
             bot_name=str(_first_value(section, "bot_name", "bot-name", "app_bot_name") or ""),
             group_message_routing=_group_message_routing(
                 _first_value(section, "group_message_routing", "group-routing", "group_routing")
@@ -284,22 +348,22 @@ class FeishuBridgeConfig:
             ),
             pilot_role=role,
             pilot_name=str(
-                _first_value(section, *_pilot_name_keys(role))
+                _first_value(section, *role.name_config_keys)
                 or section.get("supervisor_name")
                 or section.get("pilot_name")
                 or section.get("on_duty_name")
                 or section.get("session")
-                or _default_pilot_name(role)
+                or role.default_name
             ),
             pilot_tmux=str(
-                _first_value(section, *_pilot_tmux_keys(role))
+                _first_value(section, *role.tmux_config_keys)
                 or section.get("supervisor_tmux")
                 or section.get("pilot_tmux")
                 or section.get("tmux_session")
-                or _default_pilot_tmux(role)
+                or role.default_tmux
             ),
             bridge_tmux=str(
-                section.get("bridge_tmux") or section.get("bridge_tmux_session") or _default_bridge_tmux(role)
+                section.get("bridge_tmux") or section.get("bridge_tmux_session") or role.default_bridge_tmux
             ),
             agent=agent,
             auto_start=_bool(section.get("auto_start"), True),
@@ -326,7 +390,7 @@ class FeishuBridgeConfig:
                 section.get("activity_render_style") or section.get("render_style")
             ),
             tui_capture_lines=_int(section.get("tui_capture_lines"), 120),
-            watch_tmux=str(section.get("watch_tmux") or section.get("watch_tmux_session") or _default_watch_tmux(role)),
+            watch_tmux=str(section.get("watch_tmux") or section.get("watch_tmux_session") or role.default_watch_tmux),
             watch_host=str(section.get("watch_host") or DEFAULT_WATCH_HOST),
             watch_port=_int(section.get("watch_port"), DEFAULT_WATCH_PORT),
             watch_public_url=str(section.get("watch_public_url") or ""),
@@ -430,83 +494,33 @@ def _notification_policy(value: Any) -> str:
     return policy if policy in SUPPORTED_NOTIFICATION_POLICIES else DEFAULT_NOTIFICATION_POLICY
 
 
-def _pilot_role(value: Any) -> str:
+_ROLE_ALIASES: dict[str, PilotRole] = {
+    "chief": CHIEF_ROLE,
+    "devicechief": CHIEF_ROLE,
+    "device_chief": CHIEF_ROLE,
+    "machine_chief": CHIEF_ROLE,
+    "supervisor": SUPERVISOR_ROLE,
+    "device_supervisor": SUPERVISOR_ROLE,
+    "terminal_supervisor": SUPERVISOR_ROLE,
+}
+
+
+def _resolve_role(value: Any) -> PilotRole:
     text = str(value or "").strip().lower().replace("-", "_")
-    aliases = {
-        "chief": DEVICE_CHIEF_ROLE,
-        "devicechief": DEVICE_CHIEF_ROLE,
-        "device_chief": DEVICE_CHIEF_ROLE,
-        "machine_chief": DEVICE_CHIEF_ROLE,
-        "supervisor": DEFAULT_PILOT_ROLE,
-        "device_supervisor": DEFAULT_PILOT_ROLE,
-        "terminal_supervisor": DEFAULT_PILOT_ROLE,
-    }
-    role = aliases.get(text, text)
-    return role if role in SUPPORTED_PILOT_ROLES else DEFAULT_PILOT_ROLE
-
-
-def _pilot_name_keys(role: str) -> tuple[str, ...]:
-    if role == DEVICE_CHIEF_ROLE:
-        return (
-            "device_chief_name",
-            "device-chief-name",
-            "chief_name",
-            "chief-name",
-            "device_supervisor_name",
-            "terminal_supervisor_name",
-        )
-    return (
-        "device_supervisor_name",
-        "terminal_supervisor_name",
-        "device_chief_name",
-        "device-chief-name",
-    )
-
-
-def _pilot_tmux_keys(role: str) -> tuple[str, ...]:
-    if role == DEVICE_CHIEF_ROLE:
-        return (
-            "device_chief_tmux",
-            "device-chief-tmux",
-            "chief_tmux",
-            "chief-tmux",
-            "device_supervisor_tmux",
-            "terminal_supervisor_tmux",
-        )
-    return (
-        "device_supervisor_tmux",
-        "terminal_supervisor_tmux",
-        "device_chief_tmux",
-        "device-chief-tmux",
-    )
-
-
-def _default_pilot_name(role: str) -> str:
-    return DEFAULT_CHIEF_NAME if role == DEVICE_CHIEF_ROLE else DEFAULT_PILOT_NAME
-
-
-def _default_pilot_tmux(role: str) -> str:
-    return DEFAULT_CHIEF_TMUX if role == DEVICE_CHIEF_ROLE else DEFAULT_PILOT_TMUX
-
-
-def _default_bridge_tmux(role: str) -> str:
-    return DEFAULT_CHIEF_BRIDGE_TMUX if role == DEVICE_CHIEF_ROLE else DEFAULT_BRIDGE_TMUX
-
-
-def _default_watch_tmux(role: str) -> str:
-    return DEFAULT_CHIEF_WATCH_TMUX if role == DEVICE_CHIEF_ROLE else DEFAULT_WATCH_TMUX
+    return _ROLE_ALIASES.get(text, SUPERVISOR_ROLE)
 
 
 def role_label(cfg: FeishuBridgeConfig | None) -> str:
-    return DEVICE_CHIEF_LABEL if cfg is not None and cfg.pilot_role == DEVICE_CHIEF_ROLE else DEVICE_SUPERVISOR_LABEL
+    role = cfg.pilot_role if cfg else SUPERVISOR_ROLE
+    return role.label
 
 
 def role_status_title(cfg: FeishuBridgeConfig) -> str:
-    return "CNB 机器总管状态" if cfg.pilot_role == DEVICE_CHIEF_ROLE else "CNB 设备状态"
+    return cfg.pilot_role.status_title
 
 
 def ack_prefix(cfg: FeishuBridgeConfig) -> str:
-    return CHIEF_ACK_PREFIX if cfg.pilot_role == DEVICE_CHIEF_ROLE else ACK_PREFIX
+    return cfg.pilot_role.ack_prefix
 
 
 def feishu_command_prefix(cfg: FeishuBridgeConfig) -> str:
@@ -2295,11 +2309,11 @@ def _split_activity_card_lines(body: str) -> list[str]:
 
 
 def _activity_card_screen_markdown(section: ActivitySection) -> str:
-    lines, omitted = _activity_card_screen_lines(section.body)
+    lines, _omitted = _activity_card_screen_lines(section.body)
     if not lines:
         return "(当前 TUI 没有可见内容)"
     rendered: list[str] = []
-    for index, line in enumerate(lines, 1):
+    for line in lines:
         rendered.append(_render_activity_line(line))
     return "\n".join(rendered)
 
@@ -2347,7 +2361,9 @@ def _render_activity_line(text: str) -> str:
     lower = stripped.lower()
     if "http 400" in lower or "invalid ids" in lower or "traceback" in lower or "error" in lower:
         return f"<font color='red'><b>{escaped}</b></font>"
-    if stripped.startswith(("回复 ", "• ", "◦ ", "● ", "› ", "> ", "Working", "Run ", "gpt-", "当前一屏", "实时一屏", "更新于")):
+    if stripped.startswith(
+        ("回复 ", "• ", "◦ ", "● ", "› ", "> ", "Working", "Run ", "gpt-", "当前一屏", "实时一屏", "更新于")
+    ):
         return f"<font color='grey'>{escaped}</font>"
     return f"<b>{escaped}</b>" if escaped.strip() else escaped
 
@@ -2355,17 +2371,39 @@ def _render_activity_line(text: str) -> str:
 def _is_noise_screen_line(line: str, noise_blob: str) -> bool:
     if not line:
         return False
-    if line.startswith(("实时一屏", "当前一屏", "更新于", "回复 ", "cnb_Macbook_", "cnb_Macbook_主管同学", "cnb_Macbook_主管同学机器人")):
+    if line.startswith(
+        (
+            "实时一屏",
+            "当前一屏",
+            "更新于",
+            "回复 ",
+            "cnb_Macbook_",
+            "cnb_Macbook_主管同学",
+            "cnb_Macbook_主管同学机器人",
+        )
+    ):
         return True
-    if line.startswith(("• ", "◦ ", "● ", "› ", "> ", "Working", "Run ", "gpt-", "background terminal running", "/ps to view", "esc to interrupt")):
+    if line.startswith(
+        (
+            "• ",
+            "◦ ",
+            "● ",
+            "› ",
+            "> ",
+            "Working",
+            "Run ",
+            "gpt-",
+            "background terminal running",
+            "/ps to view",
+            "esc to interrupt",
+        )
+    ):
         return True
     if line in {"Codex screen", "Claude Code screen"}:
         return True
     if line in noise_blob:
         return True
-    if len(line) >= 12 and noise_blob.find(line) >= 0:
-        return True
-    return False
+    return len(line) >= 12 and noise_blob.find(line) >= 0
 
 
 def send_activity_update(cfg: FeishuBridgeConfig, event: FeishuInboundEvent, elapsed_seconds: int) -> BridgeResult:
@@ -2445,9 +2483,7 @@ def _activity_monitor_loop(event: FeishuInboundEvent, cfg: FeishuBridgeConfig) -
     if not activity_is_done(cfg, event.message_id):
         max_seconds = cfg.activity_update_max_seconds or 0
         reason = (
-            f"activity monitor reached {max_seconds}s limit"
-            if max_seconds
-            else "activity monitor schedule exhausted"
+            f"activity monitor reached {max_seconds}s limit" if max_seconds else "activity monitor schedule exhausted"
         )
         mark_activity_monitor_closed(cfg, event.message_id, reason=reason)
 
@@ -2528,7 +2564,8 @@ def send_reply_hermes_lark_cli(
     *,
     idempotency_key: str = "",
 ) -> BridgeResult:
-    cmd = lark_cli_command(cfg) + [
+    cmd = [
+        *lark_cli_command(cfg),
         "im",
         "+messages-reply",
         "--as",
@@ -2740,7 +2777,11 @@ def reply_to_command(
 
 def command_help_text(cfg: FeishuBridgeConfig | None = None) -> str:
     label = role_label(cfg)
-    status_scope = "机器总管、设备主管、团队工作面、用户前台 CLI" if cfg and cfg.pilot_role == DEVICE_CHIEF_ROLE else "设备主管、团队工作面、用户前台 CLI"
+    status_scope = (
+        "机器总管、设备主管、团队工作面、用户前台 CLI"
+        if cfg and cfg.pilot_role == DEVICE_CHIEF_ROLE
+        else "设备主管、团队工作面、用户前台 CLI"
+    )
     return (
         f"CNB 飞书可以直接用自然语言说明目标，{label}会自己选择需要的本机能力。\n\n"
         "精确命令是可选兜底：\n"
@@ -3624,7 +3665,7 @@ def consume_hermes_events(
         print("For development only, pass --allow-any-chat.", file=sys.stderr)
         return 1
 
-    cmd = lark_cli_command(cfg) + ["event", "consume", cfg.event_key, "--as", cfg.identity]
+    cmd = [*lark_cli_command(cfg), "event", "consume", cfg.event_key, "--as", cfg.identity]
     if max_events > 0:
         cmd.extend(["--max-events", str(max_events)])
     if timeout:
@@ -3770,9 +3811,7 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
     print(f"群消息路由: {cfg.group_message_routing} ({' / '.join(bot_bits) if bot_bits else '未配置 bot_open_id'})")
     print(f"角色: {cfg.pilot_role}")
     print(f"{role_label(cfg)}: {cfg.pilot_name}")
-    print(
-        f"{role_label(cfg)} tmux: {cfg.pilot_tmux} ({'running' if has_session(cfg.pilot_tmux) else 'stopped'})"
-    )
+    print(f"{role_label(cfg)} tmux: {cfg.pilot_tmux} ({'running' if has_session(cfg.pilot_tmux) else 'stopped'})")
     print(f"bridge tmux: {cfg.bridge_tmux} ({'running' if has_session(cfg.bridge_tmux) else 'stopped'})")
     print(f"watch tmux: {cfg.watch_tmux} ({'running' if has_session(cfg.watch_tmux) else 'stopped'})")
     print("飞书命令: /cnb_tui, /c_tui, /cnb_watch, /c_watch, /cnb_status, /c_status")

@@ -262,7 +262,7 @@ chat_ids = ["oc_a", "oc_b"]
         assert 'bot_open_id = "ou_chief"' in written
         assert 'bot_name = "CNB_机器总管"' in written
         assert 'group_message_routing_chat_ids = ["oc_control"]' in written
-        assert 'device_supervisor_name' not in written
+        assert "device_supervisor_name" not in written
 
     def test_ngrok_public_url_for_matches_requested_port(self, monkeypatch):
         monkeypatch.setattr(
@@ -1561,7 +1561,7 @@ class TestRouting:
         text = feishu_bridge.render_activity_snapshot_text(snapshots[0])
         assert snapshots[0].style == "codex"
         assert snapshots[0].elapsed_seconds == 20
-        assert snapshots[0].title == "Codex 实时一屏 · 20s"
+        assert snapshots[0].title == "20s"
         assert "Codex screen" in text
         assert "Working" in text
         assert "CNB tmux" not in text

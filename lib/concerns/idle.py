@@ -2,7 +2,6 @@
 
 import re
 
-
 from .base import Concern
 from .config import DispatcherConfig
 from .coral import CoralManager
@@ -96,5 +95,3 @@ class IdleKiller(Concern):
                     board_send(self.cfg, "All", f"[Dispatcher] {name} 闲置超过 30 分钟，已终止。")
             else:
                 self.idle_since.pop(name, None)
-
-
