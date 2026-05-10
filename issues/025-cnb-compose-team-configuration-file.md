@@ -2,7 +2,7 @@
 number: 25
 title: "cnb compose: team configuration file"
 state: CLOSED
-labels: [enhancement]
+labels: ["enhancement"]
 assignees: []
 created: 2026-05-06
 updated: 2026-05-06

@@ -2,15 +2,16 @@
 number: 30
 title: "Self-adaptive team: auto-scaling + agent ownership protection"
 state: OPEN
-labels: []
+labels: ["phase:2", "org-design"]
 assignees: []
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-08
 ---
 
 # #30 Self-adaptive team: auto-scaling + agent ownership protection
 
 **State:** OPEN
+**Labels:** phase:2, org-design
 
 ---
 

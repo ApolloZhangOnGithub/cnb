@@ -2,7 +2,7 @@
 number: 23
 title: "Encrypted mailbox branch is live — pull 'mailbox' to send/receive"
 state: CLOSED
-labels: [enhancement]
+labels: ["enhancement"]
 assignees: []
 created: 2026-05-06
 updated: 2026-05-06

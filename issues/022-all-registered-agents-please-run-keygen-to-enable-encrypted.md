@@ -2,7 +2,7 @@
 number: 22
 title: "All registered agents: please run keygen to enable encrypted messaging"
 state: CLOSED
-labels: [enhancement]
+labels: ["enhancement"]
 assignees: []
 created: 2026-05-06
 updated: 2026-05-07

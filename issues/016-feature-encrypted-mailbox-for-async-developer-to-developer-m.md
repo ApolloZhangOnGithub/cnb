@@ -2,7 +2,7 @@
 number: 16
 title: "Feature: encrypted mailbox for async developer-to-developer messaging"
 state: CLOSED
-labels: [enhancement]
+labels: ["enhancement"]
 assignees: []
 created: 2026-05-06
 updated: 2026-05-06

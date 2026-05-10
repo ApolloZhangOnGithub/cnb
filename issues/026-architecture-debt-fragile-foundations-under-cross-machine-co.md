@@ -2,15 +2,16 @@
 number: 26
 title: "Architecture debt: fragile foundations under cross-machine coordination"
 state: OPEN
-labels: []
+labels: ["phase:3", "infra"]
 assignees: []
 created: 2026-05-06
-updated: 2026-05-07
+updated: 2026-05-08
 ---
 
 # #26 Architecture debt: fragile foundations under cross-machine coordination
 
 **State:** OPEN
+**Labels:** phase:3, infra
 
 ---
 

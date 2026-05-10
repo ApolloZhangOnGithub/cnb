@@ -2,15 +2,16 @@
 number: 29
 title: "Design: agent-native knowledge sharing system (replace StackOverflow for agents)"
 state: OPEN
-labels: []
+labels: ["phase:3", "org-design"]
 assignees: []
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-08
 ---
 
 # #29 Design: agent-native knowledge sharing system (replace StackOverflow for agents)
 
 **State:** OPEN
+**Labels:** phase:3, org-design
 
 ---
 

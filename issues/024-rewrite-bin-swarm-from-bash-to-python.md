@@ -2,7 +2,7 @@
 number: 24
 title: "Rewrite bin/swarm from bash to Python"
 state: CLOSED
-labels: [enhancement]
+labels: ["enhancement"]
 assignees: []
 created: 2026-05-06
 updated: 2026-05-06

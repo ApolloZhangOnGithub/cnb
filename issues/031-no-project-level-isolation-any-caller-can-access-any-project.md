@@ -2,7 +2,7 @@
 number: 31
 title: "No project-level isolation: any caller can access any project's agents"
 state: CLOSED
-labels: [bug]
+labels: ["bug"]
 assignees: []
 created: 2026-05-07
 updated: 2026-05-07

@@ -2,7 +2,7 @@
 number: 14
 title: "board suspend 和 swarm 的 suspend 机制不互通"
 state: CLOSED
-labels: [bug]
+labels: ["bug"]
 assignees: []
 created: 2026-05-06
 updated: 2026-05-06

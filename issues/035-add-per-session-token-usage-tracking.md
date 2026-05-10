@@ -2,7 +2,7 @@
 number: 35
 title: "Add per-session token usage tracking"
 state: CLOSED
-labels: [enhancement]
+labels: ["enhancement"]
 assignees: []
 created: 2026-05-07
 updated: 2026-05-07
