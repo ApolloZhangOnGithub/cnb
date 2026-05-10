@@ -24,7 +24,7 @@ cnb is an organization, not just a codebase. Managing this project means managin
 
 ## Error reporting
 
-CLI modules (board_*, build_lock) follow one pattern:
+CLI modules (board_*) follow one pattern:
 
 ```python
 # Usage error → print usage + raise SystemExit(1)
