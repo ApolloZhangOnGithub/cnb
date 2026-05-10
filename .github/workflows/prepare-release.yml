@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PACKAGE_NAME: claude-nb
+  PACKAGE_NAME: c-n-b
 
 jobs:
   prepare:
@@ -91,6 +91,7 @@ jobs:
           PY
 
           python bin/sync-version --check
+          python bin/check-branding
           python bin/check-changelog
           bin/check-npm-package --install-smoke
 
