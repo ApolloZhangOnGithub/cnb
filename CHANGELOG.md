@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.49-dev (unreleased)
+
+### Bug Fixes
+
+- **GitHub contributing tab** — Rendered the contribution guide directly in `.github/CONTRIBUTING.md` instead of showing a link-only placeholder.
+
 ## 0.5.48-dev (unreleased)
 
 ### Features
