@@ -2,10 +2,10 @@
 
 cnb has two different package surfaces:
 
-- The installable CLI package is `claude-nb` on npmjs.com.
-- GitHub's repository Packages sidebar shows GitHub Packages only.
+- The canonical installable CLI package is `claude-nb` on npmjs.com.
+- The GitHub Packages sidebar is populated by the scoped mirror package `@apollozhangongithub/cnb`.
 
-These are not the same registry. Seeing "No packages published" in the GitHub sidebar does not mean the npmjs package is missing.
+These are not the same registry. Do not change the npmjs package name just to satisfy the GitHub sidebar.
 
 ## Current Package
 
@@ -21,6 +21,8 @@ Check the public package state:
 npm view claude-nb version dist-tags versions
 npm dist-tag ls claude-nb
 ```
+
+The GitHub Packages mirror exists for repository visibility and GitHub-native package metadata. It is not the primary user install path.
 
 ## Release Flow
 
@@ -50,7 +52,7 @@ npm view claude-nb version dist-tags
 
 ## GitHub Packages
 
-Do not route the existing `claude-nb` package to GitHub Packages by adding `publishConfig.registry=https://npm.pkg.github.com`.
+Do not route the existing `claude-nb` package to GitHub Packages by adding `publishConfig.registry=https://npm.pkg.github.com` to the root package. That would make normal maintainers much more likely to publish the canonical npmjs package to the wrong registry.
 
 GitHub Packages npm publishing requires a scoped package name such as `@namespace/package-name`. The current public CLI name is intentionally unscoped so users can install it with:
 
@@ -58,10 +60,17 @@ GitHub Packages npm publishing requires a scoped package name such as `@namespac
 npm install -g claude-nb
 ```
 
-If the project later needs a GitHub Packages entry for repository visibility or GitHub App workflows, handle it as a separate migration:
+To keep GitHub Packages populated without changing the user-facing npmjs package, mirror a published npmjs release into the scoped package:
 
-- Choose the namespace, likely a lowercase user or organization scope.
-- Decide whether it is a companion package or a breaking rename.
-- Publish it to GitHub Packages and connect it to this repository.
-- Document the install path separately from the npmjs package.
+```bash
+gh workflow run publish-github-package.yml -f version=0.5.1
+```
 
+The workflow downloads `claude-nb@<version>` from npmjs, rewrites only package metadata for GitHub Packages, and publishes `@apollozhangongithub/cnb@<version>` with the repository `GITHUB_TOKEN`.
+
+Rules:
+
+- Mirror release versions only, never `-dev` versions.
+- Keep npmjs `claude-nb` as the canonical install path.
+- Keep the GitHub Packages package scoped and clearly tied to this repository.
+- If the mirror package ever becomes a real supported install path, open a migration issue first.
