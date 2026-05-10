@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Validate public branding and npm install-name guardrails."""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+EXPECTED_PACKAGE = "c-n-b"
+EXPECTED_HOMEPAGE = "https://c-n-b.space"
+RETIRED_PACKAGE_PATTERN = re.compile("claude" + r"-nb", re.IGNORECASE)
+WRONG_NPM_INSTALL_PATTERN = re.compile(r"npm\s+(?:install|i)\s+(?:--global|-g)\s+cnb\b")
+SKIP_DIRS = {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__"}
+TEXT_SUFFIXES = {
+    "",
+    ".css",
+    ".html",
+    ".js",
+    ".json",
+    ".md",
+    ".py",
+    ".sh",
+    ".toml",
+    ".txt",
+    ".yml",
+    ".yaml",
+}
+
+
+def tracked_files() -> list[Path]:
+    result = subprocess.run(
+        ["git", "ls-files"],
+        cwd=ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    files = []
+    for rel in result.stdout.splitlines():
+        path = ROOT / rel
+        if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if path.suffix in TEXT_SUFFIXES:
+            files.append(path)
+    return files
+
+
+def read_pyproject_name() -> str:
+    text = (ROOT / "pyproject.toml").read_text()
+    match = re.search(r'^name\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    return match.group(1) if match else ""
+
+
+def main() -> None:
+    errors: list[str] = []
+
+    package = json.loads((ROOT / "package.json").read_text())
+    if package.get("name") != EXPECTED_PACKAGE:
+        errors.append(f"package.json name must be {EXPECTED_PACKAGE!r}, got {package.get('name')!r}")
+    if package.get("homepage") != EXPECTED_HOMEPAGE:
+        errors.append(f"package.json homepage must be {EXPECTED_HOMEPAGE!r}, got {package.get('homepage')!r}")
+
+    pyproject_name = read_pyproject_name()
+    if pyproject_name != EXPECTED_PACKAGE:
+        errors.append(f"pyproject.toml name must be {EXPECTED_PACKAGE!r}, got {pyproject_name!r}")
+
+    for path in tracked_files():
+        rel = path.relative_to(ROOT)
+        try:
+            text = path.read_text()
+        except UnicodeDecodeError:
+            continue
+        if RETIRED_PACKAGE_PATTERN.search(text):
+            errors.append(f"{rel}: contains retired package name")
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if WRONG_NPM_INSTALL_PATTERN.search(line) and "Do not" not in line and "不要" not in line:
+                errors.append(f"{rel}:{line_no}: documents the wrong npm install package")
+
+    if errors:
+        print("BRANDING CHECK FAILED:")
+        for error in errors:
+            print(f"  - {error}")
+        raise SystemExit(1)
+
+    print("OK branding guardrails passed")
+
+
+if __name__ == "__main__":
+    main()

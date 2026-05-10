@@ -6,7 +6,7 @@ cnb documentation should work like product documentation, not like a pile of not
 
 | Page | Purpose |
 |------|---------|
-| [Website](https://c-n-b.space/) | Public GitHub Pages entry for first-time visitors. |
+| [Website](https://c-n-b.space) | Public GitHub Pages entry for first-time visitors. |
 | [README](../README.md) | Product overview, install, quick start, and the shortest command reference. |
 | [Roadmap](../ROADMAP.md) | Product direction and active development themes. |
 | [Contributing](../CONTRIBUTING.md) | Contributor workflow, style, and review expectations. |

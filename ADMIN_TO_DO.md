@@ -2,50 +2,50 @@
 
 This file tracks release actions that require maintainer credentials or registry ownership.
 
-## npmjs Release
+## c-n-b npmjs Claim
 
-The repository is ready to publish `claude-nb@0.5.31`, but npmjs publishing requires an authenticated npm maintainer session.
+The canonical npm package is now `c-n-b`, which installs the `cnb` command. Do not publish or document the unhyphenated npm package name; it belongs to an unrelated package.
 
-1. Log in to npmjs:
+Current registry state checked from this workspace:
+
+- `npm view c-n-b version dist-tags versions` returns 404, so the first real `c-n-b` release will claim the package.
+- `npm view cnb name version description` resolves to an unrelated package.
+
+Before the next release:
+
+1. Log in to npmjs as the maintainer account:
 
    ```bash
    npm login
    npm whoami
    ```
 
-2. From a clean checkout of the `v0.5.31` tag, publish the package:
+2. Configure Trusted Publishing for `c-n-b` against `ApolloZhangOnGithub/cnb` and `.github/workflows/publish-npm.yml`.
+3. Run a dry-run release workflow after the rename PR merges:
 
    ```bash
-   npm publish
-   npm dist-tag add claude-nb@0.5.31 stable
+   gh workflow run publish-npm.yml -f version=0.5.44 -f dry_run=true
    ```
 
-3. Verify the public package metadata:
+4. Create the real GitHub Release only after CI and the dry run pass. The workflow should publish `c-n-b@<version>` to npmjs and mirror `@apollozhangongithub/cnb@<version>` to GitHub Packages.
+5. Verify the public install path:
 
    ```bash
-   npm view claude-nb version dist-tags engines os peerDependencies peerDependenciesMeta --json
+   npm view c-n-b version dist-tags engines os peerDependencies peerDependenciesMeta --json
+   npm install -g c-n-b
+   cnb --version
    ```
 
-4. Check the public npm page:
+6. Move the `stable` dist-tag to the same release if the workflow cannot do it through OIDC alone.
 
-   ```text
-   https://www.npmjs.com/package/claude-nb?activeTab=dependencies
-   ```
+## Site HTTPS
 
-   npm's Dependencies tab only reports JavaScript package dependencies. Runtime requirements such as Python, tmux, git, and Python packages are documented in the README and `pyproject.toml`.
+`http://c-n-b.space` is already served by GitHub Pages. GitHub Pages health reports the apex and `www` records as valid and served by Pages, but HTTPS enforcement is blocked until GitHub creates the certificate.
 
-## GitHub Packages Mirror
-
-After `claude-nb@0.5.31` is visible on npmjs, mirror it to GitHub Packages:
+Retry after the certificate appears:
 
 ```bash
-gh workflow run publish-github-package.yml -f version=0.5.31
+gh api --method PUT repos/ApolloZhangOnGithub/cnb/pages \
+  -F https_enforced=true \
+  -f cname='c-n-b.space'
 ```
-
-Verify the workflow publishes `@apollozhangongithub/cnb@0.5.31`.
-
-## Recommended Follow-Up
-
-- Configure npm trusted publishing or an npm automation token so future release packages can be published by GitHub Actions instead of a local maintainer shell.
-- Keep npmjs `claude-nb` as the canonical user install path.
-- Keep GitHub Packages as a scoped mirror only, unless a future migration issue changes that policy.

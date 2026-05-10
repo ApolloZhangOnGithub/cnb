@@ -2,7 +2,7 @@
 
 The public cnb introduction site is served by GitHub Pages at:
 
-<https://c-n-b.space/>
+<https://c-n-b.space>
 
 GitHub Pages remains the hosting layer. DNS should point the apex domain to GitHub Pages, with `www` redirecting through Pages:
 

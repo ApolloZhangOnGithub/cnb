@@ -5,18 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="Contribution workflow, release rules, and safety expectations for cnb."
+      content="Contribution workflow, release rules, and safety expectations for c-n-b."
     >
-    <title>Contributing | cnb</title>
+    <title>Contributing | c-n-b</title>
     <link rel="canonical" href="https://c-n-b.space/contributing.html">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="index.html" aria-label="cnb home">
+      <a class="brand" href="index.html" aria-label="c-n-b home">
         <span class="brand-mark" aria-hidden="true">c</span>
-        <span>cnb</span>
+        <span>c-n-b</span>
       </a>
       <nav class="nav-links" aria-label="Primary navigation">
         <a href="index.html#docs">Docs</a>
@@ -57,11 +57,12 @@
           <section id="checks">
             <h2>Verification</h2>
             <p>Run the narrow check while iterating, then finish with the relevant gates.</p>
-            <pre><code>ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog tests/
-ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog tests/
+            <pre><code>ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding tests/
+ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding tests/
 mypy lib/
 python -m pytest tests/ -v --tb=short
 python bin/sync-version --check
+python bin/check-branding
 python bin/check-changelog
 python bin/secret-scan --all
 bin/check-npm-package --install-smoke</code></pre>
@@ -73,7 +74,7 @@ bin/check-npm-package --install-smoke</code></pre>
               <li>Run the <strong>Prepare Release</strong> workflow with a release version and changelog body.</li>
               <li>Merge the generated release PR after checks pass.</li>
               <li>Create the matching GitHub Release tag, such as <code>v0.5.43</code>.</li>
-              <li>The npm workflow publishes <code>claude-nb</code>, verifies the public install, and mirrors to GitHub Packages.</li>
+              <li>The npm workflow publishes <code>c-n-b</code>, verifies the public install, and mirrors to GitHub Packages.</li>
             </ol>
           </section>
 
@@ -91,7 +92,7 @@ bin/check-npm-package --install-smoke</code></pre>
     </main>
 
     <footer class="site-footer">
-      <span>cnb contribution quality is measured by ownership, verification, and handoff clarity.</span>
+      <span>c-n-b contribution quality is measured by ownership, verification, and handoff clarity.</span>
       <a href="index.html">Home</a>
       <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/CODE_OF_CONDUCT.md">Code of Conduct</a>
     </footer>
