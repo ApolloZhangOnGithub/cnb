@@ -32,12 +32,19 @@ from lib.tmux_utils import has_session, tmux_send
 
 DEFAULT_EVENT_KEY = "im.message.receive_v1"
 DEVICE_SUPERVISOR_LABEL = "设备主管同学"
+DEVICE_CHIEF_LABEL = "机器总管同学"
 LEGACY_SUPERVISOR_LABEL = "终端主管同学"
+DEFAULT_PILOT_ROLE = "device_supervisor"
+DEVICE_CHIEF_ROLE = "device_chief"
 DEFAULT_PILOT_NAME = "device-supervisor"
+DEFAULT_CHIEF_NAME = "device-chief"
 DEFAULT_PILOT_TMUX = "cnb-device-supervisor"
+DEFAULT_CHIEF_TMUX = "cnb-device-chief"
 LEGACY_DEFAULT_PILOT_TMUX = "cnb-terminal-supervisor"
 DEFAULT_BRIDGE_TMUX = "cnb-feishu-bridge"
+DEFAULT_CHIEF_BRIDGE_TMUX = "cnb-feishu-chief-bridge"
 DEFAULT_WATCH_TMUX = "cnb-feishu-watch"
+DEFAULT_CHIEF_WATCH_TMUX = "cnb-feishu-chief-watch"
 DEFAULT_WATCH_HOST = "127.0.0.1"
 DEFAULT_WATCH_PORT = 8765
 DEFAULT_WATCH_REFRESH_MS = 250
@@ -45,10 +52,13 @@ DEFAULT_WEBHOOK_HOST = "127.0.0.1"
 DEFAULT_WEBHOOK_PORT = 8787
 DEFAULT_TRANSPORT = "local_openapi"
 SUPPORTED_PILOT_AGENTS = frozenset({"codex"})
+SUPPORTED_PILOT_ROLES = frozenset({DEFAULT_PILOT_ROLE, DEVICE_CHIEF_ROLE})
 SUPPORTED_TRANSPORTS = frozenset({"local_openapi", "hermes_lark_cli"})
 SUPPORTED_ACTIVITY_RENDER_STYLES = frozenset({"auto", "codex", "claude"})
+SUPPORTED_GROUP_MESSAGE_ROUTING = frozenset({"all", "targeted"})
 SUPPORTED_NOTIFICATION_POLICIES = frozenset({"final_only", "ack", "live"})
 DEFAULT_NOTIFICATION_POLICY = "final_only"
+DEFAULT_GROUP_MESSAGE_ROUTING = "all"
 DEFAULT_READBACK_LIMIT = 12
 MAX_READBACK_LIMIT = 50
 DEFAULT_RESOURCE_HANDOFF_MAX_BYTES = 25 * 1024 * 1024
@@ -56,8 +66,9 @@ MAX_RESOURCE_HANDOFF_BYTES = 100 * 1024 * 1024
 SHORT_REPLY_MAX_CHARS = 280
 SHORT_REPLY_MAX_LINES = 4
 ACK_PREFIX = f"已转给这台 Mac 的{DEVICE_SUPERVISOR_LABEL}"
+CHIEF_ACK_PREFIX = f"已转给 CNB {DEVICE_CHIEF_LABEL}"
 LEGACY_ACK_PREFIX = f"已转给这台 Mac 的{LEGACY_SUPERVISOR_LABEL}"
-ACK_PREFIXES = frozenset({ACK_PREFIX, LEGACY_ACK_PREFIX})
+ACK_PREFIXES = frozenset({ACK_PREFIX, CHIEF_ACK_PREFIX, LEGACY_ACK_PREFIX})
 TUI_COMMANDS = frozenset({"/cnb_tui", "/c_tui"})
 WATCH_COMMANDS = frozenset({"/cnb_watch", "/c_watch"})
 HELP_COMMANDS = frozenset({"/cnb_help", "/c_help"})
@@ -68,6 +79,8 @@ ACTIVITY_CARD_SCREEN_MAX_LINES = 12
 ACTIVITY_CARD_SCREEN_LINE_MAX_CHARS = 140
 DEFAULT_ACTIVITY_UPDATE_SECONDS = (1,)
 DEFAULT_ACTIVITY_UPDATE_REPEAT_SECONDS = 1
+DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS = 600
+ACTIVITY_STALE_SECONDS = 600
 ACTIVITY_WORK_RE = re.compile(r"^\s*[•●◦]\s*(Working|Thinking|Running)\b", re.IGNORECASE | re.MULTILINE)
 ACTIVITY_PROMPT_RE = re.compile(r"^\s*[›❯>]\s*", re.MULTILINE)
 AGENT_PROCESS_RE = re.compile(r"(^|/|\s)(codex|claude)(\s|$)", re.IGNORECASE)
@@ -92,6 +105,8 @@ class FeishuInboundEvent:
     sender_id: str = ""
     chat_type: str = ""
     message_type: str = ""
+    mention_ids: tuple[str, ...] = ()
+    mention_names: tuple[str, ...] = ()
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -133,6 +148,7 @@ class FeishuBridgeConfig:
     project_root: Path
     enabled: bool = True
     transport: str = DEFAULT_TRANSPORT
+    lark_cli_profile: str = ""
     app_id: str = ""
     app_secret: str = ""
     verification_token: str = ""
@@ -145,6 +161,11 @@ class FeishuBridgeConfig:
     auto_bind_chat: bool = False
     allowed_sender_ids: frozenset[str] = frozenset()
     ignored_sender_ids: frozenset[str] = frozenset()
+    bot_open_id: str = ""
+    bot_name: str = ""
+    group_message_routing: str = DEFAULT_GROUP_MESSAGE_ROUTING
+    group_message_routing_chat_ids: frozenset[str] = frozenset()
+    pilot_role: str = DEFAULT_PILOT_ROLE
     pilot_name: str = DEFAULT_PILOT_NAME
     pilot_tmux: str = DEFAULT_PILOT_TMUX
     bridge_tmux: str = DEFAULT_BRIDGE_TMUX
@@ -156,6 +177,7 @@ class FeishuBridgeConfig:
     activity_updates: bool = True
     activity_update_seconds: tuple[int, ...] = DEFAULT_ACTIVITY_UPDATE_SECONDS
     activity_update_repeat_seconds: int = DEFAULT_ACTIVITY_UPDATE_REPEAT_SECONDS
+    activity_update_max_seconds: int = DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS
     activity_render_style: str = "auto"
     tui_capture_lines: int = 120
     watch_tmux: str = DEFAULT_WATCH_TMUX
@@ -185,6 +207,9 @@ class FeishuBridgeConfig:
         agent = str(section.get("agent") or os.environ.get("CNB_AGENT") or "codex")
         if agent not in SUPPORTED_PILOT_AGENTS:
             agent = "codex"
+        role = _pilot_role(_first_value(section, "role", "pilot_role", "cnb_role", "supervisor_role"))
+        if role == DEFAULT_PILOT_ROLE and _first_value(section, "device_chief_name", "device-chief-name"):
+            role = DEVICE_CHIEF_ROLE
         activity_repeat_raw = section.get("activity_update_repeat_seconds")
         if activity_repeat_raw is None:
             activity_repeat_raw = section.get("activity_repeat_seconds")
@@ -221,6 +246,7 @@ class FeishuBridgeConfig:
             project_root=root,
             enabled=_bool(section.get("enabled"), True),
             transport=str(section.get("transport") or DEFAULT_TRANSPORT),
+            lark_cli_profile=str(section.get("lark_cli_profile") or section.get("profile") or ""),
             app_id=str(section.get("app_id") or os.environ.get("FEISHU_APP_ID") or ""),
             app_secret=str(section.get("app_secret") or os.environ.get("FEISHU_APP_SECRET") or ""),
             verification_token=str(
@@ -239,24 +265,42 @@ class FeishuBridgeConfig:
                 _strings(section, "allowed_sender_ids", "allowed-sender-ids", "sender_ids", "sender_id")
             ),
             ignored_sender_ids=frozenset(_strings(section, "ignored_sender_ids", "ignored-sender-ids")),
+            bot_open_id=str(
+                _first_value(section, "bot_open_id", "bot-open-id", "app_bot_open_id", "app_bot_id") or ""
+            ),
+            bot_name=str(_first_value(section, "bot_name", "bot-name", "app_bot_name") or ""),
+            group_message_routing=_group_message_routing(
+                _first_value(section, "group_message_routing", "group-routing", "group_routing")
+            ),
+            group_message_routing_chat_ids=frozenset(
+                _strings(
+                    section,
+                    "group_message_routing_chat_ids",
+                    "group-message-routing-chat-ids",
+                    "group_message_routing_chats",
+                    "group-routing-chat-ids",
+                    "group_routing_chat_ids",
+                )
+            ),
+            pilot_role=role,
             pilot_name=str(
-                section.get("device_supervisor_name")
-                or section.get("terminal_supervisor_name")
+                _first_value(section, *_pilot_name_keys(role))
                 or section.get("supervisor_name")
                 or section.get("pilot_name")
                 or section.get("on_duty_name")
                 or section.get("session")
-                or DEFAULT_PILOT_NAME
+                or _default_pilot_name(role)
             ),
             pilot_tmux=str(
-                section.get("device_supervisor_tmux")
-                or section.get("terminal_supervisor_tmux")
+                _first_value(section, *_pilot_tmux_keys(role))
                 or section.get("supervisor_tmux")
                 or section.get("pilot_tmux")
                 or section.get("tmux_session")
-                or DEFAULT_PILOT_TMUX
+                or _default_pilot_tmux(role)
             ),
-            bridge_tmux=str(section.get("bridge_tmux") or section.get("bridge_tmux_session") or DEFAULT_BRIDGE_TMUX),
+            bridge_tmux=str(
+                section.get("bridge_tmux") or section.get("bridge_tmux_session") or _default_bridge_tmux(role)
+            ),
             agent=agent,
             auto_start=_bool(section.get("auto_start"), True),
             startup_wait_seconds=_float(section.get("startup_wait_seconds"), 2.0),
@@ -271,11 +315,18 @@ class FeishuBridgeConfig:
                 _int_list(section.get("activity_update_seconds"), DEFAULT_ACTIVITY_UPDATE_SECONDS)
             ),
             activity_update_repeat_seconds=max(0, _int(activity_repeat_raw, DEFAULT_ACTIVITY_UPDATE_REPEAT_SECONDS)),
+            activity_update_max_seconds=max(
+                0,
+                _int(
+                    _first_value(section, "activity_update_max_seconds", "activity_max_seconds"),
+                    DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS,
+                ),
+            ),
             activity_render_style=_activity_render_style(
                 section.get("activity_render_style") or section.get("render_style")
             ),
             tui_capture_lines=_int(section.get("tui_capture_lines"), 120),
-            watch_tmux=str(section.get("watch_tmux") or section.get("watch_tmux_session") or DEFAULT_WATCH_TMUX),
+            watch_tmux=str(section.get("watch_tmux") or section.get("watch_tmux_session") or _default_watch_tmux(role)),
             watch_host=str(section.get("watch_host") or DEFAULT_WATCH_HOST),
             watch_port=_int(section.get("watch_port"), DEFAULT_WATCH_PORT),
             watch_public_url=str(section.get("watch_public_url") or ""),
@@ -377,6 +428,97 @@ def _notification_policy(value: Any) -> str:
     }
     policy = aliases.get(policy, policy)
     return policy if policy in SUPPORTED_NOTIFICATION_POLICIES else DEFAULT_NOTIFICATION_POLICY
+
+
+def _pilot_role(value: Any) -> str:
+    text = str(value or "").strip().lower().replace("-", "_")
+    aliases = {
+        "chief": DEVICE_CHIEF_ROLE,
+        "devicechief": DEVICE_CHIEF_ROLE,
+        "device_chief": DEVICE_CHIEF_ROLE,
+        "machine_chief": DEVICE_CHIEF_ROLE,
+        "supervisor": DEFAULT_PILOT_ROLE,
+        "device_supervisor": DEFAULT_PILOT_ROLE,
+        "terminal_supervisor": DEFAULT_PILOT_ROLE,
+    }
+    role = aliases.get(text, text)
+    return role if role in SUPPORTED_PILOT_ROLES else DEFAULT_PILOT_ROLE
+
+
+def _pilot_name_keys(role: str) -> tuple[str, ...]:
+    if role == DEVICE_CHIEF_ROLE:
+        return (
+            "device_chief_name",
+            "device-chief-name",
+            "chief_name",
+            "chief-name",
+            "device_supervisor_name",
+            "terminal_supervisor_name",
+        )
+    return (
+        "device_supervisor_name",
+        "terminal_supervisor_name",
+        "device_chief_name",
+        "device-chief-name",
+    )
+
+
+def _pilot_tmux_keys(role: str) -> tuple[str, ...]:
+    if role == DEVICE_CHIEF_ROLE:
+        return (
+            "device_chief_tmux",
+            "device-chief-tmux",
+            "chief_tmux",
+            "chief-tmux",
+            "device_supervisor_tmux",
+            "terminal_supervisor_tmux",
+        )
+    return (
+        "device_supervisor_tmux",
+        "terminal_supervisor_tmux",
+        "device_chief_tmux",
+        "device-chief-tmux",
+    )
+
+
+def _default_pilot_name(role: str) -> str:
+    return DEFAULT_CHIEF_NAME if role == DEVICE_CHIEF_ROLE else DEFAULT_PILOT_NAME
+
+
+def _default_pilot_tmux(role: str) -> str:
+    return DEFAULT_CHIEF_TMUX if role == DEVICE_CHIEF_ROLE else DEFAULT_PILOT_TMUX
+
+
+def _default_bridge_tmux(role: str) -> str:
+    return DEFAULT_CHIEF_BRIDGE_TMUX if role == DEVICE_CHIEF_ROLE else DEFAULT_BRIDGE_TMUX
+
+
+def _default_watch_tmux(role: str) -> str:
+    return DEFAULT_CHIEF_WATCH_TMUX if role == DEVICE_CHIEF_ROLE else DEFAULT_WATCH_TMUX
+
+
+def role_label(cfg: FeishuBridgeConfig | None) -> str:
+    return DEVICE_CHIEF_LABEL if cfg is not None and cfg.pilot_role == DEVICE_CHIEF_ROLE else DEVICE_SUPERVISOR_LABEL
+
+
+def role_status_title(cfg: FeishuBridgeConfig) -> str:
+    return "CNB 机器总管状态" if cfg.pilot_role == DEVICE_CHIEF_ROLE else "CNB 设备状态"
+
+
+def ack_prefix(cfg: FeishuBridgeConfig) -> str:
+    return CHIEF_ACK_PREFIX if cfg.pilot_role == DEVICE_CHIEF_ROLE else ACK_PREFIX
+
+
+def feishu_command_prefix(cfg: FeishuBridgeConfig) -> str:
+    default_path = (Path.home() / ".cnb" / "config.toml").resolve()
+    if cfg.config_path.expanduser().resolve() == default_path:
+        return "cnb feishu"
+    return f"cnb feishu --config {shlex.quote(str(cfg.config_path))}"
+
+
+def _group_message_routing(value: Any) -> str:
+    mode = str(value or DEFAULT_GROUP_MESSAGE_ROUTING).strip().lower().replace("-", "_")
+    return mode if mode in SUPPORTED_GROUP_MESSAGE_ROUTING else DEFAULT_GROUP_MESSAGE_ROUTING
 
 
 def _first_value(section: dict[str, Any], *keys: str) -> Any:
@@ -483,6 +625,45 @@ def _decode_content(content: Any) -> str:
     return text
 
 
+def _mention_id(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    return (
+        _id_value(value.get("id"))
+        or _id_value(value.get("user_id"))
+        or _id_value(value.get("user"))
+        or _id_value(value.get("open_id"))
+        or _id_value(value.get("member_id"))
+    )
+
+
+def _extract_mentions(
+    root: dict[str, Any],
+    message: dict[str, Any],
+    payload: dict[str, Any],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    mentions_value = root.get("mentions")
+    if mentions_value is None:
+        mentions_value = message.get("mentions")
+    if mentions_value is None:
+        mentions_value = payload.get("mentions")
+    if not isinstance(mentions_value, list):
+        return (), ()
+
+    ids: list[str] = []
+    names: list[str] = []
+    for item in mentions_value:
+        if not isinstance(item, dict):
+            continue
+        mention_id = _mention_id(item)
+        if mention_id:
+            ids.append(mention_id)
+        name = str(item.get("name") or item.get("key") or "").strip()
+        if name:
+            names.append(name)
+    return tuple(dict.fromkeys(ids)), tuple(dict.fromkeys(names))
+
+
 def _event_string(root: dict[str, Any], message: dict[str, Any], payload: dict[str, Any], key: str) -> str:
     return str(root.get(key) or message.get(key) or payload.get(key) or "")
 
@@ -507,6 +688,7 @@ def extract_event(payload: dict[str, Any]) -> FeishuInboundEvent:
     chat_type = _event_string(root, message, payload, "chat_type")
     message_type = _event_string(root, message, payload, "message_type")
     text = _decode_content(root.get("content") if "content" in root else message.get("content"))
+    mention_ids, mention_names = _extract_mentions(root, message, payload)
     return FeishuInboundEvent(
         text=text,
         message_id=message_id,
@@ -518,6 +700,8 @@ def extract_event(payload: dict[str, Any]) -> FeishuInboundEvent:
         sender_id=sender_id,
         chat_type=chat_type,
         message_type=message_type,
+        mention_ids=mention_ids,
+        mention_names=mention_names,
         raw=payload,
     )
 
@@ -543,12 +727,79 @@ def should_accept(
         return False, "no allowed_chat_ids configured; pass --allow-any-chat for development"
     if cfg.allowed_sender_ids and event.sender_id not in cfg.allowed_sender_ids:
         return False, f"sender {event.sender_id or '(missing)'} not allowed"
+    group_target = should_accept_group_target(event, cfg)
+    if not group_target[0]:
+        return group_target
     return True, "accepted"
+
+
+def should_accept_group_target(event: FeishuInboundEvent, cfg: FeishuBridgeConfig) -> tuple[bool, str]:
+    if event.chat_type != "group":
+        return True, "accepted"
+    if event.chat_id in cfg.group_message_routing_chat_ids:
+        return True, "accepted"
+    if cfg.group_message_routing == "all":
+        return True, "accepted"
+    if cfg.group_message_routing != "targeted":
+        return True, "accepted"
+    if not cfg.bot_open_id:
+        return False, "group routing is targeted but bot_open_id is not configured"
+    target_ids = bot_target_ids(cfg)
+    if target_ids.intersection(event.mention_ids):
+        return True, "accepted"
+    if cfg.bot_name and cfg.bot_name in event.mention_names:
+        return True, "accepted"
+    if referenced_message_owned_by_this_bridge(event, cfg):
+        return True, "accepted"
+    return False, "group message not targeted to this bot"
+
+
+def bot_target_ids(cfg: FeishuBridgeConfig) -> frozenset[str]:
+    return frozenset(item for item in (cfg.bot_open_id, cfg.app_id) if item)
+
+
+def referenced_message_owned_by_this_bridge(event: FeishuInboundEvent, cfg: FeishuBridgeConfig) -> bool:
+    target = referenced_message_id(event)
+    if not target:
+        return False
+    payload = _load_activity_state(activity_state_path(cfg))
+    item = payload.get("messages", {}).get(target)
+    return isinstance(item, dict) and bool(item.get("routed_to_self") or item.get("outgoing_from_self"))
 
 
 def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
     projects = _project_lines(cfg)
     project_block = "\n".join(projects) if projects else "(~/.cnb/projects.json 里还没有注册项目)"
+    if cfg.pilot_role == DEVICE_CHIEF_ROLE:
+        feishu = feishu_command_prefix(cfg)
+        return (
+            f"你是 CNB 的{DEVICE_CHIEF_LABEL}，身份名是 {cfg.pilot_name}。\n"
+            "你管所有机器的 roster、active/standby、leases、跨机器 handoff 和升级处理。"
+            "你不是这台 Mac 的设备主管，也不是项目 board 里的项目同学；不要把单机 tmux/bridge 状态写成总管主状态。"
+            "如果用户问“有多少正在运行的 cnb 实例/同学/人”，必须把机器总管、各机器设备主管、项目同学、"
+            "bridge/tunnel/watch 基础设施分开列出。\n"
+            "你可以协调哪台机器接手、释放或续租项目写入权，但不要直接替项目同学写代码；需要本机操作时，"
+            "明确转给对应 device-supervisor 或进入对应项目后按该项目 board 规则执行。\n\n"
+            f"总管启动目录: {cfg.project_root}\n"
+            f"本机已注册项目:\n{project_block}\n\n"
+            "飞书消息进入后会以 [Feishu inbound] 开头，并带有 message_id。Codex 的实时 TUI "
+            "渲染不会同步到飞书；不要把终端画面当成飞书回复。接手后先判断这是跨机器协调、lease/handoff，"
+            "还是单机/单项目请求。需要用户补充信息、确认选择或授权动作时，"
+            f'可以执行 `{feishu} ask <message_id> "短问题"` 发一条不结束任务的短回复。'
+            "处理完成、卡住或需要给出结论时，"
+            f'必须在 shell 中执行 `{feishu} reply <message_id> "回复内容"` 把结果回到飞书。'
+            "如果消息里带有 parent_message_id、root_message_id、thread_id 或 [Feishu referenced message]，"
+            "说明用户是在飞书里回复/引用前文；处理时必须把这段上下文算进去。"
+            "默认飞书通知策略是只推最终结果；不要为了实时状态连续发送飞书回复。"
+            "不要要求用户记飞书命令；用户用自然语言要求状态、进度或终端画面时，"
+            f"你要自己调用 `{feishu} activity`、`{feishu} tui` 或 `{feishu} watch`，"
+            f"再用 `{feishu} reply` 回到飞书。"
+            "飞书侧回读是默认关闭的排障能力；只有用户明确追问消息没发到、历史缺失或已读状态时，"
+            "且配置已开启 readback_enabled=true，才运行 history 或 inspect-message；不要把它当成常规上下文读取。"
+            "如果 [Feishu resources handed to Claude Code] 给出了本机文件路径或文档链接，"
+            "这些就是用户在飞书里发来的图片、文件或链接上下文；需要时直接读取这些路径或链接，不要让用户重发。"
+            "总管状态写入 ~/.cnb/device-chief/；单机状态写入对应机器的 device-supervisor；项目状态写入项目 .cnb/。"
+        )
     return (
         f"你是这台 Mac 的{DEVICE_SUPERVISOR_LABEL}，身份名是 {cfg.pilot_name}。\n"
         "你自己就是一个正在值班的 cnb 同学/负责人实例，不是 bridge、tunnel 或旁路服务。"
@@ -737,16 +988,52 @@ def record_activity_start(cfg: FeishuBridgeConfig, event: FeishuInboundEvent) ->
     if not isinstance(messages, dict):
         messages = {}
         payload["messages"] = messages
-    messages[event.message_id] = {
-        "chat_id": event.chat_id,
-        "sender_id": event.sender_id,
-        "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "done_at": "",
-    }
+    item = messages.get(event.message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[event.message_id] = item
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    item["chat_id"] = event.chat_id
+    item["sender_id"] = event.sender_id
+    item["routed_to_self"] = True
+    item.setdefault("started_at", now)
+    item["last_route_at"] = now
+    item.setdefault("done_at", "")
     _write_activity_state(path, payload)
 
 
-def mark_activity_done(cfg: FeishuBridgeConfig, message_id: str) -> None:
+def record_outgoing_reply(cfg: FeishuBridgeConfig, source_message_id: str, reply_message_id: str) -> None:
+    if not source_message_id or not reply_message_id:
+        return
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+
+    source_item = messages.get(source_message_id)
+    if not isinstance(source_item, dict):
+        source_item = {}
+        messages[source_message_id] = source_item
+    reply_ids = source_item.setdefault("reply_message_ids", [])
+    if not isinstance(reply_ids, list):
+        reply_ids = []
+        source_item["reply_message_ids"] = reply_ids
+    if reply_message_id not in reply_ids:
+        reply_ids.append(reply_message_id)
+
+    item = messages.get(reply_message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[reply_message_id] = item
+    item["outgoing_from_self"] = True
+    item["source_message_id"] = source_message_id
+    item["recorded_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    _write_activity_state(path, payload)
+
+
+def mark_activity_done(cfg: FeishuBridgeConfig, message_id: str, *, reason: str = "") -> None:
     if not message_id:
         return
     path = activity_state_path(cfg)
@@ -760,6 +1047,26 @@ def mark_activity_done(cfg: FeishuBridgeConfig, message_id: str) -> None:
         item = {}
         messages[message_id] = item
     item["done_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    if reason:
+        item["closed_reason"] = reason
+    _write_activity_state(path, payload)
+
+
+def mark_activity_monitor_closed(cfg: FeishuBridgeConfig, message_id: str, *, reason: str) -> None:
+    if not message_id:
+        return
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+    item = messages.get(message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[message_id] = item
+    item["activity_monitor_closed_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    item["activity_monitor_closed_reason"] = reason
     _write_activity_state(path, payload)
 
 
@@ -803,7 +1110,8 @@ def record_activity_update_message(cfg: FeishuBridgeConfig, source_message_id: s
 def describe_activity(cfg: FeishuBridgeConfig) -> str:
     return "\n".join(
         (
-            f"- {DEVICE_SUPERVISOR_LABEL}：{describe_pilot_activity(cfg)}",
+            f"- {role_label(cfg)}：{describe_pilot_activity(cfg)}",
+            f"- 飞书请求：{describe_request_activity(cfg)}",
             f"- CNB tmux 运行面：{describe_cnb_tmux_sessions(cfg)}",
             f"- 团队工作面：{describe_team_activity(cfg)}",
             f"- 用户前台 CLI：{describe_foreground_agent_sessions()}",
@@ -811,18 +1119,80 @@ def describe_activity(cfg: FeishuBridgeConfig) -> str:
     )
 
 
+def describe_request_activity(cfg: FeishuBridgeConfig, *, now: float | None = None) -> str:
+    open_items = open_activity_items(cfg, now=now)
+    if not open_items:
+        return "没有未完成请求。"
+
+    threshold = activity_stale_seconds(cfg)
+    stale = [item for item in open_items if item["age_seconds"] >= threshold]
+    oldest = open_items[0]
+    parts = [f"{len(open_items)} 个未完成", f"最久 {_format_duration(oldest['age_seconds'])}"]
+    if stale:
+        parts.append(f"{len(stale)} 个超过 {_format_duration(threshold)}，需要检查{role_label(cfg)}是否卡住")
+    return "；".join(parts) + "。"
+
+
+def open_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) -> list[dict[str, Any]]:
+    now_value = time.time() if now is None else now
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages")
+    if not isinstance(messages, dict):
+        return []
+
+    items: list[dict[str, Any]] = []
+    for message_id, item in messages.items():
+        if not isinstance(item, dict) or item.get("done_at"):
+            continue
+        started_at = _parse_activity_timestamp(item.get("started_at"))
+        if started_at is None:
+            continue
+        age = max(0, int(now_value - started_at))
+        items.append(
+            {
+                "message_id": str(message_id),
+                "chat_id": item.get("chat_id") or "",
+                "sender_id": item.get("sender_id") or "",
+                "started_at": item.get("started_at") or "",
+                "age_seconds": age,
+            }
+        )
+    return sorted(items, key=lambda item: item["age_seconds"], reverse=True)
+
+
+def activity_stale_seconds(cfg: FeishuBridgeConfig) -> int:
+    return max(60, cfg.activity_update_max_seconds or ACTIVITY_STALE_SECONDS)
+
+
+def _parse_activity_timestamp(value: Any) -> float | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return time.mktime(time.strptime(value, "%Y-%m-%d %H:%M:%S"))
+    except ValueError:
+        return None
+
+
+def _format_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, rem = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m{rem:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
+
+
 def build_activity_snapshot(cfg: FeishuBridgeConfig, elapsed_seconds: int = 0) -> ActivitySnapshot:
     style = resolve_activity_render_style(cfg)
-    title_prefix = "Claude Code" if style == "claude" else "Codex"
-    title = f"{title_prefix} 实时一屏"
-    if elapsed_seconds > 0:
-        title = f"{title} · {elapsed_seconds}s"
+    title = f"{elapsed_seconds}s" if elapsed_seconds > 0 else "活动"
     captured = capture_current_tui_screen(cfg)
     body = captured.detail.strip() if captured.handled else f"无法读取当前 TUI：{captured.detail}"
     body = _truncate_text(body or "(tmux pane has no visible content)", SNAPSHOT_MAX_CHARS)
     return ActivitySnapshot(
         title=title,
-        subtitle=f"{DEVICE_SUPERVISOR_LABEL}当前 TUI 画面",
+        subtitle="",
         sections=(ActivitySection("当前一屏", body, "screen"),),
         style=style,
         elapsed_seconds=elapsed_seconds,
@@ -889,7 +1259,7 @@ def describe_cnb_tmux_sessions(cfg: FeishuBridgeConfig) -> str:
     others = [name for name in sessions if name not in set(infra + device)]
     parts: list[str] = []
     if device:
-        parts.append("设备主管 " + ", ".join(device))
+        parts.append(role_label(cfg).replace("同学", "") + " " + ", ".join(device))
     if infra:
         parts.append("基础服务 " + ", ".join(infra))
     if others:
@@ -1846,7 +2216,8 @@ def build_claude_activity_card(snapshot: ActivitySnapshot) -> dict[str, Any]:
 
 def _build_activity_card(snapshot: ActivitySnapshot, *, template: str, accent: str) -> dict[str, Any]:
     elements: list[dict[str, Any]] = []
-    if not (len(snapshot.sections) == 1 and snapshot.sections[0].tone == "screen"):
+    screen_mode = len(snapshot.sections) == 1 and snapshot.sections[0].tone == "screen"
+    if snapshot.subtitle and not screen_mode:
         elements.append(
             {
                 "tag": "markdown",
@@ -1864,14 +2235,15 @@ def _build_activity_card(snapshot: ActivitySnapshot, *, template: str, accent: s
                 "text_size": "normal_v2",
             }
         )
-    elements.append(
-        {
-            "tag": "markdown",
-            "content": _card_escape(f"更新于 {snapshot.updated_at}；后续自动状态会更新这张卡片。"),
-            "text_align": "left",
-            "text_size": "normal_v2",
-        }
-    )
+    if not screen_mode:
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": _card_escape(f"更新于 {snapshot.updated_at}；后续自动状态会更新这张卡片。"),
+                "text_align": "left",
+                "text_size": "normal_v2",
+            }
+        )
     return {
         "schema": "2.0",
         "config": {
@@ -1884,12 +2256,20 @@ def _build_activity_card(snapshot: ActivitySnapshot, *, template: str, accent: s
             "elements": elements,
         },
         "header": {
-            "title": {"tag": "plain_text", "content": snapshot.title},
-            "subtitle": {"tag": "plain_text", "content": "只显示当前一屏"},
+            "title": {"tag": "plain_text", "content": _normalize_activity_title(snapshot.title)},
+            "subtitle": {"tag": "plain_text", "content": ""},
             "template": template,
             "padding": "12px 12px 12px 12px",
         },
     }
+
+
+def _normalize_activity_title(title: str) -> str:
+    cleaned = str(title or "").strip()
+    cleaned = re.sub(r"^(?:Codex|Claude Code)\s+", "", cleaned)
+    if "·" in cleaned:
+        cleaned = cleaned.split("·", 1)[-1].strip()
+    return cleaned or "实时一屏"
 
 
 def _card_escape(text: str) -> str:
@@ -1917,22 +2297,32 @@ def _split_activity_card_lines(body: str) -> list[str]:
 def _activity_card_screen_markdown(section: ActivitySection) -> str:
     lines, omitted = _activity_card_screen_lines(section.body)
     if not lines:
-        return f"**{_card_escape(section.title)}**\n(当前 TUI 没有可见内容)"
-    prefix = f"**{_card_escape(section.title)}（最后 {len(lines)} 行）**"
+        return "(当前 TUI 没有可见内容)"
     rendered: list[str] = []
-    if omitted > 0:
-        rendered.append(f"<font color='grey'>… 已省略上方 {omitted} 行；完整实时画面用 /cnb_watch</font>")
     for index, line in enumerate(lines, 1):
-        rendered.append(f"<font color='grey'>{index:02d}</font> {_card_escape_terminal_line(line)}")
-    return prefix + "\n" + "\n".join(rendered)
+        rendered.append(_render_activity_line(line))
+    return "\n".join(rendered)
 
 
 def _activity_card_screen_lines(body: str) -> tuple[list[str], int]:
     lines = [ANSI_ESCAPE_RE.sub("", line.expandtabs(2)).rstrip() for line in body.splitlines()]
-    while lines and not lines[0].strip():
-        lines.pop(0)
-    while lines and not lines[-1].strip():
-        lines.pop()
+    noise_blob = "\n".join(
+        part
+        for part in (
+            bridge_affordance_text(),
+            command_help_text(),
+        )
+        if part
+    )
+    filtered: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _is_noise_screen_line(stripped, noise_blob):
+            continue
+        filtered.append(line)
+    lines = filtered
     omitted = max(0, len(lines) - ACTIVITY_CARD_SCREEN_MAX_LINES)
     tail = lines[-ACTIVITY_CARD_SCREEN_MAX_LINES:]
     return [_truncate_terminal_line(line, ACTIVITY_CARD_SCREEN_LINE_MAX_CHARS) for line in tail], omitted
@@ -1949,6 +2339,33 @@ def _card_escape_terminal_line(text: str) -> str:
     for char in ("`", "*", "_", "[", "]", "|", "~"):
         escaped = escaped.replace(char, f"\\{char}")
     return escaped or " "
+
+
+def _render_activity_line(text: str) -> str:
+    stripped = text.strip()
+    escaped = _card_escape_terminal_line(stripped)
+    lower = stripped.lower()
+    if "http 400" in lower or "invalid ids" in lower or "traceback" in lower or "error" in lower:
+        return f"<font color='red'><b>{escaped}</b></font>"
+    if stripped.startswith(("回复 ", "• ", "◦ ", "● ", "› ", "> ", "Working", "Run ", "gpt-", "当前一屏", "实时一屏", "更新于")):
+        return f"<font color='grey'>{escaped}</font>"
+    return f"<b>{escaped}</b>" if escaped.strip() else escaped
+
+
+def _is_noise_screen_line(line: str, noise_blob: str) -> bool:
+    if not line:
+        return False
+    if line.startswith(("实时一屏", "当前一屏", "更新于", "回复 ", "cnb_Macbook_", "cnb_Macbook_主管同学", "cnb_Macbook_主管同学机器人")):
+        return True
+    if line.startswith(("• ", "◦ ", "● ", "› ", "> ", "Working", "Run ", "gpt-", "background terminal running", "/ps to view", "esc to interrupt")):
+        return True
+    if line in {"Codex screen", "Claude Code screen"}:
+        return True
+    if line in noise_blob:
+        return True
+    if len(line) >= 12 and noise_blob.find(line) >= 0:
+        return True
+    return False
 
 
 def send_activity_update(cfg: FeishuBridgeConfig, event: FeishuInboundEvent, elapsed_seconds: int) -> BridgeResult:
@@ -2025,17 +2442,31 @@ def _activity_monitor_loop(event: FeishuInboundEvent, cfg: FeishuBridgeConfig) -
             return
         result = send_activity_update(cfg, event, elapsed)
         print(f"[cnb-feishu-activity] {event.message_id} {elapsed}s: {result.detail}", file=sys.stderr)
+    if not activity_is_done(cfg, event.message_id):
+        max_seconds = cfg.activity_update_max_seconds or 0
+        reason = (
+            f"activity monitor reached {max_seconds}s limit"
+            if max_seconds
+            else "activity monitor schedule exhausted"
+        )
+        mark_activity_monitor_closed(cfg, event.message_id, reason=reason)
 
 
 def iter_activity_update_elapsed_seconds(cfg: FeishuBridgeConfig):
     fixed = sorted(set(cfg.activity_update_seconds))
-    yield from fixed
+    max_elapsed = max(0, cfg.activity_update_max_seconds)
+    for elapsed in fixed:
+        if max_elapsed and elapsed > max_elapsed:
+            return
+        yield elapsed
     repeat = max(0, cfg.activity_update_repeat_seconds)
     if repeat <= 0:
         return
     elapsed = fixed[-1] if fixed else 0
     while True:
         elapsed += repeat
+        if max_elapsed and elapsed > max_elapsed:
+            return
         yield elapsed
 
 
@@ -2044,24 +2475,25 @@ def reply_ack(event: FeishuInboundEvent, cfg: FeishuBridgeConfig, detail: str) -
         return BridgeResult(False, f"ack disabled by {cfg.notification_policy} policy")
     if not event.message_id:
         return BridgeResult(False, "message_id missing")
-    text = f"{ACK_PREFIX}。{detail}"
+    text = f"{ack_prefix(cfg)}。{detail}"
     return send_reply(cfg, event.message_id, text, idempotency_key=_ack_key(event.message_id))
 
 
 def send_reply(cfg: FeishuBridgeConfig, message_id: str, text: str, *, idempotency_key: str = "") -> BridgeResult:
     if not message_id:
         return BridgeResult(False, "message_id missing")
-    if not text.strip():
+    text = normalize_reply_text(text).strip()
+    if not text:
         return BridgeResult(False, "reply text is empty")
     if cfg.transport == "local_openapi":
-        return send_reply_openapi(cfg, message_id, text.strip(), idempotency_key=idempotency_key)
+        return send_reply_openapi(cfg, message_id, text, idempotency_key=idempotency_key)
     if cfg.transport == "hermes_lark_cli":
-        return send_reply_hermes_lark_cli(cfg, message_id, text.strip(), idempotency_key=idempotency_key)
+        return send_reply_hermes_lark_cli(cfg, message_id, text, idempotency_key=idempotency_key)
     return BridgeResult(False, f"unsupported Feishu transport: {cfg.transport}")
 
 
 def send_short_reply(cfg: FeishuBridgeConfig, message_id: str, text: str) -> BridgeResult:
-    text = text.strip()
+    text = normalize_reply_text(text).strip()
     validation = validate_short_reply_text(text)
     if not validation.handled:
         return validation
@@ -2069,6 +2501,12 @@ def send_short_reply(cfg: FeishuBridgeConfig, message_id: str, text: str) -> Bri
     if not result.handled:
         return result
     return BridgeResult(True, "short reply sent; activity remains open")
+
+
+def normalize_reply_text(text: str) -> str:
+    if "\n" in text or "\\n" not in text:
+        return text
+    return text.replace("\\r\\n", "\n").replace("\\n", "\n")
 
 
 def validate_short_reply_text(text: str) -> BridgeResult:
@@ -2090,8 +2528,7 @@ def send_reply_hermes_lark_cli(
     *,
     idempotency_key: str = "",
 ) -> BridgeResult:
-    cmd = [
-        "lark-cli",
+    cmd = lark_cli_command(cfg) + [
         "im",
         "+messages-reply",
         "--as",
@@ -2117,6 +2554,13 @@ def send_reply_hermes_lark_cli(
     return BridgeResult(False, f"Hermes lark-cli reply failed: {detail}")
 
 
+def lark_cli_command(cfg: FeishuBridgeConfig) -> list[str]:
+    cmd = ["lark-cli"]
+    if cfg.lark_cli_profile:
+        cmd.extend(["--profile", cfg.lark_cli_profile])
+    return cmd
+
+
 def send_reply_openapi(
     cfg: FeishuBridgeConfig,
     message_id: str,
@@ -2134,6 +2578,7 @@ def send_reply_openapi(
     result = openapi_post(f"/open-apis/im/v1/messages/{message_id}/reply", payload, headers=headers)
     if not result.handled:
         return result
+    record_outgoing_reply(cfg, message_id, _message_id_from_openapi_response(result.detail))
     return BridgeResult(True, "reply sent")
 
 
@@ -2275,7 +2720,7 @@ def handle_bridge_command(
         reply = started.detail if started.handled else f"无法启动只读 Web TUI：{started.detail}"
         return reply_to_command(event, cfg, reply, dry_run=dry_run)
     if name in HELP_COMMANDS:
-        return reply_to_command(event, cfg, command_help_text(), dry_run=dry_run)
+        return reply_to_command(event, cfg, command_help_text(cfg), dry_run=dry_run)
     if name in STATUS_COMMANDS:
         return reply_to_command(event, cfg, build_status_reply(cfg), dry_run=dry_run)
     return None
@@ -2293,20 +2738,22 @@ def reply_to_command(
     return BridgeResult(False, result.detail)
 
 
-def command_help_text() -> str:
+def command_help_text(cfg: FeishuBridgeConfig | None = None) -> str:
+    label = role_label(cfg)
+    status_scope = "机器总管、设备主管、团队工作面、用户前台 CLI" if cfg and cfg.pilot_role == DEVICE_CHIEF_ROLE else "设备主管、团队工作面、用户前台 CLI"
     return (
-        "CNB 飞书可以直接用自然语言说明目标，设备主管会自己选择需要的本机能力。\n\n"
+        f"CNB 飞书可以直接用自然语言说明目标，{label}会自己选择需要的本机能力。\n\n"
         "精确命令是可选兜底：\n"
-        f"- /cnb_tui 或 /c_tui：查看{DEVICE_SUPERVISOR_LABEL}当前 TUI 快照\n"
+        f"- /cnb_tui 或 /c_tui：查看{label}当前 TUI 快照\n"
         "- /cnb_watch 或 /c_watch：启动只读 Web TUI 观看链接\n"
-        "- /cnb_status 或 /c_status：查看设备主管、团队工作面、用户前台 CLI 状态\n"
+        f"- /cnb_status 或 /c_status：查看{status_scope}状态\n"
         "- /cnb_help 或 /c_help：显示这段帮助\n\n"
-        f"普通消息会转给这台 Mac 的{DEVICE_SUPERVISOR_LABEL}处理；默认只在最终回复时推送通知。"
+        f"普通消息会转给{label}处理；默认只在最终回复时推送通知。"
     )
 
 
 def build_status_reply(cfg: FeishuBridgeConfig) -> str:
-    return f"CNB 设备状态：\n{describe_activity(cfg)}"
+    return f"{role_status_title(cfg)}：\n{describe_activity(cfg)}"
 
 
 def build_activity_reply(cfg: FeishuBridgeConfig) -> str:
@@ -2347,9 +2794,9 @@ def bridge_affordance_text(cfg: FeishuBridgeConfig | None = None) -> str:
 def build_tui_snapshot_reply(cfg: FeishuBridgeConfig) -> str:
     captured = capture_tui_snapshot(cfg)
     if not captured.handled:
-        return f"无法获取{DEVICE_SUPERVISOR_LABEL} TUI：{captured.detail}"
+        return f"无法获取{role_label(cfg)} TUI：{captured.detail}"
     body = _truncate_text(captured.detail.strip() or "(tmux pane has no visible content)", SNAPSHOT_MAX_CHARS)
-    return f"{DEVICE_SUPERVISOR_LABEL} TUI 快照（最近 {cfg.tui_capture_lines} 行）：\n\n```text\n{body}\n```"
+    return f"{role_label(cfg)} TUI 快照（最近 {cfg.tui_capture_lines} 行）：\n\n```text\n{body}\n```"
 
 
 def capture_current_tui_screen(cfg: FeishuBridgeConfig) -> BridgeResult:
@@ -2724,13 +3171,38 @@ def _snippet(text: str) -> str:
 
 def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeResult:
     has_chat_id = bool(args.chat_id or base.allowed_chat_ids)
+    role = _pilot_role(getattr(args, "role", "") or base.pilot_role)
+    default_bridge_tmux = _default_bridge_tmux(role)
+    default_watch_tmux = _default_watch_tmux(role)
+    default_pilot_name = _default_pilot_name(role)
+    default_pilot_tmux = _default_pilot_tmux(role)
     device_supervisor_name = getattr(args, "device_supervisor_name", "")
     device_supervisor_tmux = getattr(args, "device_supervisor_tmux", "")
+    device_chief_name = getattr(args, "device_chief_name", "")
+    device_chief_tmux = getattr(args, "device_chief_tmux", "")
     terminal_supervisor_name = getattr(args, "terminal_supervisor_name", "")
     terminal_supervisor_tmux = getattr(args, "terminal_supervisor_tmux", "")
     watch_public_url = getattr(args, "watch_public_url", "") or base.watch_public_url
     watch_token = getattr(args, "watch_token", "") or base.watch_token or secrets.token_urlsafe(24)
+    pilot_name = (
+        device_chief_name
+        or device_supervisor_name
+        or terminal_supervisor_name
+        or (base.pilot_name if base.pilot_role == role else default_pilot_name)
+    )
+    pilot_tmux = (
+        device_chief_tmux
+        or device_supervisor_tmux
+        or terminal_supervisor_tmux
+        or (base.pilot_tmux if base.pilot_role == role else default_pilot_tmux)
+    )
+    group_routing_chat_ids = list(base.group_message_routing_chat_ids)
+    explicit_group_chats = getattr(args, "group_routing_chat_id", None) or []
+    if explicit_group_chats:
+        group_routing_chat_ids = [str(item) for item in explicit_group_chats if str(item)]
+    group_routing = getattr(args, "group_message_routing", "") or base.group_message_routing
     section = {
+        "role": role,
         "transport": "local_openapi",
         "app_id": args.app_id or base.app_id,
         "app_secret": args.app_secret or base.app_secret,
@@ -2742,20 +3214,24 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "webhook_public_url": args.webhook_public_url or base.webhook_public_url,
         "chat_id": args.chat_id or (next(iter(base.allowed_chat_ids), "")),
         "auto_bind_chat": False if has_chat_id else not getattr(args, "no_auto_bind_chat", False),
-        "device_supervisor_name": device_supervisor_name or terminal_supervisor_name or base.pilot_name,
-        "device_supervisor_tmux": device_supervisor_tmux or terminal_supervisor_tmux or base.pilot_tmux,
-        "bridge_tmux": base.bridge_tmux,
+        "bot_open_id": getattr(args, "bot_open_id", "") or base.bot_open_id,
+        "bot_name": getattr(args, "bot_name", "") or base.bot_name,
+        "group_message_routing": _group_message_routing(group_routing),
+        "group_message_routing_chat_ids": sorted(set(group_routing_chat_ids)),
+        "bridge_tmux": base.bridge_tmux if base.pilot_role == role else default_bridge_tmux,
         "agent": "codex",
         "notification_policy": base.notification_policy,
         "ack": True,
         "activity_updates": True,
         "activity_update_seconds": list(base.activity_update_seconds),
         "activity_update_repeat_seconds": base.activity_update_repeat_seconds,
+        "activity_update_max_seconds": base.activity_update_max_seconds,
         "activity_render_style": base.activity_render_style,
         "auto_start": True,
         "startup_wait_seconds": base.startup_wait_seconds,
         "tui_capture_lines": base.tui_capture_lines,
         "watch_tool": "builtin",
+        "watch_tmux": base.watch_tmux if base.pilot_role == role else default_watch_tmux,
         "watch_host": base.watch_host,
         "watch_port": base.watch_port,
         "watch_public_url": watch_public_url,
@@ -2768,6 +3244,12 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "resource_handoff_enabled": base.resource_handoff_enabled,
         "resource_handoff_max_bytes": base.resource_handoff_max_bytes,
     }
+    if role == DEVICE_CHIEF_ROLE:
+        section["device_chief_name"] = pilot_name
+        section["device_chief_tmux"] = pilot_tmux
+    else:
+        section["device_supervisor_name"] = pilot_name
+        section["device_supervisor_tmux"] = pilot_tmux
     public_url = str(section["webhook_public_url"])
     if not public_url and args.tunnel != "none":
         tunnel = ensure_tunnel(str(section["webhook_host"]), int(str(section["webhook_port"])), mode=args.tunnel)
@@ -2810,10 +3292,10 @@ def ensure_tunnel(host: str, port: int, *, mode: str = "auto") -> BridgeResult:
         return BridgeResult(False, "tunnel disabled")
     if not shutil.which("ngrok"):
         return BridgeResult(False, "ngrok not found; install ngrok and authenticate it before enabling tunnel setup")
-    current = ngrok_public_url()
+    current = ngrok_public_url_for(host, port)
     if current:
         return BridgeResult(True, current)
-    session = "cnb-feishu-tunnel"
+    session = "cnb-feishu-tunnel" if port == DEFAULT_WEBHOOK_PORT else f"cnb-feishu-tunnel-{port}"
     if not has_session(session):
         try:
             result = subprocess.run(
@@ -2829,32 +3311,68 @@ def ensure_tunnel(host: str, port: int, *, mode: str = "auto") -> BridgeResult:
             return BridgeResult(False, f"failed to start ngrok: {detail}")
     for _ in range(20):
         time.sleep(0.5)
-        current = ngrok_public_url()
+        current = ngrok_public_url_for(host, port)
         if current:
             return BridgeResult(True, current)
     return BridgeResult(False, "ngrok public URL not ready")
 
 
-def ngrok_public_url() -> str:
+def _ngrok_tunnels() -> list[dict[str, Any]]:
     request = urllib.request.Request("http://127.0.0.1:4040/api/tunnels")
     try:
         with urllib.request.urlopen(request, timeout=1) as response:
             payload = json.loads(response.read().decode())
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
-        return ""
+        return []
     tunnels = payload.get("tunnels")
     if not isinstance(tunnels, list):
+        return []
+    return [tunnel for tunnel in tunnels if isinstance(tunnel, dict)]
+
+
+def ngrok_public_url_for(host: str, port: int) -> str:
+    for tunnel in _ngrok_tunnels():
+        cfg = tunnel.get("config") if isinstance(tunnel.get("config"), dict) else {}
+        addr = str(cfg.get("addr") or "")
+        if not _ngrok_addr_matches(addr, host, port):
+            continue
+        url = tunnel.get("public_url")
+        if isinstance(url, str) and url.startswith("https://"):
+            return url
+    for tunnel in _ngrok_tunnels():
+        cfg = tunnel.get("config") if isinstance(tunnel.get("config"), dict) else {}
+        addr = str(cfg.get("addr") or "")
+        if not _ngrok_addr_matches(addr, host, port):
+            continue
+        url = tunnel.get("public_url")
+        if isinstance(url, str):
+            return url
+    return ""
+
+
+def _ngrok_addr_matches(addr: str, host: str, port: int) -> bool:
+    if not addr:
+        return False
+    parsed = urllib.parse.urlparse(addr if "://" in addr else f"http://{addr}")
+    if parsed.port != port:
+        return False
+    configured_host = (host or DEFAULT_WEBHOOK_HOST).strip()
+    actual_host = parsed.hostname or ""
+    return configured_host in {"0.0.0.0", "", actual_host} or actual_host in {"127.0.0.1", "localhost"}
+
+
+def ngrok_public_url() -> str:
+    tunnels = _ngrok_tunnels()
+    if not tunnels:
         return ""
     for tunnel in tunnels:
-        if isinstance(tunnel, dict):
-            url = tunnel.get("public_url")
-            if isinstance(url, str) and url.startswith("https://"):
-                return url
+        url = tunnel.get("public_url")
+        if isinstance(url, str) and url.startswith("https://"):
+            return url
     for tunnel in tunnels:
-        if isinstance(tunnel, dict):
-            url = tunnel.get("public_url")
-            if isinstance(url, str):
-                return url
+        url = tunnel.get("public_url")
+        if isinstance(url, str):
+            return url
     return ""
 
 
@@ -2896,12 +3414,14 @@ def handle_payload(
         return command_result
 
     routed = route_event(event, cfg, dry_run=dry_run)
+    if routed.handled and not dry_run:
+        record_activity_start(cfg, event)
     if routed.handled and send_ack and not dry_run:
         progress_details: list[str] = []
         ack = reply_ack(
             event,
             cfg,
-            f"已收到，{DEVICE_SUPERVISOR_LABEL}已开始处理；你可以用自然语言继续要求状态、终端画面或观察链接。",
+            f"已收到，{role_label(cfg)}已开始处理；你可以用自然语言继续要求状态、终端画面或观察链接。",
         )
         if ack.handled:
             progress_details.append(ack.detail)
@@ -3104,7 +3624,7 @@ def consume_hermes_events(
         print("For development only, pass --allow-any-chat.", file=sys.stderr)
         return 1
 
-    cmd = ["lark-cli", "event", "consume", cfg.event_key, "--as", cfg.identity]
+    cmd = lark_cli_command(cfg) + ["event", "consume", cfg.event_key, "--as", cfg.identity]
     if max_events > 0:
         cmd.extend(["--max-events", str(max_events)])
     if timeout:
@@ -3233,6 +3753,7 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
     print(f"启用: {'是' if cfg.enabled else '否'}")
     if cfg.transport == "hermes_lark_cli":
         print("通道: hermes_lark_cli（仅开发测试；不要作为 CNB 运行链路）")
+        print(f"lark-cli profile: {cfg.lark_cli_profile or '(active default)'}")
     else:
         print("通道: local_openapi（本机 webhook + 飞书 OpenAPI，不经过 Hermes）")
     print(f"事件: {cfg.event_key} ({cfg.identity})")
@@ -3245,9 +3766,12 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
         chat_status = "(未配置)"
     print(f"允许 chat: {chat_status}")
     print(f"允许 sender: {', '.join(sorted(cfg.allowed_sender_ids)) if cfg.allowed_sender_ids else '(全部)'}")
-    print(f"{DEVICE_SUPERVISOR_LABEL}: {cfg.pilot_name}")
+    bot_bits = [bit for bit in (cfg.bot_name, cfg.bot_open_id) if bit]
+    print(f"群消息路由: {cfg.group_message_routing} ({' / '.join(bot_bits) if bot_bits else '未配置 bot_open_id'})")
+    print(f"角色: {cfg.pilot_role}")
+    print(f"{role_label(cfg)}: {cfg.pilot_name}")
     print(
-        f"{DEVICE_SUPERVISOR_LABEL} tmux: {cfg.pilot_tmux} ({'running' if has_session(cfg.pilot_tmux) else 'stopped'})"
+        f"{role_label(cfg)} tmux: {cfg.pilot_tmux} ({'running' if has_session(cfg.pilot_tmux) else 'stopped'})"
     )
     print(f"bridge tmux: {cfg.bridge_tmux} ({'running' if has_session(cfg.bridge_tmux) else 'stopped'})")
     print(f"watch tmux: {cfg.watch_tmux} ({'running' if has_session(cfg.watch_tmux) else 'stopped'})")
@@ -3257,11 +3781,12 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
         f"({cfg.watch_tool}, {cfg.watch_refresh_ms}ms)"
     )
     print(f"通知策略: {describe_notification_policy(cfg)}")
+    print(f"飞书请求: {describe_request_activity(cfg)}")
     activity = "开" if should_start_activity_monitor(cfg) else "关"
     print(
         "活动反馈: "
         f"{activity} ({', '.join(str(v) + 's' for v in cfg.activity_update_seconds)}; "
-        f"之后每 {cfg.activity_update_repeat_seconds}s)"
+        f"之后每 {cfg.activity_update_repeat_seconds}s; 最长 {cfg.activity_update_max_seconds}s)"
     )
     print(f"活动渲染: {resolve_activity_render_style(cfg)}")
     readback_scope = "允许 chat" if not cfg.readback_allow_unlisted_chat else "允许显式未列 chat"
@@ -3279,7 +3804,7 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cnb feishu", description="Feishu inbound bridge for the Mac device supervisor tongxue"
+        prog="cnb feishu", description="Feishu inbound bridge for a CNB supervisor or device chief tongxue"
     )
     parser.add_argument(
         "--config", type=Path, default=None, help="path to global cnb config (default: ~/.cnb/config.toml)"
@@ -3298,10 +3823,17 @@ def build_parser() -> argparse.ArgumentParser:
     setup.add_argument("--webhook-port", type=int, default=0)
     setup.add_argument("--watch-public-url", default="")
     setup.add_argument("--watch-token", default="")
+    setup.add_argument("--role", choices=("device_supervisor", "device_chief"), default="")
+    setup.add_argument("--device-chief-name", default="")
+    setup.add_argument("--device-chief-tmux", default="")
     setup.add_argument("--device-supervisor-name", default="")
     setup.add_argument("--device-supervisor-tmux", default="")
     setup.add_argument("--terminal-supervisor-name", default="")
     setup.add_argument("--terminal-supervisor-tmux", default="")
+    setup.add_argument("--bot-open-id", default="")
+    setup.add_argument("--bot-name", default="")
+    setup.add_argument("--group-message-routing", choices=("all", "targeted"), default="")
+    setup.add_argument("--group-routing-chat-id", action="append", default=[])
     setup.add_argument("--tunnel", choices=("auto", "ngrok", "none"), default="auto")
     setup.add_argument("--no-auto-bind-chat", action="store_true")
     setup.add_argument("--no-start", action="store_true")

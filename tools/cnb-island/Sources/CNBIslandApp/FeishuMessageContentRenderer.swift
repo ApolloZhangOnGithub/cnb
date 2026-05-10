@@ -4,9 +4,9 @@ enum FeishuMessageSenderMapper {
     static func label(senderType: String?) -> String {
         switch senderType {
         case "app":
-            "CLI"
+            "机器人"
         case "user":
-            "User"
+            "用户"
         case .some(let value):
             value
         case .none:
@@ -41,6 +41,8 @@ enum FeishuMessageContentRenderer {
             return marker("Sticker", value: stringValue(in: payload, keys: ["file_key", "key"]))
         case "interactive":
             return renderInteractive(payload)
+        case "system":
+            return renderSystem(payload)
         case "share_chat":
             return marker("Shared chat", value: stringValue(in: payload, keys: ["chat_name", "chat_id"]))
         case "share_user":
@@ -128,6 +130,87 @@ enum FeishuMessageContentRenderer {
             return marker("Card", value: title)
         }
         return "[Card]\n\(title)\n\(generic)"
+    }
+
+    private static func renderSystem(_ payload: [String: Any]) -> String {
+        let content = (payload["content"] as? [String: Any]) ?? [:]
+        let merged = payload.merging(content) { _, new in new }
+        let template = systemTemplate(in: merged)
+        guard !template.isEmpty else {
+            return renderGeneric(payload)
+        }
+
+        var rendered = template
+        for (key, value) in merged {
+            let display = variableDisplay(value).trimmed
+            guard !display.isEmpty else {
+                continue
+            }
+            rendered = rendered.replacingOccurrences(of: "{\(key)}", with: display)
+        }
+
+        let cleaned = rendered.trimmed
+        guard !cleaned.contains("{") else {
+            return renderGeneric(payload)
+        }
+        return localizeKnownSystemMessage(cleaned)
+    }
+
+    private static func systemTemplate(in payload: [String: Any]) -> String {
+        if let value = payload["text"] as? String, !value.trimmed.isEmpty {
+            return value
+        }
+        if let value = payload["template"] as? String, !value.trimmed.isEmpty {
+            return value
+        }
+        if let value = payload["message"] as? String, !value.trimmed.isEmpty {
+            return value
+        }
+        if let i18n = payload["i18n"] as? [String: Any] {
+            return stringValue(in: i18n, keys: ["zh_cn", "en_us", "default"])
+        }
+        return ""
+    }
+
+    private static func variableDisplay(_ value: Any) -> String {
+        if let text = value as? String {
+            return text
+        }
+        if let number = value as? NSNumber {
+            return number.stringValue
+        }
+        if let array = value as? [Any] {
+            return compactUnique(array.map(variableDisplay)).joined(separator: "、")
+        }
+        if let dict = value as? [String: Any] {
+            let preferredKeys = [
+                "name", "user_name", "chat_name", "display_name", "nickname",
+                "cn_name", "en_name", "text", "content",
+            ]
+            for key in preferredKeys {
+                guard let raw = dict[key] else {
+                    continue
+                }
+                let rendered = variableDisplay(raw).trimmed
+                if !rendered.isEmpty {
+                    return rendered
+                }
+            }
+            return renderGeneric(dict)
+        }
+        return ""
+    }
+
+    private static func localizeKnownSystemMessage(_ text: String) -> String {
+        let invitedSuffix = " to the chat."
+        if text.contains(" invited "), text.hasSuffix(invitedSuffix) {
+            let body = String(text.dropLast(invitedSuffix.count))
+            let parts = body.components(separatedBy: " invited ")
+            if parts.count == 2 {
+                return "\(parts[0]) 邀请 \(parts[1]) 加入群聊"
+            }
+        }
+        return text
     }
 
     private static func renderGeneric(_ value: Any) -> String {

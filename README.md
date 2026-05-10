@@ -201,6 +201,9 @@ When the device supervisor tongxue is running in Claude Code:
 | `/cnb-progress` | Recent progress summary — new messages, completed tasks |
 | `/cnb-history` | Full message log |
 | `/cnb-pending` | Pending user actions with verify/retry loop |
+| `/cnb-model [menu|list|current|use profile]` | Model/provider menu or switch through direct shell execution |
+| `/cnb-model-current` | Show current model/provider profile |
+| `/cnb-model-list` | List available model/provider profiles |
 | `/cnb-update` | Update cnb to latest version |
 | `/cnb-help` | List all `/cnb-*` commands |
 
@@ -239,6 +242,7 @@ cnb board --as <name> view              # team dashboard
 cnb ps                  # tongxue status dashboard
 cnb logs <name>         # message history
 cnb exec <name> "msg"   # send a message to a tongxue
+cnb swarm smoke <name>  # start a tongxue in report-only standby mode
 cnb stop <name>         # stop a tongxue
 cnb doctor              # health check
 ```

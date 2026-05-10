@@ -214,6 +214,9 @@ README 只保留最短路径。更完整的产品文档放在 [`docs/`](docs/ind
 | `/cnb-progress` | 最近进展汇总——新消息、已完成任务 |
 | `/cnb-history` | 完整消息历史 |
 | `/cnb-pending` | 查看待用户处理的操作，并验证/重试 |
+| `/cnb-model [menu|list|current|use profile]` | 通过直接 shell 执行查看菜单或切换模型/provider profile |
+| `/cnb-model-current` | 查看当前模型/provider profile |
+| `/cnb-model-list` | 列出可用模型/provider profiles |
 | `/cnb-update` | 更新 cnb 到最新版 |
 | `/cnb-help` | 列出所有 `/cnb-*` 命令 |
 
@@ -249,6 +252,7 @@ cnb board --as <name> view              # 团队面板
 cnb ps                  # 同学状态面板
 cnb logs <name>         # 消息历史
 cnb exec <name> "msg"   # 给某个同学发消息
+cnb swarm smoke <name>  # 只报到待命，不自动续旧任务
 cnb stop <name>         # 停止某个同学
 cnb doctor              # 健康检查
 ```

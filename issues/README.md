@@ -51,6 +51,7 @@ Auto-synced from GitHub Issues. Updated every 6 hours and on every issue event. 
 | [#96](096-terminal-supervisor-should-inspect-mac-resource-pressure-and.md) | Terminal supervisor should inspect Mac resource pressure and recommend safe actions |
 | [#99](099-adopt-markrun-as-cnb-documentation-source-of-truth.md) | Adopt Markrun as cnb documentation source of truth |
 | [#100](100-add-npm-stable-tag-after-refreshing-npm-auth.md) | Add npm stable tag after refreshing npm auth |
+| [#152](152-keep-mac-awake-while-feishu-device-supervisor-is-on-duty.md) | Keep Mac awake while Feishu device supervisor is on duty |
 
 ## Closed
 

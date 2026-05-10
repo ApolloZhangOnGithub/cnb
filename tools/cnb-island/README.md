@@ -56,9 +56,41 @@ For simulator checks, export the same `[feishu]` config used by the Mac bridge:
 ```
 
 That writes `~/.cnb/feishu_chat.json` with `appID`, `appSecret`, `chatID`,
-`replyMessageID`, `webhookURL`, and `verificationToken`. The simulator and
-physical-device scripts copy this file into the app container when it exists.
-Do not commit generated files that contain app secrets.
+`chatIDs`, `replyMessageID`, `webhookURL`, and `verificationToken`. `chatID`
+keeps the existing single-chat path compatible; `chatIDs` preserves every
+configured `chat_id`, `allowed_chat_ids`, or `chat_ids` entry for read-only
+multi-control-room surfaces. The simulator and physical-device scripts copy this
+file into the app container when it exists. Do not commit generated files that
+contain app secrets.
+
+## Vision Feishu Viewer
+
+`CNBVision` is the first Apple Vision Pro surface. It is a native SwiftUI
+visionOS target, not a web wrapper and not a bundled `lark-cli` path. visionOS
+apps do not have a Mac-like shell/subprocess model for running a local CLI, so
+the first implementation reads the same `feishu_chat.json` handoff and calls
+Feishu OpenAPI directly. It aggregates recent messages from all configured
+control chats in `chatIDs`, which means one shared control group can show all
+device supervisor bots, and multiple allowlisted groups can be viewed together.
+It is read-only today; device-chief leases and cross-device routing are separate
+cnb coordination features, not enforced by this viewer.
+
+Build it locally with:
+
+```bash
+./script/build_vision.sh
+```
+
+Run it on the visionOS simulator with:
+
+```bash
+./script/run_vision_simulator.sh
+```
+
+The runner exports `~/.cnb/feishu_chat.json`, boots an Apple Vision Pro
+simulator, builds `CNBVision`, installs it, copies the Feishu config into the
+app data container, and launches the app. Override the simulator with
+`CNB_VISION_SIMULATOR_DEVICE="Apple Vision Pro"`.
 
 ## Admin To Do
 

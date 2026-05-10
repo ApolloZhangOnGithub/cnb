@@ -77,13 +77,13 @@ class SwarmManager:
             f"你可以直接 send 给任何同学协作，不用什么都通过一个人转。"
         )
 
-    def build_agent_cmd(self, name: str) -> str:
+    def build_agent_cmd(self, name: str, *, standby: bool = False) -> str:
         prompt = self.build_system_prompt(name)
         if self.cfg.agent == "claude":
             escaped = prompt.replace("'", "'\\''")
             return f"claude --name '{name}' --dangerously-skip-permissions --append-system-prompt '{escaped}'"
         elif self.cfg.agent == "codex":
-            initial = self.build_initial_prompt(name)
+            initial = self.build_initial_prompt(name, standby=standby)
             combined_prompt = f"{prompt}\n\n{initial}"
             flags = " ".join(CODEX_PERMISSION_FLAGS)
             return f"codex {flags} --cd {shlex.quote(str(self._env.project_root))} {shlex.quote(combined_prompt)}"
@@ -101,12 +101,25 @@ class SwarmManager:
     def _uses_prompt_argument(self) -> bool:
         return self.cfg.agent == "codex"
 
-    def build_initial_prompt(self, name: str) -> str:
+    def build_initial_prompt(self, name: str, *, standby: bool = False) -> str:
         engine_labels = {"codex": "Codex CLI", "trae": "Trae CLI", "qwen": "Qwen Code"}
         engine_label = engine_labels.get(self.cfg.agent, self.cfg.agent)
         sd = self._env.sessions_dir
         cv = self._env.cv_dir
         board = self._board_path()
+        if standby:
+            return (
+                f"你是 {name}。你正在使用 {engine_label} 引擎。"
+                f"这是 CNB standby/smoke 启动：只验证会话、inbox 和看板回复链路。"
+                f"1. 读取 {sd}/{name}.md，"
+                f"2. 读取 {cv}/{name}.md（如果存在），"
+                f"3. 用 '{board}' --as {name} inbox 检查未读消息，"
+                f"4. 用 '{board}' --as {name} status 'standby: 已启动，等待明确任务' 更新状态，"
+                f"5. 如果有发起 smoke/standby 的消息，只回复一句已启动、已读 inbox。"
+                f"不要继续 session 文件中的历史任务，不要读取 ROADMAP.md 自主找活，"
+                f"不要改文件，不要运行测试，不要评论 issue/PR，不要执行外部可见动作；"
+                f"完成报到后进入等待。"
+            )
         return (
             f"你是 {name}。你正在使用 {engine_label} 引擎。"
             f"按 CLAUDE.md 的启动流程执行："
@@ -325,7 +338,7 @@ class SwarmManager:
 
     # --- High-level commands ---
 
-    def _start_one(self, name: str) -> None:
+    def _start_one(self, name: str, *, standby: bool = False) -> None:
         prefix = self._env.prefix
         backend = self.cfg.backend
 
@@ -337,7 +350,7 @@ class SwarmManager:
             time.sleep(1)
 
         self.log_startup(name)
-        agent_cmd = self.build_agent_cmd(name)
+        agent_cmd = self.build_agent_cmd(name, standby=standby)
         backend.start_session(prefix, name, self._env.project_root, agent_cmd)
 
         if isinstance(backend, TmuxBackend) and self.cfg.agent in ("claude", "codex"):
@@ -347,7 +360,7 @@ class SwarmManager:
             self._pending_threads.append(t_trust)
 
         if self._needs_prompt_injection() or (isinstance(backend, TmuxBackend) and not self._uses_prompt_argument()):
-            initial = self.build_initial_prompt(name)
+            initial = self.build_initial_prompt(name, standby=standby)
             t = threading.Thread(
                 target=backend.inject_initial_prompt,
                 args=(prefix, name, initial, self._env.log_dir),
@@ -356,10 +369,19 @@ class SwarmManager:
             self._pending_threads.append(t)
 
         print(
-            f"  {name}: started ({type(backend).__name__.lower().replace('backend', '')}: {prefix}-{name}, agent: {self.cfg.agent})"
+            f"  {name}: started ({type(backend).__name__.lower().replace('backend', '')}: {prefix}-{name}, agent: {self.cfg.agent}"
+            f"{', standby' if standby else ''})"
         )
 
-    def start(self, names: list[str], *, dry_run: bool = False, role: str = "", exclude: str = "") -> None:
+    def start(
+        self,
+        names: list[str],
+        *,
+        dry_run: bool = False,
+        role: str = "",
+        exclude: str = "",
+        standby: bool = False,
+    ) -> None:
         if not names:
             if role or exclude:
                 targets = self.filter_sessions(role=role, exclude=exclude)
@@ -369,7 +391,8 @@ class SwarmManager:
             targets = names
 
         if dry_run:
-            print(f"=== DRY RUN: would start {len(targets)} session(s) ===")
+            mode_note = " in standby/smoke mode" if standby else ""
+            print(f"=== DRY RUN: would start {len(targets)} session(s){mode_note} ===")
             for name in targets:
                 sf = self._env.suspended_file
                 if is_suspended(name, sf):
@@ -378,7 +401,8 @@ class SwarmManager:
                     print(f"  {name}: already running (would skip)")
                 else:
                     backend_name = type(self.cfg.backend).__name__.lower().replace("backend", "")
-                    print(f"  {name}: would start (mode: {backend_name}, agent: {self.cfg.agent})")
+                    standby_note = ", standby" if standby else ""
+                    print(f"  {name}: would start (mode: {backend_name}, agent: {self.cfg.agent}{standby_note})")
             return
 
         self.ensure_registered(targets)
@@ -392,7 +416,7 @@ class SwarmManager:
             if is_suspended(name, sf):
                 print(f"  {name}: SUSPENDED (use 'swarm resume {name}' to reactivate)")
                 continue
-            self._start_one(name)
+            self._start_one(name, standby=standby)
             self.clock_in(name)
             started += 1
 
@@ -402,7 +426,8 @@ class SwarmManager:
 
         print()
         backend_name = type(self.cfg.backend).__name__.lower().replace("backend", "")
-        print(f"Mode: {backend_name} | Engine: {self.cfg.agent} | Started: {started}")
+        standby_note = " | Startup: standby/smoke" if standby else ""
+        print(f"Mode: {backend_name} | Engine: {self.cfg.agent} | Started: {started}{standby_note}")
         print(f"Logs: {self._env.log_dir}")
         if isinstance(self.cfg.backend, TmuxBackend):
             print(f"  tmux attach -t {self._env.prefix}-<name>   # attach (Ctrl-B D to detach)")
@@ -555,6 +580,8 @@ Mode: {backend_name} (override with SWARM_MODE=tmux|screen)
 Engine: {self.cfg.agent} (override with CNB_AGENT/SWARM_AGENT=claude|codex|trae|qwen)
 
   start [names...]    Launch sessions (default: all non-suspended)
+  smoke [names...]    Launch sessions in standby/smoke mode (no historical task resume)
+  standby [names...]  Alias for smoke
   start --role=dev    Launch only sessions with matching role
   start --exclude=intern  Launch all except matching role
   status              Who's running
@@ -571,6 +598,7 @@ Roles (from config.toml [session.X] role key): lead, dev, intern, dispatcher
 Examples:
   swarm start                           # launch all with Claude (default)
   SWARM_AGENT=codex swarm start         # launch all with Codex
+  SWARM_AGENT=codex swarm smoke alice   # start alice for report-only standby
   SWARM_AGENT=trae swarm start          # launch all with Trae
   swarm start alice bob                 # launch specific sessions
   swarm attach alice                    # interactive access

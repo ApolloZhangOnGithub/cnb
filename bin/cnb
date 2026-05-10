@@ -171,11 +171,16 @@ if [ $# -gt 0 ]; then
         init)       shift; exec "$CLAUDES_HOME/bin/init" "$@" ;;
         status|ps)  exec "$CLAUDES_HOME/bin/board" overview ;;
         board)      shift; exec "$CLAUDES_HOME/bin/board" "$@" ;;
+        model|m)    shift; exec "$CLAUDES_HOME/bin/board" model "$@" ;;
         swarm)      shift; exec "$CLAUDES_HOME/bin/swarm" "$@" ;;
         dispatcher) shift; exec "$CLAUDES_HOME/bin/dispatcher" "$@" ;;
         watchdog)   shift; exec "$CLAUDES_HOME/bin/dispatcher-watchdog" "$@" ;;
         doctor)     shift; exec "$CLAUDES_HOME/bin/doctor" "$@" ;;
+        hygiene)    shift; exec "$CLAUDES_HOME/bin/hygiene" "$@" ;;
         feishu)     shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.feishu_bridge "$@" ;;
+        feishu-chief)
+            shift
+            PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.feishu_bridge --config "$HOME/.cnb/device-chief/config.toml" "$@" ;;
         capture)    shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.capture_ingest "$@" ;;
         shutdown)   shift; exec "$CLAUDES_HOME/bin/shutdown" "$@" ;;
         logs)
@@ -196,7 +201,12 @@ if [ $# -gt 0 ]; then
                 echo "用法: cnb exec <name> \"message\"" >&2; exit 1
             fi
             _target="$1"; shift
-            exec "$CLAUDES_HOME/bin/board" send "$_target" "$*" ;;
+            _sender="${CNB_EXEC_FROM:-}"
+            if [ -z "$_sender" ]; then
+                _sender="$(_read_update_owner 2>/dev/null | head -n 1 || true)"
+            fi
+            [ -n "$_sender" ] || _sender="dispatcher"
+            exec "$CLAUDES_HOME/bin/board" --as "$_sender" send "$_target" "$*" ;;
         compose)
             shift
             _TEAM_FILE="${1:-cnb.toml}"
@@ -314,9 +324,12 @@ cmd_usage(Path('$CNB_PROJECT'), sys.argv[1:])
             printf "  cnb usage             token 用量统计\n"
             printf "  cnb leaderboard       贡献排行榜\n"
             printf "  cnb doctor            健康检查\n\n"
+            printf "  cnb hygiene           区分可清缓存、本地状态、疑似备份\n\n"
             printf "  cnb feishu status     查看飞书入站 bridge 配置\n"
             printf "  cnb feishu setup      自动写配置、启动 webhook、准备公网回调\n"
             printf "  cnb feishu start      启动飞书入站 bridge，允许用户从飞书唤起本机设备主管同学\n\n"
+            printf "  cnb feishu-chief status  查看机器总管独立飞书 bridge 配置\n"
+            printf "  cnb feishu-chief start   启动机器总管独立飞书 bridge\n\n"
             printf "  cnb feishu activity   查看设备/tmux/团队/前台会话活动摘要\n"
             printf "  cnb feishu tui        查看设备主管 TUI 快照\n"
             printf "  cnb feishu watch      启动只读 Web TUI\n\n"
@@ -479,6 +492,37 @@ EOF
 cat > "$CMD_DIR/cnb-pending.md"   <<EOF
 查看需要用户介入的待处理操作。运行 \`${BOARD} --as ${ME} pending list\`，把所有 \`用户需执行: ! ...\` 命令整理成可复制清单；如果用户说已经执行，运行 \`${BOARD} --as ${ME} pending verify --retry\` 并汇报验证/重试结果。
 EOF
+cat > "$CMD_DIR/cnb-model.md"     <<'EOF'
+---
+allowed-tools: Bash(cnb model), Bash(cnb model *), Bash(cnb m), Bash(cnb m *)
+argument-hint: "<profile> | list | current"
+description: Switch cnb LLM provider (e.g. /cnb-model d for deepseek)
+---
+
+!`cnb m $ARGUMENTS`
+
+Reply with only the command output above. Do not explain it unless the user asks.
+EOF
+cat > "$CMD_DIR/cnb-model-current.md" <<EOF
+---
+allowed-tools: Bash(cnb model current)
+description: Show current cnb LLM provider/model profile
+---
+
+!\`cnb model current\`
+
+Reply with only the command output above.
+EOF
+cat > "$CMD_DIR/cnb-model-list.md" <<EOF
+---
+allowed-tools: Bash(cnb model list)
+description: List cnb LLM provider/model profiles
+---
+
+!\`cnb model list\`
+
+Reply with only the command output above.
+EOF
 cat > "$CMD_DIR/cnb-update.md"    <<EOF
 运行 \`npm install -g claude-nb\`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 cnb 以生效。
 EOF
@@ -489,6 +533,9 @@ cat > "$CMD_DIR/cnb-help.md"      <<EOF
 - /cnb-progress — 最近进展汇总
 - /cnb-history — 查看完整消息历史
 - /cnb-pending — 查看待用户处理的操作并验证重试
+- /cnb-model [menu|list|current|use profile] — 模型/provider 菜单或切换
+- /cnb-model-current — 查看当前模型/provider
+- /cnb-model-list — 列出可用模型/provider profiles
 - /cnb-update — 更新 cnb 到最新版
 EOF
 

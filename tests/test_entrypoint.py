@@ -208,6 +208,9 @@ class TestSlashCommands:
             "cnb-progress.md",
             "cnb-history.md",
             "cnb-pending.md",
+            "cnb-model.md",
+            "cnb-model-current.md",
+            "cnb-model-list.md",
             "cnb-update.md",
             "cnb-help.md",
         ]
@@ -217,6 +220,20 @@ class TestSlashCommands:
         pending_content = (cmd_dir / "cnb-pending.md").read_text()
         assert "pending list" in pending_content
         assert "pending verify --retry" in pending_content
+
+        model_content = (cmd_dir / "cnb-model.md").read_text()
+        assert "allowed-tools: Bash(cnb model), Bash(cnb model *), Bash(cnb m), Bash(cnb m *)" in model_content
+        assert "list | current" in model_content
+        assert "!`cnb m $ARGUMENTS`" in model_content
+        assert "If $ARGUMENTS is provided" not in model_content
+
+        current_content = (cmd_dir / "cnb-model-current.md").read_text()
+        assert "allowed-tools: Bash(cnb model current)" in current_content
+        assert "!`cnb model current`" in current_content
+
+        list_content = (cmd_dir / "cnb-model-list.md").read_text()
+        assert "allowed-tools: Bash(cnb model list)" in list_content
+        assert "!`cnb model list`" in list_content
 
 
 class TestSubcommands:
@@ -251,6 +268,61 @@ class TestSubcommands:
         )
         assert r.returncode == 0
         assert "threebody" in r.stdout
+
+    def test_exec_sends_with_registered_sender(self, board_project, tmp_path):
+        home = tmp_path / "home"
+        home.mkdir()
+        env = {
+            **os.environ,
+            "CNB_PROJECT": str(board_project),
+            "HOME": str(home),
+            "VIRTUAL_ENV": str(tmp_path / "venv"),
+        }
+        r = subprocess.run(
+            ["bash", str(ENTRYPOINT), "exec", "alpha", "hello from cnb exec"],
+            cwd=board_project,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert r.returncode == 0
+        assert "OK" in r.stdout
+        inbox = _board(board_project, "--as", "alpha", "inbox")
+        assert "hello from cnb exec" in inbox.stdout
+
+    def test_model_subcommand_without_args_shows_menu(self, board_project, tmp_path):
+        home = tmp_path / "home"
+        home.mkdir()
+        cnb_dir = board_project / ".cnb"
+        if not cnb_dir.exists():
+            cnb_dir = board_project / ".claudes"
+        (cnb_dir / "model-profiles.json").write_text(
+            """{
+  "default": {"name": "Claude default", "env": {}},
+  "deepseek": {"name": "Deepseek", "env": {"ANTHROPIC_MODEL": "deepseek-chat"}}
+}
+"""
+        )
+        env = {
+            **os.environ,
+            "CNB_PROJECT": str(board_project),
+            "HOME": str(home),
+            "VIRTUAL_ENV": str(tmp_path / "venv"),
+        }
+
+        r = subprocess.run(
+            ["bash", str(ENTRYPOINT), "model"],
+            cwd=board_project,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert r.returncode == 0
+        assert "cnb m (model) — 切换 LLM provider" in r.stdout
+        assert "cnb m <profile> [-s global|project]" in r.stdout
+        assert "deepseek" in r.stdout
 
     def test_version_subcommand_notifies_lead_when_outdated(self, board_project, tmp_path):
         home = tmp_path / "home"

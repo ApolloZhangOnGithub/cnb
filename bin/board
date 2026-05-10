@@ -273,6 +273,16 @@ COMMANDS: list[Command] = [
         "pending actions queue",
         "pending {add|list|verify|retry|resolve}",
     ),
+    # ── model / provider ──
+    Command(
+        "model",
+        "lib.board_model",
+        "cmd_model",
+        "switch LLM provider / model",
+        "model {list|current|use <profile>}",
+        needs_identity=False,
+        aliases=["m"],
+    ),
     # ── maintenance ──
     Command(
         "prune",

@@ -43,5 +43,4 @@ instances/silicon_vally_battle/CHAT_LOG.txt
 !.claude/.gitignore
 !.claude/commands/
 !.claude/settings.json
-!.claude/settings.local.json
 npm_recovery_codes.txt

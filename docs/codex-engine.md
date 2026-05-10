@@ -9,6 +9,7 @@ cnb codex
 cnb --agent codex
 CNB_AGENT=codex cnb
 SWARM_AGENT=codex cnb swarm start
+SWARM_AGENT=codex cnb swarm smoke <session>
 ```
 
 ## Permission Mode
@@ -60,3 +61,15 @@ Clean up the temporary session after the check:
 ```bash
 tmux kill-session -t <prefix>-<session>
 ```
+
+Use standby mode when the goal is to prove the team can clock in without
+resuming historical work:
+
+```bash
+SWARM_AGENT=codex ./bin/swarm smoke <session>
+```
+
+In smoke mode the startup prompt tells the tongxue to read its session/CV and
+inbox, report readiness, and then wait. It explicitly forbids continuing the
+session file, reading `ROADMAP.md` for autonomous work, editing files, running
+tests, or commenting on issues/PRs.

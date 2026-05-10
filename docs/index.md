@@ -10,7 +10,9 @@ cnb documentation should work like product documentation, not like a pile of not
 | [README](../README.md) | Product overview, install, quick start, and the shortest command reference. |
 | [Pricing and usage](pricing.md) | How cnb usage maps to Claude Code, Codex, credits, Fast mode, and team size. |
 | [Feishu bridge](feishu-bridge.md) | Wake the Mac device supervisor from Feishu, quiet notifications, Web TUI viewing, resource handoff, and readback boundaries. |
+| [Device chief and multi-device supervisors](device-chief-and-multidevice-supervisors.md) | Cross-device supervisor roles, Feishu group handshake, leases, state boundaries, and watchdog plan. |
 | [Mac companion and Island](terminal-supervisor-island.md) | Mac companion first, optional iPhone Live Activity bridge second. |
+| [Mac team host capacity](mac-team-host-capacity.md) | Planning assumptions and benchmark plan for running many cnb team instances on one high-memory Mac. |
 | [Roadmap](../ROADMAP.md) | Product direction and active development themes. |
 | [Contributing](../CONTRIBUTING.md) | Contributor workflow, style, and review expectations. |
 | [Package publishing](package-publishing.md) | npm release, dist-tags, and GitHub Packages visibility rules. |

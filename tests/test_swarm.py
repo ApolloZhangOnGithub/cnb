@@ -141,10 +141,26 @@ class TestPrompts:
         assert "alice" in cmd
         assert "--append-system-prompt" not in cmd
 
+    def test_agent_cmd_codex_standby_does_not_resume_historical_work(self, mgr):
+        mgr.cfg.agent = "codex"
+        cmd = mgr.build_agent_cmd("alice", standby=True)
+        assert "standby/smoke" in cmd
+        assert "不要继续" in cmd
+        assert "不要读取 ROADMAP.md" in cmd
+        assert "如果没有明确任务，读 ROADMAP.md 自主找活" not in cmd
+
     def test_initial_prompt_contains_session_dir(self, mgr):
         p = mgr.build_initial_prompt("bob")
         assert "bob" in p
         assert "inbox" in p
+
+    def test_initial_prompt_standby_reports_only(self, mgr):
+        p = mgr.build_initial_prompt("bob", standby=True)
+        assert "standby/smoke" in p
+        assert "等待明确任务" in p
+        assert "不要改文件" in p
+        assert "不要读取 ROADMAP.md" in p
+        assert "如果没有明确任务，读 ROADMAP.md 自主找活" not in p
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +297,22 @@ class TestStartStop:
         started = [c for c in fake_backend.calls if c[0] == "start_session"]
         assert len(started) == 1
         assert started[0][2] == "alice"
+
+    def test_start_standby_passes_report_only_prompt(self, mgr, fake_backend, capsys):
+        mgr.cfg.agent = "codex"
+        mgr.start(["alice"], standby=True)
+        started = [c for c in fake_backend.calls if c[0] == "start_session"]
+        assert len(started) == 1
+        assert "standby/smoke" in started[0][3]
+        assert "不要继续" in started[0][3]
+        assert "不要读取 ROADMAP.md" in started[0][3]
+        out = capsys.readouterr().out
+        assert "Startup: standby/smoke" in out
+
+    def test_start_dry_run_standby_mentions_mode(self, mgr, capsys):
+        mgr.start(["alice"], dry_run=True, standby=True)
+        out = capsys.readouterr().out
+        assert "standby/smoke" in out
 
     def test_start_skips_suspended(self, mgr, fake_backend, capsys):
         sf = mgr._env.suspended_file

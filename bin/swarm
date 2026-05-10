@@ -15,10 +15,12 @@ from lib.swarm import SwarmConfig, SwarmManager
 
 def _parse_start_args(args: list[str]) -> tuple[list[str], dict]:
     names: list[str] = []
-    kwargs: dict = {"dry_run": False, "role": "", "exclude": ""}
+    kwargs: dict = {"dry_run": False, "role": "", "exclude": "", "standby": False}
     for arg in args:
         if arg == "--dry-run":
             kwargs["dry_run"] = True
+        elif arg in ("--standby", "--smoke"):
+            kwargs["standby"] = True
         elif arg.startswith("--role="):
             kwargs["role"] = arg.split("=", 1)[1]
         elif arg.startswith("--exclude="):
@@ -50,6 +52,10 @@ def main() -> None:
 
     if cmd == "start":
         names, kwargs = _parse_start_args(rest)
+        mgr.start(names, **kwargs)
+    elif cmd in ("smoke", "standby"):
+        names, kwargs = _parse_start_args(rest)
+        kwargs["standby"] = True
         mgr.start(names, **kwargs)
     elif cmd == "stop":
         names, kwargs = _parse_stop_args(rest)

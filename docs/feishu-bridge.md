@@ -44,6 +44,24 @@ The routed prompt includes the Feishu `message_id`. The supervisor should use:
 `ask` is intentionally short and rejects long summaries or fenced code blocks so
 progress reporting does not become chat spam.
 
+## Device Supervisor State Boundary
+
+The device supervisor is machine-level state, not a project board session.
+Project `.cnb/dailies/<shift>/<session>.md` files are only for project tongxue
+that are registered in that project's board database.
+
+When the Feishu-routed device supervisor writes shutdown notes, daily notes, or
+handoff state, it must use the global supervisor area:
+
+```text
+~/.cnb/device-supervisor/dailies/<date>.md
+```
+
+It must not write machine-level handoff into a project tongxue's daily report
+such as `.cnb/dailies/<shift>/codex.md` or `.cnb/dailies/<shift>/lead.md`.
+Those files may be referenced in the global note when a project handoff matters,
+but they remain owned by the project sessions.
+
 ## Config Shape
 
 `cnb feishu setup` writes this section to `~/.cnb/config.toml`. Keep secrets
@@ -156,6 +174,45 @@ user has scrolled away.
 - Keep `watch_token` private. Share the full watch URL only through an
   intentional `cnb feishu watch` reply.
 
+## Permission Manifest
+
+For the current bridge path, request the broad IM/Chat/Contact scopes below in
+the Feishu developer console. This is the "open as much as the bridge can use"
+set, not a minimal set.
+
+```json
+{
+  "scopes": {
+    "tenant": [
+      "contact:contact.base:readonly",
+      "contact:user.base:readonly",
+      "contact:user.email:readonly",
+      "contact:user.employee_id:readonly",
+      "contact:user.id:readonly",
+      "im:chat",
+      "im:chat:create",
+      "im:chat:readonly",
+      "im:chat.members:read",
+      "im:chat.members:write_only",
+      "im:message",
+      "im:message:readonly",
+      "im:message:send_as_bot",
+      "im:message.group_msg",
+      "im:message.group_at_msg.include_bot:readonly",
+      "im:message.group_at_msg:readonly",
+      "im:message.p2p_msg:readonly",
+      "im:resource"
+    ],
+    "user": []
+  }
+}
+```
+
+If the console exposes additional IM sub-scopes for your tenant, keep them
+enabled as well. The bridge only consumes the current-message handoff and the
+opt-in readback path; it does not need Calendar/Docs/Drive permissions for the
+current control-room flow.
+
 `ngrok` is user-owned infrastructure. CNB can start `ngrok http ...` only after
 the local machine has installed and authenticated ngrok, for example:
 
@@ -182,6 +239,9 @@ the goal before calling local capabilities.
 
 ## Related Surfaces
 
+- [Device chief and multi-device supervisors](device-chief-and-multidevice-supervisors.md)
+  defines how multiple Mac device supervisors use Feishu as a human-visible
+  control room without becoming split-brain active writers.
 - [Mac companion and Island](terminal-supervisor-island.md) explains the Mac
   companion and optional iPhone Live Activity bridge.
 - `tools/cnb-mac-companion/` embeds the same built-in Web TUI locally through

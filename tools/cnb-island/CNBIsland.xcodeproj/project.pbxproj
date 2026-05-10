@@ -29,6 +29,13 @@
 		010000000000000000000014 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* LaunchScreen.storyboard */; };
 		010000000000000000000015 /* CNBRuntimeFileLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* CNBRuntimeFileLocator.swift */; };
 		010000000000000000000016 /* CNBAdminTodoViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* CNBAdminTodoViewModel.swift */; };
+		010000000000000000000017 /* CNBVisionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000014 /* CNBVisionApp.swift */; };
+		010000000000000000000018 /* VisionFeishuMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* VisionFeishuMessagesView.swift */; };
+		010000000000000000000019 /* VisionFeishuMessagesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* VisionFeishuMessagesViewModel.swift */; };
+		01000000000000000000001A /* FeishuChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000C /* FeishuChatModels.swift */; };
+		01000000000000000000001B /* FeishuChatClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000D /* FeishuChatClient.swift */; };
+		01000000000000000000001C /* FeishuMessageContentRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000010 /* FeishuMessageContentRenderer.swift */; };
+		01000000000000000000001D /* CNBRuntimeFileLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* CNBRuntimeFileLocator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,8 +82,12 @@
 		020000000000000000000011 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		020000000000000000000012 /* CNBRuntimeFileLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CNBRuntimeFileLocator.swift; sourceTree = "<group>"; };
 		020000000000000000000013 /* CNBAdminTodoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CNBAdminTodoViewModel.swift; sourceTree = "<group>"; };
+		020000000000000000000014 /* CNBVisionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CNBVisionApp.swift; sourceTree = "<group>"; };
+		020000000000000000000015 /* VisionFeishuMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionFeishuMessagesView.swift; sourceTree = "<group>"; };
+		020000000000000000000016 /* VisionFeishuMessagesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionFeishuMessagesViewModel.swift; sourceTree = "<group>"; };
 		030000000000000000000001 /* CNBIsland.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CNBIsland.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		030000000000000000000002 /* CNBIslandWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CNBIslandWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		030000000000000000000003 /* CNBVision.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CNBVision.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -89,14 +100,21 @@
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-		};
-		060000000000000000000002 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+			};
+			060000000000000000000002 /* Frameworks */ = {
+				isa = PBXFrameworksBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
+			060000000000000000000003 /* Frameworks */ = {
+				isa = PBXFrameworksBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -109,13 +127,14 @@
 			);
 			sourceTree = "<group>";
 		};
-		070000000000000000000002 /* Sources */ = {
-			isa = PBXGroup;
-			children = (
-				070000000000000000000003 /* CNBIslandApp */,
-				070000000000000000000004 /* CNBIslandShared */,
-				070000000000000000000005 /* CNBIslandWidget */,
-			);
+			070000000000000000000002 /* Sources */ = {
+				isa = PBXGroup;
+				children = (
+					070000000000000000000003 /* CNBIslandApp */,
+					070000000000000000000008 /* CNBVisionApp */,
+					070000000000000000000004 /* CNBIslandShared */,
+					070000000000000000000005 /* CNBIslandWidget */,
+				);
 			path = Sources;
 			sourceTree = "<group>";
 		};
@@ -157,15 +176,26 @@
 			path = CNBIslandWidget;
 			sourceTree = "<group>";
 		};
-		070000000000000000000006 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				030000000000000000000001 /* CNBIsland.app */,
-				030000000000000000000002 /* CNBIslandWidgetExtension.appex */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
+			070000000000000000000006 /* Products */ = {
+				isa = PBXGroup;
+				children = (
+					030000000000000000000001 /* CNBIsland.app */,
+					030000000000000000000002 /* CNBIslandWidgetExtension.appex */,
+					030000000000000000000003 /* CNBVision.app */,
+				);
+				name = Products;
+				sourceTree = "<group>";
+			};
+			070000000000000000000008 /* CNBVisionApp */ = {
+				isa = PBXGroup;
+				children = (
+					020000000000000000000014 /* CNBVisionApp.swift */,
+					020000000000000000000015 /* VisionFeishuMessagesView.swift */,
+					020000000000000000000016 /* VisionFeishuMessagesViewModel.swift */,
+				);
+				path = CNBVisionApp;
+				sourceTree = "<group>";
+			};
 		070000000000000000000007 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -196,10 +226,10 @@
 			productName = CNBIsland;
 			productReference = 030000000000000000000001 /* CNBIsland.app */;
 			productType = "com.apple.product-type.application";
-		};
-		080000000000000000000002 /* CNBIslandWidgetExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 0A0000000000000000000002 /* Build configuration list for PBXNativeTarget "CNBIslandWidgetExtension" */;
+			};
+			080000000000000000000002 /* CNBIslandWidgetExtension */ = {
+				isa = PBXNativeTarget;
+				buildConfigurationList = 0A0000000000000000000002 /* Build configuration list for PBXNativeTarget "CNBIslandWidgetExtension" */;
 			buildPhases = (
 				0B0000000000000000000002 /* Sources */,
 				060000000000000000000002 /* Frameworks */,
@@ -209,11 +239,28 @@
 			);
 			dependencies = (
 			);
-			name = CNBIslandWidgetExtension;
-			productName = CNBIslandWidgetExtension;
-			productReference = 030000000000000000000002 /* CNBIslandWidgetExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
+				name = CNBIslandWidgetExtension;
+				productName = CNBIslandWidgetExtension;
+				productReference = 030000000000000000000002 /* CNBIslandWidgetExtension.appex */;
+				productType = "com.apple.product-type.app-extension";
+			};
+			080000000000000000000003 /* CNBVision */ = {
+				isa = PBXNativeTarget;
+				buildConfigurationList = 0A0000000000000000000004 /* Build configuration list for PBXNativeTarget "CNBVision" */;
+				buildPhases = (
+					0B0000000000000000000003 /* Sources */,
+					060000000000000000000003 /* Frameworks */,
+					0E0000000000000000000003 /* Resources */,
+				);
+				buildRules = (
+				);
+				dependencies = (
+				);
+				name = CNBVision;
+				productName = CNBVision;
+				productReference = 030000000000000000000003 /* CNBVision.app */;
+				productType = "com.apple.product-type.application";
+			};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -228,6 +275,9 @@
 						CreatedOnToolsVersion = 26.4.1;
 					};
 					080000000000000000000002 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					080000000000000000000003 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
 				};
@@ -249,63 +299,85 @@
 			targets = (
 				080000000000000000000001 /* CNBIsland */,
 				080000000000000000000002 /* CNBIslandWidgetExtension */,
+				080000000000000000000003 /* CNBVision */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		0E0000000000000000000001 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				01000000000000000000000D /* Localizable.xcstrings in Resources */,
-				010000000000000000000014 /* LaunchScreen.storyboard in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		0E0000000000000000000002 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				01000000000000000000000E /* Localizable.xcstrings in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+			0E0000000000000000000001 /* Resources */ = {
+				isa = PBXResourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					01000000000000000000000D /* Localizable.xcstrings in Resources */,
+					010000000000000000000014 /* LaunchScreen.storyboard in Resources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
+			0E0000000000000000000002 /* Resources */ = {
+				isa = PBXResourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					01000000000000000000000E /* Localizable.xcstrings in Resources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
+			0E0000000000000000000003 /* Resources */ = {
+				isa = PBXResourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		0B0000000000000000000001 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				010000000000000000000001 /* CNBIslandApp.swift in Sources */,
-				010000000000000000000002 /* ContentView.swift in Sources */,
-				010000000000000000000003 /* CNBLiveActivityController.swift in Sources */,
-				010000000000000000000004 /* CNBLiveActivityViewModel.swift in Sources */,
-				010000000000000000000005 /* CNBLiveStateReader.swift in Sources */,
-				010000000000000000000015 /* CNBRuntimeFileLocator.swift in Sources */,
-				010000000000000000000016 /* CNBAdminTodoViewModel.swift in Sources */,
-				010000000000000000000006 /* CNBActivityAttributes.swift in Sources */,
-				010000000000000000000007 /* CNBLiveState.swift in Sources */,
-				01000000000000000000000F /* FeishuChatModels.swift in Sources */,
-				010000000000000000000010 /* FeishuChatClient.swift in Sources */,
-				010000000000000000000013 /* FeishuMessageContentRenderer.swift in Sources */,
-				010000000000000000000011 /* FeishuChatViewModel.swift in Sources */,
-				010000000000000000000012 /* FeishuChatView.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		0B0000000000000000000002 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				010000000000000000000008 /* CNBIslandLiveActivity.swift in Sources */,
-				010000000000000000000009 /* CNBIslandWidgetBundle.swift in Sources */,
-				01000000000000000000000A /* CNBActivityAttributes.swift in Sources */,
-				01000000000000000000000B /* CNBLiveState.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+			0B0000000000000000000001 /* Sources */ = {
+				isa = PBXSourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					010000000000000000000001 /* CNBIslandApp.swift in Sources */,
+					010000000000000000000002 /* ContentView.swift in Sources */,
+					010000000000000000000003 /* CNBLiveActivityController.swift in Sources */,
+					010000000000000000000004 /* CNBLiveActivityViewModel.swift in Sources */,
+					010000000000000000000005 /* CNBLiveStateReader.swift in Sources */,
+					010000000000000000000015 /* CNBRuntimeFileLocator.swift in Sources */,
+					010000000000000000000016 /* CNBAdminTodoViewModel.swift in Sources */,
+					010000000000000000000006 /* CNBActivityAttributes.swift in Sources */,
+					010000000000000000000007 /* CNBLiveState.swift in Sources */,
+					01000000000000000000000F /* FeishuChatModels.swift in Sources */,
+					010000000000000000000010 /* FeishuChatClient.swift in Sources */,
+					010000000000000000000013 /* FeishuMessageContentRenderer.swift in Sources */,
+					010000000000000000000011 /* FeishuChatViewModel.swift in Sources */,
+					010000000000000000000012 /* FeishuChatView.swift in Sources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
+			0B0000000000000000000002 /* Sources */ = {
+				isa = PBXSourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					010000000000000000000008 /* CNBIslandLiveActivity.swift in Sources */,
+					010000000000000000000009 /* CNBIslandWidgetBundle.swift in Sources */,
+					01000000000000000000000A /* CNBActivityAttributes.swift in Sources */,
+					01000000000000000000000B /* CNBLiveState.swift in Sources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
+			0B0000000000000000000003 /* Sources */ = {
+				isa = PBXSourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					010000000000000000000017 /* CNBVisionApp.swift in Sources */,
+					010000000000000000000018 /* VisionFeishuMessagesView.swift in Sources */,
+					010000000000000000000019 /* VisionFeishuMessagesViewModel.swift in Sources */,
+					01000000000000000000001D /* CNBRuntimeFileLocator.swift in Sources */,
+					01000000000000000000001A /* FeishuChatModels.swift in Sources */,
+					01000000000000000000001B /* FeishuChatClient.swift in Sources */,
+					01000000000000000000001C /* FeishuMessageContentRenderer.swift in Sources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -500,10 +572,10 @@
 			};
 			name = Debug;
 		};
-		0D0000000000000000000006 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
+			0D0000000000000000000006 /* Release */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -522,9 +594,57 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				};
+				name = Release;
 			};
-			name = Release;
-		};
+			0D0000000000000000000007 /* Debug */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					CODE_SIGN_STYLE = Automatic;
+					CURRENT_PROJECT_VERSION = 1;
+					DEVELOPMENT_TEAM = "";
+					GENERATE_INFOPLIST_FILE = YES;
+					INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
+						"@executable_path/Frameworks",
+					);
+					MARKETING_VERSION = 0.1;
+					PRODUCT_BUNDLE_IDENTIFIER = dev.cnb.CNBVision;
+					PRODUCT_NAME = "$(TARGET_NAME)";
+					SDKROOT = xros;
+					SUPPORTED_PLATFORMS = "xros xrsimulator";
+					SWIFT_EMIT_LOC_STRINGS = YES;
+					SWIFT_VERSION = 6.0;
+					TARGETED_DEVICE_FAMILY = 7;
+					XROS_DEPLOYMENT_TARGET = 1.0;
+				};
+				name = Debug;
+			};
+			0D0000000000000000000008 /* Release */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					CODE_SIGN_STYLE = Automatic;
+					CURRENT_PROJECT_VERSION = 1;
+					DEVELOPMENT_TEAM = "";
+					GENERATE_INFOPLIST_FILE = YES;
+					INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
+						"@executable_path/Frameworks",
+					);
+					MARKETING_VERSION = 0.1;
+					PRODUCT_BUNDLE_IDENTIFIER = dev.cnb.CNBVision;
+					PRODUCT_NAME = "$(TARGET_NAME)";
+					SDKROOT = xros;
+					SUPPORTED_PLATFORMS = "xros xrsimulator";
+					SWIFT_EMIT_LOC_STRINGS = YES;
+					SWIFT_VERSION = 6.0;
+					TARGETED_DEVICE_FAMILY = 7;
+					XROS_DEPLOYMENT_TARGET = 1.0;
+				};
+				name = Release;
+			};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -546,15 +666,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		0A0000000000000000000003 /* Build configuration list for PBXProject "CNBIsland" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				0D0000000000000000000001 /* Debug */,
+			0A0000000000000000000003 /* Build configuration list for PBXProject "CNBIsland" */ = {
+				isa = XCConfigurationList;
+				buildConfigurations = (
+					0D0000000000000000000001 /* Debug */,
 				0D0000000000000000000002 /* Release */,
 			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
+				defaultConfigurationIsVisible = 0;
+				defaultConfigurationName = Debug;
+			};
+			0A0000000000000000000004 /* Build configuration list for PBXNativeTarget "CNBVision" */ = {
+				isa = XCConfigurationList;
+				buildConfigurations = (
+					0D0000000000000000000007 /* Debug */,
+					0D0000000000000000000008 /* Release */,
+				);
+				defaultConfigurationIsVisible = 0;
+				defaultConfigurationName = Debug;
+			};
 /* End XCConfigurationList section */
 	};
 	rootObject = 090000000000000000000001 /* Project object */;
