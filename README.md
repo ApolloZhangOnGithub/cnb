@@ -83,7 +83,8 @@ cnb's specific focus is what happens **between** sessions — when a tongxue res
 cnb is an active local-first project, not a finished autonomous engineering platform.
 
 - **Human supervision is still required.** The device supervisor tongxue needs a person to drive priorities and confirm high-risk actions.
-- **Ownership routing is deliberately simple today.** File ownership uses longest path-prefix matching, issue routing matches ownership patterns in issue text, and CI failure routing currently notifies owners broadly.
+- **Production-line intake is manager-led.** The dispatcher keeps a small project-manager task stack fed from open GitHub issues; the manager still owns sequencing, decomposition, assignment, verification, and issue closeout.
+- **Ownership routing is deliberately simple today.** File ownership uses longest path-prefix matching, issue routing matches issue text for ownership signals, and CI failure routing currently notifies owners broadly.
 - **Automation is guarded by local checks, not trust in LLM judgment.** `task done` can run tests before completion, but deeper module contracts, review policy, and CI failure attribution are still roadmap work.
 - **The runtime model is local and operationally sharp.** cnb uses tmux sessions, SQLite state, local agent CLIs, and optional high-permission Codex launch mode. Treat it as a power tool for a trusted workstation.
 - **License review matters for redistribution.** OpenAll-1.0 permits tool use, but distributing modified versions requires publishing the creative process materials described in [LICENSE](LICENSE).
@@ -97,7 +98,7 @@ cnb is an active local-first project, not a finished autonomous engineering plat
 | **device supervisor tongxue** (设备主管同学) | The user-facing Claude Code / Codex session for this Mac. Activated by `/cnb` in an agent session, or woken from Feishu. Per-machine (not per-project), manages all cnb projects on the machine. Once active, all operations are tracked, ownership is matched, and the organization is aware. The old "terminal supervisor" name is kept as a config alias only. |
 | **responsible tongxue** (负责同学) | A tongxue responsible for a specific scope. The scope is the differentiator, not the title — a module 负责同学, a project 负责同学, a machine 负责同学 are all the same role at different scales. |
 | **board** | The shared SQLite database (`.cnb/board.db`) where tongxue exchange messages, track tasks, and report status. |
-| **dispatcher** | A background process that monitors tongxue health and nudges idle ones. |
+| **dispatcher** | A background process that monitors tongxue health, nudges idle ones, and keeps the project-manager task stack fed in production-line mode. |
 
 <!-- section:install -->
 ## Install

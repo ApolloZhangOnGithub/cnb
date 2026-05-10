@@ -10,6 +10,7 @@ from lib.concerns.notifications import (
     BugSLAChecker,
     InboxNudger,
     ManagerCloseoutEscalator,
+    ProductionLineIntake,
     QueuedMessageFlusher,
     TimeAnnouncer,
 )
@@ -194,6 +195,82 @@ class TestManagerCloseoutEscalator:
         escalator.tick(1060)
 
         assert mock_send.call_count == 1
+
+
+# ===========================================================================
+# ProductionLineIntake
+# ===========================================================================
+
+
+class TestProductionLineIntake:
+    def test_selects_project_manager(self, tmp_path):
+        cfg = make_cfg(tmp_path, ["alice", "project-manager"])
+        intake = ProductionLineIntake(cfg)
+
+        assert intake._manager() == "project-manager"
+
+    def test_prioritizes_p0_bug_before_unlabeled(self, tmp_path):
+        cfg = make_cfg(tmp_path, ["project-manager"])
+        intake = ProductionLineIntake(cfg)
+
+        issues = [
+            {"number": 200, "title": "later", "labels": [], "url": "u"},
+            {
+                "number": 100,
+                "title": "urgent",
+                "labels": [{"name": "priority:p0"}, {"name": "bug"}],
+                "url": "u",
+            },
+        ]
+
+        with patch.object(intake, "_fetch_open_issues", return_value=issues):
+            ranked = intake._ranked_candidates(set())
+
+        assert [issue["number"] for issue in ranked] == [100, 200]
+
+    @patch("lib.concerns.notifications.log")
+    @patch("lib.concerns.notifications.db")
+    def test_adds_tasks_until_stack_limit(self, mock_db, mock_log, tmp_path):
+        cfg = make_cfg(tmp_path, ["project-manager"])
+        fake_db = MagicMock()
+        fake_conn = MagicMock()
+        fake_db.conn.return_value.__enter__.return_value = fake_conn
+        fake_db.conn.return_value.__exit__.return_value = False
+        fake_db.scalar.side_effect = [0, 0, 0, 1, 2]
+        fake_db.query.return_value = []
+        fake_db.execute.side_effect = [11, 12, 13]
+        mock_db.return_value = fake_db
+        intake = ProductionLineIntake(cfg)
+        issues = [
+            {"number": 1, "title": "one", "labels": [{"name": "priority:p1"}], "url": "https://e/1"},
+            {"number": 2, "title": "two", "labels": [{"name": "priority:p1"}], "url": "https://e/2"},
+            {"number": 3, "title": "three", "labels": [{"name": "priority:p1"}], "url": "https://e/3"},
+        ]
+
+        with patch.object(intake, "_fetch_open_issues", return_value=issues):
+            intake.tick(1000)
+
+        assert fake_db.execute.call_count == 3
+        assert fake_db.post_message.call_count == 3
+        first_insert = fake_db.execute.call_args_list[0][0][1]
+        assert first_insert[0] == "project-manager"
+        assert "#1" in first_insert[1]
+        assert first_insert[2] == "active"
+        assert first_insert[3] == 80
+        assert mock_log.call_count == 3
+
+    @patch("lib.concerns.notifications.db")
+    def test_skips_when_manager_stack_is_full(self, mock_db, tmp_path):
+        cfg = make_cfg(tmp_path, ["project-manager"])
+        fake_db = MagicMock()
+        fake_db.scalar.return_value = ProductionLineIntake.STACK_LIMIT
+        mock_db.return_value = fake_db
+        intake = ProductionLineIntake(cfg)
+
+        with patch.object(intake, "_fetch_open_issues") as fetch:
+            intake.tick(1000)
+
+        fetch.assert_not_called()
 
 
 # ===========================================================================

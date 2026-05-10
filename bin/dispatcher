@@ -7,6 +7,7 @@ Concerns (each with independent check intervals):
   IdleDetector       — batch screen snapshot comparison
   IdleKiller         — kill sessions idle >30min
   NudgeCoordinator   — unified nudge orchestrator (inbox/queued/idle)
+  ProductionLineIntake — keep manager task stack fed from GitHub issues
   ManagerCloseoutEscalator — escalate manager tasks stuck after workers finish
   CoralPoker         — periodic heartbeat to dispatcher session
   HealthChecker      — periodic full status report + team idle detection
@@ -39,6 +40,7 @@ from lib.concerns import (
     IdleKiller,
     ManagerCloseoutEscalator,
     NudgeCoordinator,
+    ProductionLineIntake,
     ResourceMonitor,
     SessionKeepAlive,
     TimeAnnouncer,
@@ -115,6 +117,7 @@ def main() -> None:
         SessionKeepAlive(cfg),
         IdleKiller(cfg, idle, coral),
         nudge,
+        ProductionLineIntake(cfg),
         ManagerCloseoutEscalator(cfg),
         poker,
         BugSLAChecker(cfg, poker),

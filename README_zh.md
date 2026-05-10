@@ -96,7 +96,8 @@ cnb 聚焦的是 session **之间**发生的事——当一个同学重启后失
 cnb 是一个活跃的 local-first 项目，还不是成熟的自治工程平台。
 
 - **仍然需要人工监督。** 设备主管同学需要人来驱动优先级，并确认高风险动作。
-- **当前 ownership 路由刻意保持简单。** 文件 owner 使用最长路径前缀匹配，issue 路由匹配 issue 文本中的 ownership pattern，CI 失败目前会比较宽泛地通知 owner。
+- **产线模式由项目经理主导。** dispatcher 会从 GitHub open issue 持续补一个小的 project-manager 任务栈；项目经理仍负责排序、拆分、派给同学、验证和关闭 issue。
+- **当前 ownership 路由刻意保持简单。** 文件 owner 使用最长路径前缀匹配，issue 路由会从 issue 文本里匹配 ownership 信号，CI 失败目前会比较宽泛地通知 owner。
 - **自动化依赖本地检查，不依赖 LLM 自我判断。** `task done` 可以在完成前跑测试，但更深的模块 contract、review 策略和 CI 失败归因仍在 roadmap 中。
 - **运行模型是本地的，也有操作风险。** cnb 使用 tmux session、SQLite 状态、本地 agent CLI，并可选用高权限 Codex 启动模式。把它当作可信工作站上的强力工具。
 - **重新分发前需要审 license。** OpenAll-1.0 允许作为工具使用，但分发修改版时需要公开 [LICENSE](LICENSE) 中描述的创作过程材料。
@@ -110,7 +111,7 @@ cnb 是一个活跃的 local-first 项目，还不是成熟的自治工程平台
 | **设备主管同学** | 面向用户的本机 Claude Code / Codex 会话。在 agent 会话里用 `/cnb` 激活，也可以从飞书唤醒。Per-machine（不是 per-project），管理这台机器上所有 cnb 项目。激活后所有操作被追踪、ownership 被匹配、组织有感知。旧名「终端主管」仅作为配置兼容别名保留。 |
 | **负责同学** | 对某个范围负责的同学。范围是区分维度，不是头衔——模块负责同学、项目负责同学、机器负责同学是同一角色在不同尺度上的实例。 |
 | **看板 (board)** | 共享的 SQLite 数据库（`.cnb/board.db`），同学在这里交换消息、追踪任务、汇报状态。 |
-| **调度器 (dispatcher)** | 后台进程，监控同学健康状态，提醒空闲的同学。 |
+| **调度器 (dispatcher)** | 后台进程，监控同学健康状态、提醒空闲同学，并在产线模式下持续给项目经理补任务栈。 |
 
 <!-- section:install -->
 ## 安装

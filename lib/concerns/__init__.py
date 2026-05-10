@@ -10,7 +10,14 @@ from .coral import CoralManager, CoralPoker
 from .health import HealthChecker, ResourceMonitor, SessionKeepAlive
 from .helpers import log, tmux_ok, warn
 from .idle import IdleDetector, IdleKiller, IdleNudger
-from .notifications import BugSLAChecker, InboxNudger, ManagerCloseoutEscalator, QueuedMessageFlusher, TimeAnnouncer
+from .notifications import (
+    BugSLAChecker,
+    InboxNudger,
+    ManagerCloseoutEscalator,
+    ProductionLineIntake,
+    QueuedMessageFlusher,
+    TimeAnnouncer,
+)
 from .nudge_coordinator import NudgeCoordinator
 
 __all__ = [
@@ -27,6 +34,7 @@ __all__ = [
     "InboxNudger",
     "ManagerCloseoutEscalator",
     "NudgeCoordinator",
+    "ProductionLineIntake",
     "QueuedMessageFlusher",
     "ResourceMonitor",
     "SessionKeepAlive",
