@@ -16,6 +16,7 @@
 ### Bug Fixes
 
 - **GitHub Packages mirror workflow** — Added a manual workflow that mirrors an already-published npmjs `claude-nb` release into the scoped GitHub Packages package `@apollozhangongithub/cnb`, keeping the GitHub sidebar populated without changing the canonical npmjs install path.
+- **npm dependency disclosure** — Added package metadata and install documentation so npm users do not mistake the JavaScript dependency count for the full runtime requirements. The package now declares Node support and optional peer CLIs for Claude Code / Codex while documenting Python, tmux, git, and `cryptography`.
 - **Package visibility documentation** — Clarified that the installable `claude-nb` package lives on npmjs.com while GitHub's repository Packages sidebar only shows GitHub Packages. Added npm release tag guidance and package metadata links.
 - **BBS LIKE wildcard injection** — Thread ID prefix matching (`LIKE ?`) did not escape `%` and `_` wildcards in user input. Added `_escape_like()` helper.
 - **BBS reply atomicity** — `cmd_reply` insert and notification message were in separate transactions; wrapped in single `with db.conn()` block.

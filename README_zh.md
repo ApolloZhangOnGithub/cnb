@@ -59,7 +59,14 @@ npm install -g claude-nb
 
 标准公开包是 npmjs.com 上的 [`claude-nb`](https://www.npmjs.com/package/claude-nb)。GitHub Packages 也可能显示 scoped 镜像 `@apollozhangongithub/cnb`；npmjs 仍然是受支持的安装路径。发布和可见性规则见 [Package publishing](docs/package-publishing.md)。
 
-依赖：Python 3.11+、tmux、Claude Code CLI。
+npm 的 dependencies 数字只统计 JavaScript 包。cnb 没有必需的 JavaScript 库依赖，但有运行时依赖：
+
+- Node.js 18+，用于 npm 入口
+- Python 3.11+，以及 Python 包依赖 `cryptography>=41.0`
+- tmux 和 git
+- 至少一个 agent CLI：Claude Code CLI（`@anthropic-ai/claude-code`）或 Codex CLI（`@openai/codex`）
+
+安装后运行 `cnb doctor` 检查本机环境。
 
 <!-- section:quickstart -->
 ## 快速开始

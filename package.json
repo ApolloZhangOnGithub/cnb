@@ -1,9 +1,28 @@
 {
   "name": "claude-nb",
-  "version": "0.5.30-dev",
+  "version": "0.5.31-dev",
   "description": "Multi-agent coordination framework for Claude Code sessions",
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
   "bin": {
     "cnb": "./bin/cnb.js"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-code": "*",
+    "@openai/codex": "*"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-code": {
+      "optional": true
+    },
+    "@openai/codex": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",

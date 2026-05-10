@@ -46,7 +46,14 @@ npm install -g claude-nb
 
 The canonical public package is [`claude-nb`](https://www.npmjs.com/package/claude-nb) on npmjs.com. GitHub Packages may also show the scoped mirror `@apollozhangongithub/cnb`; npmjs remains the supported install path. See [Package publishing](docs/package-publishing.md) for release and visibility rules.
 
-Requires: Python 3.11+, tmux, Claude Code CLI.
+The npm dependency count only covers JavaScript packages. cnb has no required JavaScript library dependencies, but it does have runtime requirements:
+
+- Node.js 18+ for the npm entrypoint
+- Python 3.11+ and the Python package dependency `cryptography>=41.0`
+- tmux and git
+- at least one agent CLI: Claude Code CLI (`@anthropic-ai/claude-code`) or Codex CLI (`@openai/codex`)
+
+Run `cnb doctor` after install to check the local machine.
 
 <!-- section:quickstart -->
 ## Quick start
