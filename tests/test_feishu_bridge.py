@@ -1530,7 +1530,12 @@ class TestRouting:
         assert updates == [0]
         assert feishu_bridge.activity_is_done(cfg, "om_1") is False
         assert state["messages"]["om_1"]["activity_monitor_closed_reason"] == "activity monitor reached 3s limit"
-        assert "1 个未完成" in feishu_bridge.describe_request_activity(cfg)
+        assert state["messages"]["om_1"]["blocked_reason"] == (
+            "final Feishu reply not confirmed: activity monitor reached 3s limit"
+        )
+        activity = feishu_bridge.describe_request_activity(cfg)
+        assert "1 个未完成" in activity
+        assert "1 个阻塞" in activity
 
     def test_describe_request_activity_reports_stale_open_request(self, tmp_path):
         cfg = _cfg(tmp_path, activity_update_max_seconds=120)
@@ -1828,6 +1833,33 @@ class TestRouting:
 
         assert code == 0
         assert feishu_bridge.activity_is_done(cfg, "om_1") is True
+        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
+        assert state["messages"]["om_1"]["closed_reason"] == "final Feishu reply sent"
+
+    def test_reply_command_blocks_activity_when_final_reply_fails(self, tmp_path, monkeypatch, capsys):
+        path = tmp_path / "config.toml"
+        path.write_text("[feishu]\n")
+        cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed")
+        feishu_bridge.record_activity_start(cfg, event)
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_reply",
+            lambda cfg, mid, text: feishu_bridge.BridgeResult(False, "Feishu OpenAPI error: simulated"),
+        )
+
+        code = feishu_bridge.main(["--config", str(path), "reply", "om_1", "done"])
+
+        captured = capsys.readouterr()
+        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
+        assert code == 1
+        assert feishu_bridge.activity_is_done(cfg, "om_1") is False
+        assert state["messages"]["om_1"]["blocked_reason"] == (
+            "final Feishu reply failed: Feishu OpenAPI error: simulated"
+        )
+        assert "activity remains open" in captured.out
+        assert "[cnb-feishu-reply] om_1 final Feishu reply failed" in captured.err
+        assert "1 个阻塞" in feishu_bridge.describe_request_activity(cfg)
 
     def test_ask_command_keeps_activity_open(self, tmp_path, monkeypatch):
         path = tmp_path / "config.toml"

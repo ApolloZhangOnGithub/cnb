@@ -1152,6 +1152,24 @@ def mark_activity_done(cfg: FeishuBridgeConfig, message_id: str, *, reason: str 
     _write_activity_state(path, payload)
 
 
+def mark_activity_blocked(cfg: FeishuBridgeConfig, message_id: str, *, reason: str) -> None:
+    if not message_id:
+        return
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+    item = messages.get(message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[message_id] = item
+    item["blocked_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    item["blocked_reason"] = reason
+    _write_activity_state(path, payload)
+
+
 def mark_activity_monitor_closed(cfg: FeishuBridgeConfig, message_id: str, *, reason: str) -> None:
     if not message_id:
         return
@@ -1227,8 +1245,12 @@ def describe_request_activity(cfg: FeishuBridgeConfig, *, now: float | None = No
 
     threshold = activity_stale_seconds(cfg)
     stale = [item for item in open_items if item["age_seconds"] >= threshold]
+    blocked = [item for item in open_items if item.get("blocked_at")]
     oldest = open_items[0]
     parts = [f"{len(open_items)} 个未完成", f"最久 {_format_duration(oldest['age_seconds'])}"]
+    if blocked:
+        reason = _truncate_inline(str(blocked[0].get("blocked_reason") or "需要人工处理"), 96)
+        parts.append(f"{len(blocked)} 个阻塞：{reason}")
     if stale:
         parts.append(f"{len(stale)} 个超过 {_format_duration(threshold)}，需要检查{role_label(cfg)}是否卡住")
     return "；".join(parts) + "。"
@@ -1256,6 +1278,8 @@ def open_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) ->
                 "sender_id": item.get("sender_id") or "",
                 "started_at": item.get("started_at") or "",
                 "age_seconds": age,
+                "blocked_at": item.get("blocked_at") or "",
+                "blocked_reason": item.get("blocked_reason") or "",
             }
         )
     return sorted(items, key=lambda item: item["age_seconds"], reverse=True)
@@ -2573,6 +2597,7 @@ def _activity_monitor_loop(event: FeishuInboundEvent, cfg: FeishuBridgeConfig) -
             f"activity monitor reached {max_seconds}s limit" if max_seconds else "activity monitor schedule exhausted"
         )
         mark_activity_monitor_closed(cfg, event.message_id, reason=reason)
+        mark_activity_blocked(cfg, event.message_id, reason=f"final Feishu reply not confirmed: {reason}")
 
 
 def iter_activity_update_elapsed_seconds(cfg: FeishuBridgeConfig):
@@ -2624,6 +2649,17 @@ def send_short_reply(cfg: FeishuBridgeConfig, message_id: str, text: str) -> Bri
     if not result.handled:
         return result
     return BridgeResult(True, "short reply sent; activity remains open")
+
+
+def send_final_reply(cfg: FeishuBridgeConfig, message_id: str, text: str) -> BridgeResult:
+    result = send_reply(cfg, message_id, text)
+    if result.handled:
+        mark_activity_done(cfg, message_id, reason="final Feishu reply sent")
+        return BridgeResult(True, "final reply sent; activity marked done")
+    detail = f"final Feishu reply failed: {result.detail}"
+    mark_activity_blocked(cfg, message_id, reason=detail)
+    print(f"[cnb-feishu-reply] {message_id or '(missing message_id)'} {detail}", file=sys.stderr)
+    return BridgeResult(False, f"{detail}; activity remains open")
 
 
 def normalize_reply_text(text: str) -> str:
@@ -4282,9 +4318,7 @@ def main(argv: list[str] | None = None) -> int:
         print(result.detail)
         return 0 if result.handled else 1
     if args.cmd == "reply":
-        result = send_reply(cfg, args.message_id, " ".join(args.text))
-        if result.handled:
-            mark_activity_done(cfg, args.message_id)
+        result = send_final_reply(cfg, args.message_id, " ".join(args.text))
         print(result.detail)
         return 0 if result.handled else 1
     return 1

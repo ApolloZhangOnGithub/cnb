@@ -51,6 +51,11 @@ The routed prompt includes the Feishu `message_id`. The supervisor should use:
 `ask` is intentionally short and rejects long summaries or fenced code blocks so
 progress reporting does not become chat spam.
 
+Final `cnb feishu reply` is the closeout gate. CNB only marks the inbound
+request done after the reply send path reports success. If sending fails, the
+request stays open, is marked blocked in the Feishu activity state, and the
+failure is printed to stderr for the operator.
+
 ## Device Supervisor State Boundary
 
 The device supervisor is machine-level state, not a project board session.
