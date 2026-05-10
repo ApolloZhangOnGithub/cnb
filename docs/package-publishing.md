@@ -24,6 +24,16 @@ npm dist-tag ls claude-nb
 
 The GitHub Packages mirror exists for repository visibility and GitHub-native package metadata. It is not the primary user install path.
 
+The npm Dependencies tab only reports JavaScript packages listed in `dependencies`. cnb is an npm-distributed Bash/Python CLI, so a low npm dependency count does not mean it has no runtime requirements.
+
+Keep the runtime contract visible in three places:
+
+- `package.json` `engines` and optional `peerDependencies` for supported agent CLIs.
+- `README.md` / `README_zh.md` install section for system and Python requirements.
+- `pyproject.toml` for Python package dependencies such as `cryptography`.
+
+Do not add unused npm packages just to make the dependency count nonzero. If a dependency is not required by `bin/cnb.js` or another JavaScript entrypoint, it does not belong in `dependencies`.
+
 ## Release Flow
 
 Publish only from a clean `master` checkout after the release PR is merged.
