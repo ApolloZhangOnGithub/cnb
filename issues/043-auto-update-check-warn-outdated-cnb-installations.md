@@ -2,15 +2,16 @@
 number: 43
 title: "Auto-update check: warn outdated cnb installations"
 state: OPEN
-labels: []
+labels: ["phase:1", "infra"]
 assignees: []
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-08
 ---
 
 # #43 Auto-update check: warn outdated cnb installations
 
 **State:** OPEN
+**Labels:** phase:1, infra
 
 ---
 

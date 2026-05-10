@@ -1,16 +1,18 @@
 ---
 number: 38
 title: "Token usage tracking: hard to discover / undocumented"
-state: OPEN
-labels: []
+state: CLOSED
+labels: ["phase:1", "infra"]
 assignees: []
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-09
+closed: 2026-05-09
 ---
 
 # #38 Token usage tracking: hard to discover / undocumented
 
-**State:** OPEN
+**State:** CLOSED
+**Labels:** phase:1, infra
 
 ---
 

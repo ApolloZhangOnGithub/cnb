@@ -2,15 +2,16 @@
 number: 39
 title: "Rename .claudes/ to .cnb/ for project-level config"
 state: OPEN
-labels: []
+labels: ["phase:1", "infra"]
 assignees: []
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-08
 ---
 
 # #39 Rename .claudes/ to .cnb/ for project-level config
 
 **State:** OPEN
+**Labels:** phase:1, infra
 
 ---
 

@@ -2,7 +2,7 @@
 number: 13
 title: "tmux send-keys 在 shell 未就绪时发命令，导致命令堆积重复执行"
 state: CLOSED
-labels: [bug]
+labels: ["bug"]
 assignees: []
 created: 2026-05-06
 updated: 2026-05-06

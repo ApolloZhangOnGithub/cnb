@@ -2,7 +2,7 @@
 number: 12
 title: "ack 静默吞消息：inbox 和 ack 之间到达的消息被永久删除"
 state: CLOSED
-labels: [bug]
+labels: ["bug"]
 assignees: []
 created: 2026-05-06
 updated: 2026-05-06
