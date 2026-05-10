@@ -12,12 +12,14 @@ cnb documentation should work like product documentation, not like a pile of not
 | [Contributing](../CONTRIBUTING.md) | Contributor workflow, style, and review expectations. |
 | [Package publishing](package-publishing.md) | npm release, dist-tags, and GitHub Packages visibility rules. |
 | [Custom domain operations](custom-domain.md) | DNS records and GoDaddy helper for the public site domain. |
+| [Tongxue avatar generation](avatar-generation.md) | Safe provider choices and prompt rules for AI-generated tongxue avatars. |
 
 ## Concepts
 
 | Page | Purpose |
 |------|---------|
 | [Ownership autonomy](design-ownership-autonomy.md) | Why cnb treats long-lived module ownership as the core unit of work. |
+| [Contribution wall](contribution-wall.md) | Broad contribution signals beyond GitHub's commit-only Contributors panel. |
 
 ## Documentation System
 

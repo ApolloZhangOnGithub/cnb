@@ -132,6 +132,7 @@ cnb
 README 是最短路径。长期维护的文档放在 [`docs/`](docs/)：
 
 - [Ownership autonomy](docs/design-ownership-autonomy.md) — 为什么 cnb 把长期模块 ownership 当作核心工作单元。
+- [Tongxue avatar generation](docs/avatar-generation.md) — AI 同学头像的安全模型选择和 prompt 规则。
 - [Package publishing](docs/package-publishing.md) — npm release、dist-tags 和 GitHub Packages 可见性规则。
 - [公开网站](https://c-n-b.space/) — 第一次访问项目时的产品入口和文档导航。
 
