@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.46-dev (unreleased)
+
+### Documentation
+
+- **Deployment closeout notes** - Appended the custom-domain deployment status, HTTPS follow-up commands, and first `c-n-b` npm release reminders without replacing the existing runbooks.
+
 ## 0.5.45-dev (unreleased)
 
 ### Documentation
