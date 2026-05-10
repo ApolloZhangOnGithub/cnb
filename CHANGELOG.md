@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.43 (2026-05-10)
+
+### CI/CD
+
+- **Trusted npm publishing** — Added the release workflow for npmjs Trusted Publishing, with GitHub Packages mirroring for repository package visibility.
+- **Release preparation automation** — Added a Prepare Release workflow that updates release metadata, inserts the changelog entry, opens the release PR, and dispatches CI / CodeQL for generated branches.
+- **Package smoke checks** — Centralized npm tarball validation in `bin/check-npm-package`, including required-file checks, secret-looking path rejection, and global install smoke coverage.
+- **Post-publish verification** — Release publishing now verifies npm dist-tags, installs the published package from npmjs, and checks the GitHub Packages mirror.
+- **Docs and site maintenance** — Added the GitHub Pages contributing page, package publishing runbook, contribution wall docs, avatar generation guidance, custom domain docs, and README maturity updates.
+- **Workflow maintenance** — Updated GitHub Actions usage to the current Node 24 action generation and kept CI, CodeQL, Pages, and issue sync workflows current.
+
 ## 0.5.42-dev (unreleased)
 
 ### Documentation
