@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.5.32-dev (unreleased)
+## 0.5.33-dev (unreleased)
 
 ### Bug Fixes
 
 - **Protected issue sync branch** — Updated the issue mirror workflow to push generated issue snapshots to a bot branch and open or update a pull request instead of pushing directly to protected `master`.
+- **Issue sync PR fallback** — Let the issue mirror workflow complete after pushing the sync branch when repository settings block GitHub Actions from creating pull requests.
 
 ## 0.5.31 (2026-05-10)
 
