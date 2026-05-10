@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.38-dev (unreleased)
+
+### Documentation
+
+- **Broad contribution wall** — Added a compact README contribution wall and reference document for non-commit contribution signals such as issues, reviews, checks, board ownership, and GitHub App identity evidence.
+
 ## 0.5.37-dev (unreleased)
 
 ### Documentation
