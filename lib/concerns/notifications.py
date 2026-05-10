@@ -37,6 +37,81 @@ class InboxNudger(Concern):
             self.nudge_if_unread(name)
 
 
+class ManagerCloseoutEscalator(Concern):
+    """Escalate manager sessions that keep reading reports without closing out."""
+
+    interval = 15
+    STUCK_TICKS = 3
+    COOLDOWN = 300
+
+    def __init__(self, cfg: DispatcherConfig) -> None:
+        super().__init__()
+        self.cfg = cfg
+        self.streaks: dict[str, int] = {}
+        self.last_escalation: dict[str, int] = {}
+
+    @staticmethod
+    def _is_manager_session(name: str) -> bool:
+        return name == "lead" or "manager" in name
+
+    def _count(self, sql: str, params: tuple[str, ...]) -> int:
+        value = db(self.cfg).scalar(sql, params) or 0
+        return int(value)
+
+    def _is_closeout_stall(self, name: str) -> bool:
+        unread = self._count("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
+        own_open = self._count(
+            "SELECT COUNT(*) FROM tasks WHERE session=? AND status IN ('active', 'pending')",
+            (name,),
+        )
+        other_open = self._count(
+            "SELECT COUNT(*) FROM tasks WHERE session!=? AND status IN ('active', 'pending')",
+            (name,),
+        )
+        return unread > 0 and own_open > 0 and other_open == 0
+
+    def _escalate(self, name: str) -> None:
+        board_send(
+            self.cfg,
+            name,
+            "closeout escalation：所有执行子任务看起来已收口，但你的管理任务仍 active 且 inbox 未读。"
+            "请立即汇总执行同学报告、说明剩余风险，随后 ack inbox 并 task done；"
+            "如果不能收口，请明确发消息给 device-supervisor 说明 blocker。",
+        )
+        log(f"CLOSEOUT escalation sent to {name}")
+
+    def tick(self, now: int) -> None:
+        if not self.cfg.board_db.exists():
+            return
+
+        for name in get_dev_sessions(self.cfg):
+            if not self._is_manager_session(name):
+                continue
+            sess = f"{self.cfg.prefix}-{name}"
+            if not tmux_ok("has-session", "-t", sess) or not is_claude_running(sess):
+                self.streaks.pop(name, None)
+                continue
+
+            try:
+                stalled = self._is_closeout_stall(name)
+            except Exception:
+                self.streaks.pop(name, None)
+                continue
+            if not stalled:
+                self.streaks.pop(name, None)
+                continue
+
+            streak = self.streaks.get(name, 0) + 1
+            self.streaks[name] = streak
+            if streak < self.STUCK_TICKS:
+                continue
+            if (now - self.last_escalation.get(name, 0)) < self.COOLDOWN:
+                continue
+
+            self._escalate(name)
+            self.last_escalation[name] = now
+
+
 class TimeAnnouncer(Concern):
     interval = 30
 

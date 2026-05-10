@@ -6,7 +6,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from lib.concerns.config import DispatcherConfig
-from lib.concerns.notifications import BugSLAChecker, InboxNudger, QueuedMessageFlusher, TimeAnnouncer
+from lib.concerns.notifications import (
+    BugSLAChecker,
+    InboxNudger,
+    ManagerCloseoutEscalator,
+    QueuedMessageFlusher,
+    TimeAnnouncer,
+)
 
 PREFIX = "cc-test"
 
@@ -111,6 +117,83 @@ class TestInboxNudger:
 
         nudger.tick(1000)
         assert mock_send.call_count == 2
+
+
+# ===========================================================================
+# ManagerCloseoutEscalator
+# ===========================================================================
+
+
+class TestManagerCloseoutEscalator:
+    def _mock_counts(self, *, unread: int, own_open: int, other_open: int):
+        fake_db = MagicMock()
+
+        def scalar(sql, params):
+            if "FROM inbox" in sql:
+                return unread
+            if "session=?" in sql:
+                return own_open
+            if "session!=?" in sql:
+                return other_open
+            raise AssertionError(f"unexpected query: {sql}")
+
+        fake_db.scalar.side_effect = scalar
+        return fake_db
+
+    @patch("lib.concerns.notifications.board_send")
+    @patch("lib.concerns.notifications.tmux_ok", return_value=True)
+    @patch("lib.concerns.notifications.is_claude_running", return_value=True)
+    @patch("lib.concerns.notifications.get_dev_sessions", return_value=["project-manager", "alice"])
+    @patch("lib.concerns.notifications.db")
+    def test_escalates_stuck_manager_closeout(self, mock_db, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
+        cfg = make_cfg(tmp_path, ["project-manager", "alice"])
+        mock_db.return_value = self._mock_counts(unread=3, own_open=1, other_open=0)
+        escalator = ManagerCloseoutEscalator(cfg)
+
+        escalator.tick(1000)
+        escalator.tick(1015)
+        mock_send.assert_not_called()
+
+        escalator.tick(1030)
+        mock_send.assert_called_once()
+        assert mock_send.call_args[0][1] == "project-manager"
+        assert "closeout escalation" in mock_send.call_args[0][2]
+
+    @patch("lib.concerns.notifications.board_send")
+    @patch("lib.concerns.notifications.tmux_ok", return_value=True)
+    @patch("lib.concerns.notifications.is_claude_running", return_value=True)
+    @patch("lib.concerns.notifications.get_dev_sessions", return_value=["project-manager"])
+    @patch("lib.concerns.notifications.db")
+    def test_no_escalation_while_worker_tasks_remain(
+        self, mock_db, mock_devs, mock_running, mock_ok, mock_send, tmp_path
+    ):
+        cfg = make_cfg(tmp_path, ["project-manager"])
+        mock_db.return_value = self._mock_counts(unread=3, own_open=1, other_open=1)
+        escalator = ManagerCloseoutEscalator(cfg)
+
+        escalator.tick(1000)
+        escalator.tick(1015)
+        escalator.tick(1030)
+
+        mock_send.assert_not_called()
+
+    @patch("lib.concerns.notifications.board_send")
+    @patch("lib.concerns.notifications.tmux_ok", return_value=True)
+    @patch("lib.concerns.notifications.is_claude_running", return_value=True)
+    @patch("lib.concerns.notifications.get_dev_sessions", return_value=["project-manager"])
+    @patch("lib.concerns.notifications.db")
+    def test_escalation_cooldown_prevents_spam(self, mock_db, mock_devs, mock_running, mock_ok, mock_send, tmp_path):
+        cfg = make_cfg(tmp_path, ["project-manager"])
+        mock_db.return_value = self._mock_counts(unread=3, own_open=1, other_open=0)
+        escalator = ManagerCloseoutEscalator(cfg)
+
+        escalator.tick(1000)
+        escalator.tick(1015)
+        escalator.tick(1030)
+        escalator.tick(1045)
+        escalator.tick(1060)
+
+        assert mock_send.call_count == 1
 
 
 # ===========================================================================
