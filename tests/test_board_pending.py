@@ -1,6 +1,7 @@
 """Tests for lib/board_pending — pending actions queue."""
 
 import sqlite3
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -222,6 +223,44 @@ class TestPendingVerify:
         assert row[0] == "done"
 
     @patch("lib.board_pending.subprocess.run")
+    def test_verify_with_retry_success(self, mock_run, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        aid = _add_action(db, retry_command="npm publish")
+        mock_run.side_effect = [
+            subprocess.CompletedProcess(["verify"], 0, stdout="", stderr=""),
+            subprocess.CompletedProcess(["retry"], 0, stdout="", stderr=""),
+        ]
+
+        cmd_pending(db, "alice", ["verify", "--retry"])
+        out = capsys.readouterr().out
+        assert "验证通过" in out
+        assert "重试成功" in out
+        assert "重试结果: 1 成功, 0 失败, 0 跳过" in out
+
+        row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row[0] == "retried"
+        assert mock_run.call_args_list[0].args[0] == ["gcloud", "auth", "print-access-token"]
+        assert mock_run.call_args_list[1].args[0] == ["npm", "publish"]
+
+    @patch("lib.board_pending.subprocess.run")
+    def test_verify_with_retry_failure(self, mock_run, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        aid = _add_action(db, retry_command="npm publish")
+        mock_run.side_effect = [
+            subprocess.CompletedProcess(["verify"], 0, stdout="", stderr=""),
+            subprocess.CompletedProcess(["retry"], 1, stdout="", stderr="publish denied"),
+        ]
+
+        cmd_pending(db, "alice", ["verify", "#1", "--retry"])
+        out = capsys.readouterr().out
+        assert "验证通过" in out
+        assert "重试失败" in out
+        assert "publish denied" in out
+
+        row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row[0] == "failed"
+
+    @patch("lib.board_pending.subprocess.run")
     def test_verify_failure(self, mock_run, tmp_path, capsys):
         db = _setup_db(tmp_path)
         _add_action(db)
@@ -258,6 +297,8 @@ class TestPendingVerify:
             cmd_pending(db, "alice", ["verify"])
             out = capsys.readouterr().out
             assert "超时" in out
+            row = db.query_one("SELECT status FROM pending_actions WHERE id=1")
+            assert row[0] == "reminded"
 
     def test_verify_invalid_id_exits(self, tmp_path):
         db = _setup_db(tmp_path)
@@ -302,6 +343,20 @@ class TestPendingRetry:
 
         row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
         assert row[0] == "failed"
+
+    @patch("lib.board_pending.subprocess.run")
+    def test_retry_can_rerun_failed_action(self, mock_run, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        aid = _add_action(db, retry_command="npm publish")
+        db.execute("UPDATE pending_actions SET status='failed' WHERE id=?", (aid,))
+
+        mock_run.return_value.returncode = 0
+        cmd_pending(db, "alice", ["retry"])
+        out = capsys.readouterr().out
+        assert "重试成功" in out
+
+        row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row[0] == "retried"
 
     def test_retry_invalid_id_exits(self, tmp_path):
         db = _setup_db(tmp_path)

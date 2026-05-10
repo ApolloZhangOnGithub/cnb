@@ -1,10 +1,22 @@
 # Changelog
 
-## 0.5.47-dev (unreleased)
+## 0.5.48-dev (unreleased)
+
+### Features
+
+- **Feishu bridge operations** — Added default-off readback diagnostics, current-message resource handoff, short clarification asks, quiet notification modes, activity-card updates, and Web TUI viewing for the device supervisor.
+- **Mac companion and CNB Island surfaces** — Added the native Mac companion, iPhone status dashboard, Live Activity state export, and `ADMIN_TO_DO` display surfaces for local-first device supervision.
+- **CNB sync gateway** — Added a small sync gateway plus Linux service/backup/restore tooling for companion and future relay paths.
 
 ### Bug Fixes
 
 - **npm package registry fact restore** — Restored current install docs, package metadata, and release workflows to the verified npmjs package `claude-nb` until the future `c-n-b` package migration is actually claimed and published.
+- **Feishu terminal delivery** — Preserved Feishu reply/quote context, rendered Markdown replies as Feishu post messages, reduced live-card notification noise, improved mobile card readability, and used bracketed paste buffers for multiline tmux injection.
+- **Secret-scan false positives** — Narrowed generic token/password matching so code identifier assignments such as `app_secret = settings.app_secret` are not reported as leaked secrets.
+
+### Security
+
+- **GitHub App identity guard** — Added default-deny allowlist checks and guarded token minting for public GitHub Apps, with tests and operator docs for per-tongxue App identity handling.
 
 ## 0.5.46-dev (unreleased)
 

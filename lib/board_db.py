@@ -17,7 +17,7 @@ from lib.common import (  # noqa: F401 — re-export ts for board_* modules
 )
 
 # Emitted when deliver_to_inbox() delivers a message. Session name is the arg.
-# Subscribers (e.g., FileWatcher) can react instantly without polling.
+# Subscribers can react instantly without polling the inbox table.
 inbox_delivered = Signal[str]()
 
 

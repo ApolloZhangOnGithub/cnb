@@ -67,15 +67,26 @@ class TestTmuxOk:
 
 class TestTmuxSend:
     @patch("lib.tmux_utils.subprocess.run")
-    def test_sends_text_then_enter(self, mock_run):
+    def test_pastes_text_then_enter(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         assert tmux_send("sess", "hello") is True
-        assert mock_run.call_count == 2
+        assert mock_run.call_count == 3
         first = mock_run.call_args_list[0][0][0]
-        assert "-l" in first
-        assert "hello" in first
+        assert first[:3] == ["tmux", "load-buffer", "-b"]
+        assert mock_run.call_args_list[0].kwargs["input"] == "hello"
         second = mock_run.call_args_list[1][0][0]
-        assert "Enter" in second
+        assert second[:2] == ["tmux", "paste-buffer"]
+        assert "-p" in second
+        assert "-r" in second
+        third = mock_run.call_args_list[2][0][0]
+        assert "Enter" in third
+
+    @patch("lib.tmux_utils.subprocess.run")
+    def test_empty_text_only_sends_enter(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0)
+        assert tmux_send("sess", "") is True
+        assert mock_run.call_count == 1
+        assert mock_run.call_args_list[0][0][0] == ["tmux", "send-keys", "-t", "sess", "Enter"]
 
     @patch("lib.tmux_utils.subprocess.run")
     def test_returns_false_on_called_process_error(self, mock_run):

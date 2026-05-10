@@ -106,23 +106,65 @@ def _pending_list(db: BoardDB, identity: str, args: list[str]) -> None:
         print()
 
 
+def _command_output(result: subprocess.CompletedProcess[str]) -> str:
+    stderr = result.stderr.strip() if isinstance(result.stderr, str) else ""
+    stdout = result.stdout.strip() if isinstance(result.stdout, str) else ""
+    return stderr or stdout or f"exit {result.returncode}"
+
+
+def _run_command(command: str, timeout: int) -> tuple[bool, str | None]:
+    try:
+        result = subprocess.run(shlex.split(command), capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, "超时"
+    except (OSError, ValueError) as e:
+        return False, f"出错: {e}"
+
+    if result.returncode == 0:
+        return True, None
+    return False, _command_output(result)
+
+
+def _run_retry_command(db: BoardDB, action_id: int, retry_cmd: str) -> bool:
+    ok, detail = _run_command(retry_cmd, timeout=60)
+    if ok:
+        db.execute("UPDATE pending_actions SET status='retried' WHERE id=?", (action_id,))
+        print(f"  #{action_id}: 重试成功 ✓")
+        return True
+
+    db.execute("UPDATE pending_actions SET status='failed' WHERE id=?", (action_id,))
+    if detail == "超时":
+        print(f"  #{action_id}: 重试超时")
+    else:
+        print(f"  #{action_id}: 重试失败 — {detail}")
+    return False
+
+
 def _pending_verify(db: BoardDB, identity: str, args: list[str]) -> None:
+    flags, positional = parse_flags(args, bool_flags={"retry": ["--retry"]})
+    auto_retry = bool(flags.get("retry"))
+
     specific_id = None
-    if args:
+    if positional:
+        if len(positional) > 1:
+            print("Usage: ./board --as <name> pending verify [#id] [--retry]")
+            raise SystemExit(1)
         try:
-            specific_id = int(args[0].lstrip("#"))
+            specific_id = int(positional[0].lstrip("#"))
         except ValueError:
-            print("Usage: ./board --as <name> pending verify [#id]")
+            print("Usage: ./board --as <name> pending verify [#id] [--retry]")
             raise SystemExit(1)
 
     if specific_id:
         rows = db.query(
-            "SELECT id, verify_command, command FROM pending_actions WHERE id=? AND status IN ('pending', 'reminded')",
+            "SELECT id, verify_command, command, retry_command FROM pending_actions "
+            "WHERE id=? AND status IN ('pending', 'reminded')",
             (specific_id,),
         )
     else:
         rows = db.query(
-            "SELECT id, verify_command, command FROM pending_actions WHERE status IN ('pending', 'reminded') AND verify_command IS NOT NULL ORDER BY id"
+            "SELECT id, verify_command, command, retry_command FROM pending_actions "
+            "WHERE status IN ('pending', 'reminded') AND verify_command IS NOT NULL ORDER BY id"
         )
 
     if not rows:
@@ -131,31 +173,45 @@ def _pending_verify(db: BoardDB, identity: str, args: list[str]) -> None:
 
     verified = 0
     failed = 0
-    for aid, verify_cmd, cmd in rows:
+    retried = 0
+    retry_failed = 0
+    retry_skipped = 0
+    for aid, verify_cmd, cmd, retry_cmd in rows:
         if not verify_cmd:
-            continue
-        try:
-            r = subprocess.run(shlex.split(verify_cmd), capture_output=True, text=True, timeout=30)
-            if r.returncode == 0:
-                now = ts()
-                db.execute(
-                    "UPDATE pending_actions SET status='done', resolved_at=? WHERE id=?",
-                    (now, aid),
-                )
-                print(f"  #{aid}: 验证通过 ✓")
-                verified += 1
-            else:
-                db.execute("UPDATE pending_actions SET status='reminded' WHERE id=?", (aid,))
-                print(f"  #{aid}: 验证失败 — 用户仍需执行: ! {cmd}")
-                failed += 1
-        except subprocess.TimeoutExpired:
-            print(f"  #{aid}: 验证超时")
+            print(f"  #{aid}: 无验证命令")
             failed += 1
-        except OSError as e:
-            print(f"  #{aid}: 验证出错: {e}")
+            continue
+
+        ok, detail = _run_command(verify_cmd, timeout=30)
+        if ok:
+            now = ts()
+            db.execute(
+                "UPDATE pending_actions SET status='done', resolved_at=? WHERE id=?",
+                (now, aid),
+            )
+            print(f"  #{aid}: 验证通过 ✓")
+            verified += 1
+
+            if auto_retry:
+                if retry_cmd:
+                    if _run_retry_command(db, aid, retry_cmd):
+                        retried += 1
+                    else:
+                        retry_failed += 1
+                else:
+                    print(f"  #{aid}: 无重试命令，跳过 retry")
+                    retry_skipped += 1
+        else:
+            db.execute("UPDATE pending_actions SET status='reminded' WHERE id=?", (aid,))
+            if detail == "超时":
+                print(f"  #{aid}: 验证超时")
+            else:
+                print(f"  #{aid}: 验证失败 — {detail}; 用户仍需执行: ! {cmd}")
             failed += 1
 
     print(f"\n验证结果: {verified} 通过, {failed} 未通过")
+    if auto_retry:
+        print(f"重试结果: {retried} 成功, {retry_failed} 失败, {retry_skipped} 跳过")
 
 
 def _pending_retry(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -169,12 +225,13 @@ def _pending_retry(db: BoardDB, identity: str, args: list[str]) -> None:
 
     if specific_id:
         rows = db.query(
-            "SELECT id, retry_command FROM pending_actions WHERE id=? AND status='done'",
+            "SELECT id, retry_command FROM pending_actions WHERE id=? AND status IN ('done', 'failed')",
             (specific_id,),
         )
     else:
         rows = db.query(
-            "SELECT id, retry_command FROM pending_actions WHERE status='done' AND retry_command IS NOT NULL ORDER BY id"
+            "SELECT id, retry_command FROM pending_actions "
+            "WHERE status IN ('done', 'failed') AND retry_command IS NOT NULL ORDER BY id"
         )
 
     if not rows:
@@ -185,24 +242,12 @@ def _pending_retry(db: BoardDB, identity: str, args: list[str]) -> None:
     failed = 0
     for aid, retry_cmd in rows:
         if not retry_cmd:
+            print(f"  #{aid}: 无重试命令")
             continue
-        try:
-            r = subprocess.run(shlex.split(retry_cmd), capture_output=True, text=True, timeout=60)
-            if r.returncode == 0:
-                db.execute("UPDATE pending_actions SET status='retried' WHERE id=?", (aid,))
-                print(f"  #{aid}: 重试成功 ✓")
-                retried += 1
-            else:
-                db.execute("UPDATE pending_actions SET status='failed' WHERE id=?", (aid,))
-                print(f"  #{aid}: 重试失败 — {r.stderr.strip() or r.stdout.strip() or 'exit ' + str(r.returncode)}")
-                failed += 1
-        except subprocess.TimeoutExpired:
-            db.execute("UPDATE pending_actions SET status='failed' WHERE id=?", (aid,))
-            print(f"  #{aid}: 重试超时")
-            failed += 1
-        except OSError as e:
-            db.execute("UPDATE pending_actions SET status='failed' WHERE id=?", (aid,))
-            print(f"  #{aid}: 重试出错: {e}")
+
+        if _run_retry_command(db, aid, retry_cmd):
+            retried += 1
+        else:
             failed += 1
 
     print(f"\n重试结果: {retried} 成功, {failed} 失败")

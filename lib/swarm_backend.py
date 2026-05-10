@@ -102,17 +102,25 @@ class TmuxBackend(SessionBackend):
             waited += 2
         return False
 
-    def auto_accept_trust(self, prefix: str, name: str) -> None:
+    def auto_accept_trust(self, prefix: str, name: str, timeout: int = 60) -> None:
         sess = self._sess(prefix, name)
         waited = 0
-        while waited < 60:
+        while waited < timeout:
             r = subprocess.run(
                 ["tmux", "capture-pane", "-t", sess, "-p"],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            if "I trust" in r.stdout or "trust this folder" in r.stdout.lower():
+            text = r.stdout.lower()
+            # Claude and Codex use different workspace-trust copy; both default
+            # to the safe "continue" choice when Enter is pressed.
+            if (
+                "i trust" in text
+                or "trust this folder" in text
+                or "do you trust the contents" in text
+                or "press enter to continue" in text
+            ):
                 time.sleep(0.5)
                 subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=10)
                 return

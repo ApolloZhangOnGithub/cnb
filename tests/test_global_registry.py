@@ -19,7 +19,9 @@ from lib.global_registry import (
     _read_projects,
     check_credential,
     cleanup,
+    discover_projects,
     list_projects,
+    register_discovered_projects,
     register_project,
     remove_project,
     update_credential,
@@ -89,6 +91,25 @@ class TestRegisterProject:
         assert registry.exists()
         data = json.loads(registry.read_text())
         assert len(data["projects"]) == 1
+
+    def test_ambient_registry_skips_transient_test_projects(self, tmp_path, monkeypatch):
+        import lib.global_registry as registry
+
+        cnb_home = tmp_path / ".cnb"
+        monkeypatch.setattr(registry, "CNB_HOME", cnb_home)
+        monkeypatch.setattr(registry, "PROJECTS_FILE", cnb_home / "projects.json")
+        proj = tmp_path / "pytest-of-user" / "pytest-1" / "test_case0" / "proj"
+        proj.mkdir(parents=True)
+
+        register_project(proj, "proj")
+
+        assert not registry.PROJECTS_FILE.exists()
+
+        smoke = tmp_path / "cnb-codex-smoke.abc123"
+        smoke.mkdir()
+        register_project(smoke, "smoke")
+
+        assert not registry.PROJECTS_FILE.exists()
 
     def test_last_active_is_iso_format(self, registry_file, tmp_path):
         proj = tmp_path / "proj"
@@ -276,6 +297,109 @@ class TestCleanup:
         removed = cleanup(registry_path=registry_file)
         assert len(removed) == 2
         assert list_projects(registry_path=registry_file) == []
+
+
+# ---------------------------------------------------------------------------
+# discover_projects
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoverProjects:
+    def test_discovers_cnb_project_under_bounded_root(self, tmp_path):
+        proj = tmp_path / "workspace" / "app"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+        (cnb_dir / "config.toml").write_text('prefix = "cc-test"\nsessions = ["alice"]\n')
+
+        projects = discover_projects(roots=[tmp_path], max_depth=3)
+
+        assert len(projects) == 1
+        assert projects[0]["name"] == "app"
+        assert projects[0]["path"] == str(proj.resolve())
+        assert projects[0]["config_dir"] == ".cnb"
+        assert projects[0]["prefix"] == "cc-test"
+        assert projects[0]["configured_sessions"] == ["alice"]
+
+    def test_discovers_legacy_claudes_project(self, tmp_path):
+        proj = tmp_path / "legacy"
+        legacy_dir = proj / ".claudes"
+        legacy_dir.mkdir(parents=True)
+        (legacy_dir / "board.db").touch()
+
+        projects = discover_projects(roots=[tmp_path], max_depth=2)
+
+        assert len(projects) == 1
+        assert projects[0]["config_dir"] == ".claudes"
+
+    def test_prefers_cnb_over_legacy_for_same_project(self, tmp_path):
+        proj = tmp_path / "both"
+        (proj / ".cnb").mkdir(parents=True)
+        (proj / ".claudes").mkdir(parents=True)
+        (proj / ".cnb" / "board.db").touch()
+        (proj / ".claudes" / "board.db").touch()
+
+        projects = discover_projects(roots=[tmp_path], max_depth=2)
+
+        assert len(projects) == 1
+        assert projects[0]["config_dir"] == ".cnb"
+
+    def test_respects_max_depth(self, tmp_path):
+        proj = tmp_path / "a" / "b" / "c"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+
+        assert discover_projects(roots=[tmp_path], max_depth=1) == []
+        assert len(discover_projects(roots=[tmp_path], max_depth=3)) == 1
+
+    def test_default_board_mode_ignores_marker_without_board(self, tmp_path):
+        proj = tmp_path / "marker-only"
+        (proj / ".cnb").mkdir(parents=True)
+
+        assert discover_projects(roots=[tmp_path], max_depth=1) == []
+
+    def test_marker_mode_includes_marker_without_board(self, tmp_path):
+        proj = tmp_path / "marker-only"
+        (proj / ".cnb").mkdir(parents=True)
+
+        projects = discover_projects(roots=[tmp_path], max_depth=1, mode="marker")
+
+        assert len(projects) == 1
+        assert projects[0]["path"] == str(proj.resolve())
+        assert projects[0]["config_dir"] == ".cnb"
+        assert projects[0]["has_board"] is False
+        assert projects[0]["discovery"] == "marker"
+        assert projects[0]["board_db"] == ""
+
+    def test_register_skips_marker_only_projects(self, registry_file, tmp_path):
+        board_proj = tmp_path / "board"
+        marker_proj = tmp_path / "marker"
+        (board_proj / ".cnb").mkdir(parents=True)
+        (marker_proj / ".cnb").mkdir(parents=True)
+        (board_proj / ".cnb" / "board.db").touch()
+
+        projects = discover_projects(roots=[tmp_path], max_depth=1, mode="marker")
+        count = register_discovered_projects(projects, registry_path=registry_file)
+
+        assert count == 1
+        registered = list_projects(registry_path=registry_file)
+        assert registered[0]["name"] == "board"
+        assert registered[0]["path"] == str(board_proj.resolve())
+
+    def test_registers_discovered_projects(self, registry_file, tmp_path):
+        proj = tmp_path / "app"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+        projects = discover_projects(roots=[tmp_path], max_depth=1)
+
+        count = register_discovered_projects(projects, registry_path=registry_file)
+
+        assert count == 1
+        registered = list_projects(registry_path=registry_file)
+        assert registered[0]["name"] == "app"
+        assert registered[0]["path"] == str(proj.resolve())
 
 
 # ---------------------------------------------------------------------------

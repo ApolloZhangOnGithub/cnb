@@ -153,11 +153,12 @@ class TestSessionFiles:
             content = (tmp_project / ".claudes" / "sessions" / f"{name}.md").read_text()
             assert "## Current task" in content
 
-    def test_session_file_has_inbox_section(self, tmp_project):
-        """Each session file has an @inbox section."""
+    def test_session_file_has_no_inbox_section(self, tmp_project):
+        """Session files do not mirror SQLite inbox state."""
         for name in DEFAULT_SESSIONS:
             content = (tmp_project / ".claudes" / "sessions" / f"{name}.md").read_text()
-            assert "## @inbox" in content
+            assert "## @inbox" not in content
+            assert "## @收件箱" not in content
 
 
 class TestIdempotency:
@@ -207,7 +208,7 @@ class TestIdempotency:
         path.write_text("# alice\n\n## Current task\nworking on something\n")
 
         # Re-create (simulating init)
-        path.write_text("# alice\n\n## Current task\n(none)\n\n## @inbox\n")
+        path.write_text("# alice\n\n## Current task\n(none)\n")
 
         content = path.read_text()
         assert "(none)" in content
@@ -241,6 +242,33 @@ class TestSchemaApplication:
         index_names = {r[0] for r in indexes}
         assert "idx_msg_ts" in index_names
         assert "idx_inbox" in index_names
+
+
+class TestInstructionFiles:
+    """Initialization writes coordination instructions for supported agent CLIs."""
+
+    def test_agents_md_can_be_created_for_codex(self, tmp_path):
+        snippet = init_mod._claude_md_snippet(["alice"], Path("/tmp/cnb"))
+        init_mod._update_agents_md(tmp_path, snippet)
+
+        path = tmp_path / "AGENTS.md"
+        assert path.exists()
+        assert "Multi-Agent Coordination" in path.read_text()
+
+    def test_agents_md_marker_is_idempotent(self, tmp_path):
+        original = "project notes\n\n"
+        path = tmp_path / "AGENTS.md"
+        path.write_text(original)
+
+        first = init_mod._claude_md_snippet(["alice"], Path("/tmp/cnb"))
+        second = init_mod._claude_md_snippet(["bob"], Path("/tmp/cnb"))
+        init_mod._update_agents_md(tmp_path, first)
+        init_mod._update_agents_md(tmp_path, second)
+
+        text = path.read_text()
+        assert text.count(init_mod.MARKER_START) == 1
+        assert "**bob**" in text
+        assert "**alice**" not in text
 
 
 # ── session name validation (bin/init) ──

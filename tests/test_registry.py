@@ -111,6 +111,19 @@ class TestContentHash:
         b = {"type": "agent", "name": "x", "block": 0}
         assert reg._content_hash(a) == reg._content_hash(b)
 
+    def test_accepts_legacy_utf8_hash(self):
+        entry = {
+            "block": 4,
+            "name": "legacy",
+            "type": "agent",
+            "description": "中文说明",
+            "chain": None,
+            "content_hash": None,
+        }
+        legacy_hash = reg._legacy_content_hash(entry)
+        assert legacy_hash != reg._content_hash(entry)
+        assert reg._content_hash_matches(entry, legacy_hash)
+
 
 # ---------------------------------------------------------------------------
 # _load_chain
@@ -304,6 +317,41 @@ class TestCmdVerifyChain:
         out = capsys.readouterr().out
         assert "OK" in out
         assert "3 blocks" in out
+
+    def test_legacy_utf8_hash_keeps_existing_chain_valid(self, tmp_path, capsys):
+        legacy = {
+            "block": 2,
+            "name": "legacy",
+            "display_name": "Claude Legacy",
+            "type": "agent",
+            "role": "dev",
+            "description": "中文说明",
+            "created": "2026-01-03",
+            "prev": AGENT_1["content_hash"],
+            "chain": "legacy1",
+            "content_hash": None,
+        }
+        legacy["content_hash"] = reg._legacy_content_hash(legacy)
+        next_agent = {
+            "block": 3,
+            "name": "carol",
+            "display_name": "Claude Carol",
+            "type": "agent",
+            "role": "reviewer",
+            "description": "Reviewer",
+            "created": "2026-01-04",
+            "prev": legacy["content_hash"],
+            "chain": "ghi9012",
+            "content_hash": None,
+        }
+        next_agent["content_hash"] = reg._content_hash(next_agent)
+        registry = _write_chain(tmp_path, [GENESIS, AGENT_1, legacy, next_agent])
+
+        with patch.object(reg, "REGISTRY_DIR", registry):
+            reg.cmd_verify_chain([])
+        out = capsys.readouterr().out
+        assert "OK" in out
+        assert "4 blocks" in out
 
     def test_broken_prev_link(self, tmp_path, capsys):
         broken = {**AGENT_2, "prev": "wrong_hash"}

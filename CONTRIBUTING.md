@@ -90,6 +90,37 @@ bin/check-readme-sync
 - User-facing CLI output is Chinese.
 - Code identifiers, docstrings, docs, commit messages, and PR text are English.
 
+## Native iOS UI
+
+For iOS targets, never ship a host app without a modern launch screen
+configuration. A missing launch screen can make iOS run the app in legacy
+compatibility sizing, which looks like an old iPhone viewport on current
+devices.
+
+- Keep `UILaunchScreen` / generated launch screen settings present for every
+  iPhone host app target.
+- Do not tune SwiftUI layouts against one simulator screenshot. Verify on a
+  current Dynamic Island iPhone size and at least one smaller iPhone viewport.
+- Declare supported interface orientations intentionally. If an app target also
+  supports iPad, support the required iPad orientations or explicitly require
+  full screen instead of relying on generated defaults.
+- Use geometry, safe-area, adaptive grids, and scrollable content for dashboard
+  surfaces; avoid fixed top offsets, fixed card stacks, or hero-scale text in
+  tool UIs.
+- On iOS 26 and newer, use SwiftUI Liquid Glass APIs for floating command
+  surfaces and controls; only fall back to material backgrounds on older OS
+  versions.
+- Before installing to a physical device, run the iOS typecheck/build scripts
+  and capture a simulator screenshot that shows the app using the full screen
+  without black compatibility bars.
+- Do not require phone-side setup for Mac-owned runtime state. Export Feishu,
+  Live Activity, and bridge settings on the Mac, sync them into the app
+  container automatically, and make the iOS app reload those files on launch,
+  refresh, and foreground entry.
+- When a synced service is unavailable, disable the whole input affordance, not
+  only the submit button. Text fields must not focus, raise the keyboard, or
+  accept draft text until the backing service is ready.
+
 ## Documentation
 
 The root README is the short path. Longer product documentation lives under `docs/`, command documentation belongs near the relevant tool, and operational runbooks should include verification commands.
@@ -136,6 +167,35 @@ When behavior has multiple valid interpretations, prefer explicit modes, options
 - Name modes by the boundary they represent, not by the current incident.
 - Tests should cover the default path and at least one non-default boundary mode.
 - Documentation should explain when to use each mode, what state it reads or writes, and which modes are safe to register or persist.
+
+## Operational Provisioning UX
+
+Do not make users perform repetitive, non-creative setup work when cnb can safely
+generate, validate, or summarize it.
+
+For external platforms such as Feishu, GitHub, npm, ngrok, and future chat
+channels:
+
+- Prefer guided commands, templates, importable manifests, doctor checks, and
+  redacted deployment summaries over prose-only instructions.
+- Keep the user responsible only for actions that truly require account owner,
+  tenant admin, or security approval.
+- Clearly separate template data from secrets. Permissions, event names, app
+  names, and callback URLs can be generated or copied; app secrets, private
+  keys, verification tokens, webhook tokens, and recovery codes must be
+  user-owned and per environment.
+- Fail closed when platform state is ambiguous. If cnb cannot verify that an app,
+  webhook, permission, or package target is safe, print the missing step and stop
+  instead of continuing with a guessed configuration.
+- Provide an active/standby model for multi-device or multi-bot flows so two
+  machines do not silently act as active writers for the same chat, repo, or
+  release target.
+- Add a verification command or observable acceptance check for every setup
+  step that cnb claims to automate.
+
+If a platform does not expose an API for an administrative action, implement the
+surrounding automation anyway: generate the exact checklist, validate the result,
+and keep the manual step as short and explicit as possible.
 
 ## Security-Sensitive Changes
 

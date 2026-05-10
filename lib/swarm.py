@@ -1,6 +1,8 @@
 """swarm — launch and manage multi-agent sessions."""
 
 import os
+import re
+import shlex
 import threading
 import time
 import tomllib
@@ -13,6 +15,12 @@ from lib.common import ClaudesEnv, _write_config_toml, is_suspended
 from lib.swarm_backend import SessionBackend, TmuxBackend, detect_backend
 from lib.theme_profiles import PROFILES
 
+SUPPORTED_AGENTS = frozenset({"claude", "codex", "trae", "qwen"})
+# Codex treats this as the top permission mode. In Codex CLI 0.130.0 it
+# conflicts with explicit --ask-for-approval or --sandbox flags, so keep it
+# standalone instead of trying to restate the implied "never ask/no sandbox".
+CODEX_PERMISSION_FLAGS = ("--dangerously-bypass-approvals-and-sandbox",)
+
 
 @dataclass
 class SwarmConfig:
@@ -24,7 +32,7 @@ class SwarmConfig:
     @classmethod
     def load(cls) -> "SwarmConfig":
         env = ClaudesEnv.load()
-        agent = os.environ.get("SWARM_AGENT", "claude")
+        agent = os.environ.get("SWARM_AGENT") or os.environ.get("CNB_AGENT", "claude")
         backend = detect_backend()
         install_home_raw = os.environ.get("CLAUDES_HOME", "")
         install_home = Path(install_home_raw) if install_home_raw else env.install_home
@@ -71,22 +79,30 @@ class SwarmManager:
 
     def build_agent_cmd(self, name: str) -> str:
         prompt = self.build_system_prompt(name)
-        escaped = prompt.replace("'", "'\\''")
         if self.cfg.agent == "claude":
+            escaped = prompt.replace("'", "'\\''")
             return f"claude --name '{name}' --dangerously-skip-permissions --append-system-prompt '{escaped}'"
+        elif self.cfg.agent == "codex":
+            initial = self.build_initial_prompt(name)
+            combined_prompt = f"{prompt}\n\n{initial}"
+            flags = " ".join(CODEX_PERMISSION_FLAGS)
+            return f"codex {flags} --cd {shlex.quote(str(self._env.project_root))} {shlex.quote(combined_prompt)}"
         elif self.cfg.agent == "trae":
             return "trae-cli"
         elif self.cfg.agent == "qwen":
             return "qwen"
         else:
-            print(f"ERROR: unknown agent: {self.cfg.agent}")
+            print(f"ERROR: unknown agent: {self.cfg.agent} (supported: {', '.join(sorted(SUPPORTED_AGENTS))})")
             raise SystemExit(1)
 
     def _needs_prompt_injection(self) -> bool:
         return self.cfg.agent in ("trae", "qwen")
 
+    def _uses_prompt_argument(self) -> bool:
+        return self.cfg.agent == "codex"
+
     def build_initial_prompt(self, name: str) -> str:
-        engine_labels = {"trae": "Trae CLI", "qwen": "Qwen Code"}
+        engine_labels = {"codex": "Codex CLI", "trae": "Trae CLI", "qwen": "Qwen Code"}
         engine_label = engine_labels.get(self.cfg.agent, self.cfg.agent)
         sd = self._env.sessions_dir
         cv = self._env.cv_dir
@@ -103,11 +119,9 @@ class SwarmManager:
 
     def _save_cmd(self, name: str) -> str:
         board = self._board_path()
-        return (
-            f"git add -A && git commit -m '[WIP][{name}] auto-save before shutdown' "
-            f"--allow-empty-message 2>/dev/null; "
-            f"'{board}' --as {name} status 'shutdown: state saved'"
-        )
+        # Never auto-stage on shutdown. A previous git add -A auto-save path
+        # leaked secrets and can also mix unrelated agents' hunks in one commit.
+        return f"'{board}' --as {name} status 'shutdown: stopped without auto-commit'"
 
     # --- Session registration ---
 
@@ -123,7 +137,7 @@ class SwarmManager:
         for n in names:
             md = self._env.sessions_dir / f"{n}.md"
             if not md.exists():
-                md.write_text(f"# {n}\n\n## Current task\n(none)\n\n## @inbox\n")
+                md.write_text(f"# {n}\n\n## Current task\n(none)\n")
 
         config_path = self._env.claudes_dir / "config.toml"
         if config_path.exists():
@@ -142,15 +156,108 @@ class SwarmManager:
 
     # --- Attendance ---
 
+    def _engine_from_record(self, line: str) -> str:
+        m = re.search(r"\bengine=([a-z0-9_-]+)", line)
+        if m:
+            return m.group(1)
+        if " with agent: " in line:
+            return line.rsplit(" with agent: ", 1)[1].strip()
+        return ""
+
+    def _timestamp_from_record(self, line: str) -> str:
+        m = re.match(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]", line)
+        if m:
+            return m.group(1)
+        m = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\|", line)
+        if m:
+            return m.group(1)
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def _record_run_start(self, name: str, started_at: str) -> None:
+        db = BoardDB(self._env)
+        with db.conn() as c:
+            db.ensure_session(name, c=c)
+            # Close any previous open run for this session before recording a
+            # new clock-in, so restarts do not leave ambiguous current engines.
+            c.execute(
+                "UPDATE session_runs SET ended_at=? WHERE session=? AND ended_at IS NULL",
+                (started_at, name),
+            )
+            c.execute(
+                "INSERT INTO session_runs(session, engine, started_at) VALUES (?, ?, ?)",
+                (name, self.cfg.agent, started_at),
+            )
+
+    def _record_run_end(self, name: str, ended_at: str) -> None:
+        db = BoardDB(self._env)
+        with db.conn() as c:
+            c.execute(
+                "UPDATE session_runs SET ended_at=? "
+                "WHERE id=(SELECT id FROM session_runs "
+                "WHERE session=? AND ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT 1)",
+                (ended_at, name),
+            )
+
+    def _record_run_snapshot(self, name: str, engine: str, started_at: str) -> None:
+        db = BoardDB(self._env)
+        with db.conn() as c:
+            db.ensure_session(name, c=c)
+            c.execute(
+                "INSERT INTO session_runs(session, engine, started_at) VALUES (?, ?, ?)",
+                (name, engine, started_at),
+            )
+
+    def _engine_from_run_history(self, name: str) -> str:
+        if not self._env.board_db.exists():
+            return ""
+        try:
+            db = BoardDB(self._env)
+            row = db.query_one(
+                "SELECT engine FROM session_runs WHERE session=? ORDER BY started_at DESC, id DESC LIMIT 1",
+                (name,),
+            )
+        except Exception:
+            return ""
+        return row["engine"] if row and row["engine"] else ""
+
+    def recorded_engine(self, name: str) -> str:
+        engine = self._engine_from_run_history(name)
+        if engine:
+            return engine
+        # A running session may be inspected from a later shell where SWARM_AGENT
+        # defaults differently. Persisted startup records are the truth for the
+        # engine that actually clocked in.
+        paths = [self._env.attendance_log, self._env.log_dir / f"{name}.log", self._env.log_dir / "swarm.log"]
+        for path in paths:
+            if not path.exists():
+                continue
+            try:
+                lines = path.read_text().splitlines()
+            except OSError:
+                continue
+            for line in reversed(lines):
+                if f"| {name} | clock-in" in line or f"Starting {name} with agent:" in line:
+                    engine = self._engine_from_record(line)
+                    if engine:
+                        try:
+                            self._record_run_snapshot(name, engine, self._timestamp_from_record(line))
+                        except Exception:
+                            pass
+                        return engine
+        return self.cfg.agent
+
     def clock_in(self, name: str) -> None:
         t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._record_run_start(name, t)
         with open(self._env.attendance_log, "a") as f:
-            f.write(f"{t} | {name} | clock-in\n")
+            f.write(f"{t} | {name} | clock-in | engine={self.cfg.agent}\n")
 
     def clock_out(self, name: str) -> None:
         t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        engine = self.recorded_engine(name)
+        self._record_run_end(name, t)
         with open(self._env.attendance_log, "a") as f:
-            f.write(f"{t} | {name} | clock-out\n")
+            f.write(f"{t} | {name} | clock-out | engine={engine}\n")
 
     def attendance(self) -> None:
         log = self._env.attendance_log
@@ -166,10 +273,15 @@ class SwarmManager:
             today_outs = [l for l in lines if f"| {name} | clock-out" in l and l.startswith(today)]
             last_in = today_ins[-1].split("|")[0].strip() if today_ins else ""
             last_out = today_outs[-1].split("|")[0].strip() if today_outs else ""
+            engine = self._engine_from_record(today_ins[-1]) if today_ins else ""
+            if today_ins and not engine:
+                engine = self.recorded_engine(name)
             if last_in and not last_out:
-                print(f"  {name}: 在岗 (上班 {last_in})")
+                engine_note = f", engine {engine}" if engine else ""
+                print(f"  {name}: 在岗 (上班 {last_in}{engine_note})")
             elif last_out:
-                print(f"  {name}: 已下班 (最后 {last_out})")
+                engine_note = f", engine {engine}" if engine else ""
+                print(f"  {name}: 已下班 (最后 {last_out}{engine_note})")
             else:
                 print(f"  {name}: 今日未上班")
         print()
@@ -228,12 +340,13 @@ class SwarmManager:
         agent_cmd = self.build_agent_cmd(name)
         backend.start_session(prefix, name, self._env.project_root, agent_cmd)
 
-        if isinstance(backend, TmuxBackend):
-            t_trust = threading.Thread(target=backend.auto_accept_trust, args=(prefix, name))
+        if isinstance(backend, TmuxBackend) and self.cfg.agent in ("claude", "codex"):
+            trust_timeout = 60 if self.cfg.agent == "claude" else 20
+            t_trust = threading.Thread(target=backend.auto_accept_trust, args=(prefix, name, trust_timeout))
             t_trust.start()
             self._pending_threads.append(t_trust)
 
-        if self._needs_prompt_injection() or isinstance(backend, TmuxBackend):
+        if self._needs_prompt_injection() or (isinstance(backend, TmuxBackend) and not self._uses_prompt_argument()):
             initial = self.build_initial_prompt(name)
             t = threading.Thread(
                 target=backend.inject_initial_prompt,
@@ -299,14 +412,14 @@ class SwarmManager:
 
     def status(self) -> None:
         backend_name = type(self.cfg.backend).__name__.lower().replace("backend", "")
-        print(f"=== 同学状态 (mode: {backend_name}, engine: {self.cfg.agent}) ===")
+        print(f"=== 同学状态 (mode: {backend_name}, default engine: {self.cfg.agent}) ===")
         prefix = self._env.prefix
         sf = self._env.suspended_file
         for name in self._env.sessions:
             if is_suspended(name, sf):
                 print(f"  {name}: SUSPENDED")
             elif self.cfg.backend.is_agent_active(prefix, name):
-                line = self.cfg.backend.status_line(prefix, name, self.cfg.agent)
+                line = self.cfg.backend.status_line(prefix, name, self.recorded_engine(name))
                 print(f"  {name}: {line}")
             elif self.cfg.backend.is_running(prefix, name):
                 print(f"  {name}: stale (session exists, 同学已退出)")
@@ -439,7 +552,7 @@ class SwarmManager:
 swarm — 管理同学协作会话
 
 Mode: {backend_name} (override with SWARM_MODE=tmux|screen)
-Engine: {self.cfg.agent} (override with SWARM_AGENT=claude|trae|qwen)
+Engine: {self.cfg.agent} (override with CNB_AGENT/SWARM_AGENT=claude|codex|trae|qwen)
 
   start [names...]    Launch sessions (default: all non-suspended)
   start --role=dev    Launch only sessions with matching role
@@ -457,6 +570,7 @@ Roles (from config.toml [session.X] role key): lead, dev, intern, dispatcher
 
 Examples:
   swarm start                           # launch all with Claude (default)
+  SWARM_AGENT=codex swarm start         # launch all with Codex
   SWARM_AGENT=trae swarm start          # launch all with Trae
   swarm start alice bob                 # launch specific sessions
   swarm attach alice                    # interactive access

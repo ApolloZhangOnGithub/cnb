@@ -205,6 +205,18 @@ class TestTmuxAutoAcceptTrust:
             send_enter = [c for c in mock.call_args_list if "Enter" in str(c)]
             assert len(send_enter) > 0
 
+    def test_accepts_codex_trust_dialog(self):
+        b = TmuxBackend()
+        with patch("subprocess.run") as mock:
+            mock.return_value = MagicMock(
+                returncode=0,
+                stdout="Do you trust the contents of this directory?\nPress enter to continue",
+            )
+            with patch("time.sleep"):
+                b.auto_accept_trust("cnb", "alice", timeout=2)
+            send_enter = [c for c in mock.call_args_list if "Enter" in str(c)]
+            assert len(send_enter) > 0
+
     def test_times_out_without_trust(self):
         b = TmuxBackend()
         with patch("subprocess.run") as mock:

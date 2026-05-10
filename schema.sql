@@ -175,6 +175,16 @@ CREATE TABLE IF NOT EXISTS ownership(
 CREATE INDEX IF NOT EXISTS idx_ownership_session ON ownership(session);
 CREATE INDEX IF NOT EXISTS idx_ownership_path ON ownership(path_pattern);
 
+CREATE TABLE IF NOT EXISTS session_runs(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session TEXT NOT NULL REFERENCES sessions(name) ON DELETE CASCADE,
+    engine TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_runs_session_started ON session_runs(session, started_at);
+CREATE INDEX IF NOT EXISTS idx_session_runs_open ON session_runs(session, ended_at);
+
 CREATE TABLE IF NOT EXISTS mail(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thread_id INTEGER REFERENCES mail(id) ON DELETE CASCADE,

@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up CNB sync gateway state to encrypted Git
+
+[Service]
+Type=oneshot
+User=cnb-sync
+Group=cnb-sync
+EnvironmentFile=/etc/cnb-sync/env
+WorkingDirectory=/opt/cnb-sync/source
+ExecStart=/opt/cnb-sync/source/tools/cnb-sync-gateway/backup_to_git.sh

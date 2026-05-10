@@ -65,6 +65,12 @@ class TestSensitiveContent:
         findings = secret_scan._scan_content(str(f))
         assert any("API key" in label or "secret" in label for _, label in findings)
 
+    def test_detects_generic_secret_literal(self, tmp_path):
+        f = tmp_path / "config.toml"
+        f.write_text('webhook_token = "prod-token-123456789"\n')
+        findings = secret_scan._scan_content(str(f))
+        assert any("secret" in label for _, label in findings)
+
     def test_detects_aws_key(self, tmp_path):
         f = tmp_path / "aws.txt"
         f.write_text("aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n")
@@ -88,6 +94,14 @@ class TestSensitiveContent:
         f.write_text("def hello():\n    print('hello world')\n")
         findings = secret_scan._scan_content(str(f))
         assert len(findings) == 0
+
+    def test_ignores_code_identifier_assignments(self, tmp_path):
+        f = tmp_path / "source.py"
+        f.write_text(
+            "token = tenant_access_token(cfg)\napp_secret = settings.app_secret\nwatch_token = base.watch_token\n"
+        )
+        findings = secret_scan._scan_content(str(f))
+        assert findings == []
 
 
 class TestSkipLogic:

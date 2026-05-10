@@ -32,7 +32,7 @@ class FakeBackend(SessionBackend):
         return f"{prefix}-{name}" in self._running
 
     def start_session(self, prefix: str, name: str, project_root: Path, agent_cmd: str) -> str:
-        self.calls.append(("start_session", prefix, name))
+        self.calls.append(("start_session", prefix, name, agent_cmd))
         self._running.add(f"{prefix}-{name}")
         return f"{prefix}-{name}"
 
@@ -130,6 +130,17 @@ class TestPrompts:
         with pytest.raises(SystemExit):
             mgr.build_agent_cmd("alice")
 
+    def test_agent_cmd_codex_highest_permissions(self, mgr):
+        mgr.cfg.agent = "codex"
+        cmd = mgr.build_agent_cmd("alice")
+        assert cmd.startswith("codex ")
+        assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+        assert "--ask-for-approval" not in cmd
+        assert "--sandbox" not in cmd
+        assert "--cd" in cmd
+        assert "alice" in cmd
+        assert "--append-system-prompt" not in cmd
+
     def test_initial_prompt_contains_session_dir(self, mgr):
         p = mgr.build_initial_prompt("bob")
         assert "bob" in p
@@ -188,6 +199,48 @@ class TestAttendance:
         assert "alice" in log.read_text()
         assert "clock-in" in log.read_text()
 
+    def test_clock_in_records_engine(self, mgr):
+        from lib.board_db import BoardDB
+
+        mgr.cfg.agent = "codex"
+        mgr.clock_in("alice")
+        assert "engine=codex" in mgr._env.attendance_log.read_text()
+        db = BoardDB(mgr._env)
+        row = db.query_one(
+            "SELECT session, engine, ended_at FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1"
+        )
+        assert row["session"] == "alice"
+        assert row["engine"] == "codex"
+        assert row["ended_at"] is None
+
+    def test_clock_out_records_run_end(self, mgr):
+        from lib.board_db import BoardDB
+
+        mgr.cfg.agent = "codex"
+        mgr.clock_in("alice")
+        mgr.clock_out("alice")
+        db = BoardDB(mgr._env)
+        row = db.query_one("SELECT engine, ended_at FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1")
+        assert row["engine"] == "codex"
+        assert row["ended_at"] is not None
+
+    def test_recorded_engine_prefers_run_history(self, mgr):
+        mgr.cfg.agent = "codex"
+        mgr.clock_in("alice")
+        mgr.cfg.agent = "claude"
+        assert mgr.recorded_engine("alice") == "codex"
+
+    def test_recorded_engine_falls_back_to_startup_log(self, mgr):
+        from lib.board_db import BoardDB
+
+        mgr.cfg.agent = "codex"
+        mgr.log_startup("alice")
+        mgr.cfg.agent = "claude"
+        assert mgr.recorded_engine("alice") == "codex"
+        db = BoardDB(mgr._env)
+        row = db.query_one("SELECT engine FROM session_runs WHERE session='alice' ORDER BY id DESC LIMIT 1")
+        assert row["engine"] == "codex"
+
     def test_clock_out_writes_log(self, mgr):
         mgr.clock_in("alice")
         mgr.clock_out("alice")
@@ -206,6 +259,12 @@ class TestAttendance:
 
 
 class TestStartStop:
+    def test_save_cmd_does_not_auto_stage_or_commit(self, mgr):
+        cmd = mgr._save_cmd("alice")
+        assert "git add" not in cmd
+        assert "git commit" not in cmd
+        assert "shutdown: stopped without auto-commit" in cmd
+
     def test_start_dry_run(self, mgr, fake_backend, capsys):
         mgr.start([], dry_run=True)
         out = capsys.readouterr().out
@@ -256,6 +315,15 @@ class TestStartStop:
         assert "running" in out
         assert "bob" in out
         assert "stopped" in out
+
+    def test_status_uses_recorded_engine(self, mgr, fake_backend, capsys):
+        mgr.cfg.agent = "codex"
+        mgr.start(["alice"])
+        mgr.cfg.agent = "claude"
+        capsys.readouterr()
+        mgr.status()
+        out = capsys.readouterr().out
+        assert "alice: running (fake, agent: codex)" in out
 
 
 # ---------------------------------------------------------------------------
