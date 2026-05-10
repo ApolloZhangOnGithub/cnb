@@ -11,10 +11,12 @@ Usage:
 
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,10 +62,13 @@ class CPUInfo:
 # ---------------------------------------------------------------------------
 
 
-def _run(cmd: str, default: str = "") -> str:
-    """Run a shell command and return stdout, or *default* on failure."""
+def _run(cmd: str | Sequence[str], default: str = "") -> str:
+    """Run a command and return stdout, or *default* on failure."""
+    argv = shlex.split(cmd) if isinstance(cmd, str) else list(cmd)
+    if not argv:
+        return default
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+        r = subprocess.run(argv, shell=False, capture_output=True, text=True, timeout=10)
         return r.stdout.strip() if r.returncode == 0 else default
     except Exception:
         return default
@@ -73,7 +78,7 @@ def check_battery() -> BatteryInfo:
     if not shutil.which("pmset"):
         return BatteryInfo(status="N/A", pct=100, on_battery=False, remaining="—")
 
-    batt_info = _run("pmset -g batt")
+    batt_info = _run(["pmset", "-g", "batt"])
     on_battery = "Battery Power" in batt_info
 
     m = re.search(r"(\d+)%", batt_info)
@@ -101,7 +106,7 @@ def check_memory() -> MemoryInfo:
     pressure = "normal"
 
     if shutil.which("memory_pressure"):
-        mp_out = _run("memory_pressure 2>/dev/null | tail -1")
+        mp_out = (_run(["memory_pressure"]).splitlines() or [""])[-1]
         if "critical" in mp_out.lower():
             pressure = "critical"
             status = "CRITICAL"
@@ -110,7 +115,7 @@ def check_memory() -> MemoryInfo:
             status = "WARNING"
 
     if shutil.which("vm_stat"):
-        vm_out = _run("vm_stat")
+        vm_out = _run(["vm_stat"])
         lines = vm_out.splitlines()
         if lines:
             # page size
@@ -127,7 +132,7 @@ def check_memory() -> MemoryInfo:
             pages_free = _extract("Pages free")
             pages_speculative = _extract("Pages speculative")
 
-            total_bytes_str = _run("sysctl -n hw.memsize", "0")
+            total_bytes_str = _run(["sysctl", "-n", "hw.memsize"], "0")
             total_bytes = int(total_bytes_str) if total_bytes_str.isdigit() else 0
 
             if total_bytes > 0:
@@ -145,7 +150,7 @@ def check_cpu() -> CPUInfo:
     usage = 0
 
     if shutil.which("top"):
-        top_out = _run("top -l 1 -n 0 2>/dev/null")
+        top_out = _run(["top", "-l", "1", "-n", "0"])
         for line in top_out.splitlines():
             if "CPU usage" in line:
                 m = re.search(r"([\d.]+)%\s*idle", line)

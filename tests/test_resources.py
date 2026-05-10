@@ -166,6 +166,20 @@ class TestRun:
         result = _run("false", default="fallback")
         assert result == "fallback"
 
+    def test_uses_argv_without_shell(self):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+        with patch("lib.resources.subprocess.run", side_effect=fake_run):
+            result = _run("echo hello")
+
+        assert result == "ok"
+        assert calls[0][0] == ["echo", "hello"]
+        assert calls[0][1]["shell"] is False
+
     def test_returns_default_on_timeout(self):
         with patch("lib.resources.subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 10)):
             result = _run("sleep 999", default="timed-out")
