@@ -19,8 +19,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
-      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog tests/
-      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog tests/
+      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding tests/
+      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding tests/
 
   typecheck:
     runs-on: ubuntu-latest
@@ -45,6 +45,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: python bin/sync-version --check
+      - run: python bin/check-branding
       - name: Version must change on every push
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
@@ -86,7 +87,7 @@ jobs:
           LOCAL=$(cat VERSION)
           # Strip -dev suffix for comparison
           LOCAL_CLEAN=$(echo "$LOCAL" | sed 's/-dev$//')
-          NPM=$(npm view claude-nb version 2>/dev/null || echo "0.0.0")
+          NPM=$(npm view c-n-b version 2>/dev/null || echo "0.0.0")
           if [ "$LOCAL_CLEAN" != "$NPM" ]; then
             echo "::warning::npm package is outdated: npm=$NPM local=$LOCAL_CLEAN. Run 'npm publish' to update."
           fi

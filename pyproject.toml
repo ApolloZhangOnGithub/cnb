@@ -3,8 +3,8 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "claude-nb"
-version = "0.5.44"
+name = "c-n-b"
+version = "0.5.45.dev0"
 description = "Multi-agent coordination framework for Claude Code sessions"
 requires-python = ">=3.11"
 license = "LicenseRef-OpenAll-1.0"

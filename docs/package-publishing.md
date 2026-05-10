@@ -2,7 +2,7 @@
 
 cnb has two different package surfaces:
 
-- The canonical installable CLI package is `claude-nb` on npmjs.com.
+- The canonical installable CLI package is `c-n-b` on npmjs.com.
 - The GitHub Packages sidebar is populated by the scoped mirror package `@apollozhangongithub/cnb`.
 
 These are not the same registry. Do not change the npmjs package name just to satisfy the GitHub sidebar.
@@ -12,14 +12,16 @@ These are not the same registry. Do not change the npmjs package name just to sa
 Use npmjs for user installs:
 
 ```bash
-npm install -g claude-nb
+npm install -g c-n-b
 ```
+
+The package name and the installed command are intentionally different: npm package `c-n-b` installs the `cnb` command. Do not publish or document `npm install -g cnb`; that npm name belongs to an unrelated package. If `npm view c-n-b` returns 404, the rename release has not claimed the package yet.
 
 Check the public package state:
 
 ```bash
-npm view claude-nb version dist-tags versions
-npm dist-tag ls claude-nb
+npm view c-n-b version dist-tags versions
+npm dist-tag ls c-n-b
 ```
 
 The GitHub Packages mirror exists for repository visibility and GitHub-native package metadata. It is not the primary user install path.
@@ -52,7 +54,7 @@ bin/check-npm-package --install-smoke
 
 6. Create a GitHub Release for the matching tag, for example `v0.5.43`.
 
-The `Publish npm Release` workflow then publishes `claude-nb` to npmjs and mirrors the same release to GitHub Packages. It can also be run manually in dry-run mode:
+The `Publish npm Release` workflow then publishes `c-n-b` to npmjs and mirrors the same release to GitHub Packages. It can also be run manually in dry-run mode:
 
 ```bash
 gh workflow run publish-npm.yml -f version=<version> -f dry_run=true
@@ -72,18 +74,18 @@ The release workflow performs three package checks:
 
 The npmjs publish step uses Trusted Publishing through GitHub Actions OIDC. This avoids a long-lived npm publish token in GitHub secrets.
 
-Configure the package once from an npm account that owns `claude-nb`:
+Configure the package once from an npm account that owns `c-n-b`:
 
 ```bash
 npm install -g npm@^11.10.0
 npm login
-npm trust github claude-nb --repo ApolloZhangOnGithub/cnb --file publish-npm.yml
-npm trust list claude-nb
+npm trust github c-n-b --repo ApolloZhangOnGithub/cnb --file publish-npm.yml
+npm trust list c-n-b
 ```
 
 Equivalent npmjs.com UI settings:
 
-- package: `claude-nb`
+- package: `c-n-b`
 - trusted publisher: GitHub Actions
 - organization/user: `ApolloZhangOnGithub`
 - repository: `cnb`
@@ -94,25 +96,35 @@ After this setup, creating a GitHub Release is enough to publish the package. If
 
 ## GitHub Packages
 
-Do not route the existing `claude-nb` package to GitHub Packages by adding `publishConfig.registry=https://npm.pkg.github.com` to the root package. That would make normal maintainers much more likely to publish the canonical npmjs package to the wrong registry.
+Do not route the npmjs `c-n-b` package to GitHub Packages by adding `publishConfig.registry=https://npm.pkg.github.com` to the root package. That would make normal maintainers much more likely to publish the canonical npmjs package to the wrong registry.
 
 GitHub Packages npm publishing requires a scoped package name such as `@namespace/package-name`. The current public CLI name is intentionally unscoped so users can install it with:
 
 ```bash
-npm install -g claude-nb
+npm install -g c-n-b
 ```
 
 To keep GitHub Packages populated without changing the user-facing npmjs package, mirror a published npmjs release into the scoped package:
 
 ```bash
-gh workflow run publish-github-package.yml -f version=0.5.1
+gh workflow run publish-github-package.yml -f version=<version>
 ```
 
-The release workflow now does this automatically after a successful npmjs release. The manual `publish-github-package.yml` workflow remains as a repair path for old releases or failed mirror runs. It downloads `claude-nb@<version>` from npmjs, rewrites only package metadata for GitHub Packages, and publishes `@apollozhangongithub/cnb@<version>` with the repository `GITHUB_TOKEN`.
+The release workflow now does this automatically after a successful npmjs release. The manual `publish-github-package.yml` workflow remains as a repair path for old releases or failed mirror runs. It downloads `c-n-b@<version>` from npmjs, rewrites only package metadata for GitHub Packages, and publishes `@apollozhangongithub/cnb@<version>` with the repository `GITHUB_TOKEN`.
 
 Rules:
 
 - Mirror release versions only, never `-dev` versions.
-- Keep npmjs `claude-nb` as the canonical install path.
+- Keep npmjs `c-n-b` as the canonical install path.
 - Keep the GitHub Packages package scoped and clearly tied to this repository.
 - If the mirror package ever becomes a real supported install path, open a migration issue first.
+
+## Rename Release Checklist
+
+Before the first `c-n-b` npmjs release:
+
+1. Confirm `npm view c-n-b` still returns 404 or shows this project.
+2. Configure npm Trusted Publishing for package `c-n-b`.
+3. Run `python bin/check-branding` and `bin/check-npm-package --install-smoke`.
+4. Publish a normal GitHub Release and let `publish-npm.yml` claim `c-n-b`.
+5. After npmjs shows `c-n-b`, verify that `npm install -g c-n-b` exposes `cnb --version`.
