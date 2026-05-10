@@ -87,7 +87,7 @@ jobs:
           LOCAL=$(cat VERSION)
           # Strip -dev suffix for comparison
           LOCAL_CLEAN=$(echo "$LOCAL" | sed 's/-dev$//')
-          NPM=$(npm view c-n-b version 2>/dev/null || echo "0.0.0")
+          NPM=$(npm view claude-nb version 2>/dev/null || echo "0.0.0")
           if [ "$LOCAL_CLEAN" != "$NPM" ]; then
             echo "::warning::npm package is outdated: npm=$NPM local=$LOCAL_CLEAN. Run 'npm publish' to update."
           fi
