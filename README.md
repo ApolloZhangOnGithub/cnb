@@ -5,7 +5,7 @@
 # c-n-b
 
 [![CI](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml/badge.svg)](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/c-n-b?label=npm)](https://www.npmjs.com/package/c-n-b)
+[![npm](https://img.shields.io/npm/v/claude-nb?label=npm)](https://www.npmjs.com/package/claude-nb)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)](pyproject.toml)
 [![Docs](https://img.shields.io/badge/docs-c--n--b.space-14865d)](https://c-n-b.space)
 [![License](https://img.shields.io/badge/license-OpenAll--1.0-444)](LICENSE)
@@ -15,7 +15,7 @@
 `cnb` is local-first organizational infrastructure for long-lived Claude Code and Codex teams. It gives AI coding sessions a shared board, durable ownership, handoff records, and operational checks so a restarted session does not become a new hire with no memory.
 
 ```bash
-npm install -g c-n-b
+npm install -g claude-nb
 ```
 
 | Surface | Current shape |
@@ -23,7 +23,7 @@ npm install -g c-n-b
 | Runtime | Local tmux sessions, SQLite board, dispatcher, filesystem reports |
 | Engines | Claude Code by default; Codex supported through the npm peer CLI |
 | State | Board database, ownership map, issue mirror, daily/shift reports |
-| Distribution | Public npm package `c-n-b`, Python 3.11+ internals |
+| Distribution | Public npm package `claude-nb`, Python 3.11+ internals |
 | Documentation | README short path, durable docs in [`docs/`](docs/), public site at [`c-n-b.space`](https://c-n-b.space) |
 
 Every multi-agent tool solves "how to run multiple agents." cnb solves what happens after — how to make them **manageable** across sessions, shifts, and team changes.
@@ -37,7 +37,7 @@ This is not about speed or context isolation. Those are side effects. The core p
 
 | Need | Path |
 |------|------|
-| Install the CLI | `npm install -g c-n-b` |
+| Install the CLI | `npm install -g claude-nb` |
 | Understand the model | [How cnb fits in](#how-cnb-fits-in), [Glossary](#glossary), [Ownership autonomy](docs/design-ownership-autonomy.md) |
 | Start a team | [Quick start](#quick-start), then `cnb` inside a project |
 | Inspect a real run | [Silicon Valley Battle](instances/silicon_vally_battle/) |
@@ -87,12 +87,12 @@ cnb's specific focus is what happens **between** sessions — when a tongxue res
 ## Install
 
 ```bash
-npm install -g c-n-b
+npm install -g claude-nb
 ```
 
-The canonical public package is [`c-n-b`](https://www.npmjs.com/package/c-n-b) on npmjs.com. GitHub Packages may also show the scoped mirror `@apollozhangongithub/cnb`; npmjs remains the supported install path. See [Package publishing](docs/package-publishing.md) for release and visibility rules.
+The canonical public package is [`claude-nb`](https://www.npmjs.com/package/claude-nb) on npmjs.com. GitHub Packages may also show the scoped mirror `@apollozhangongithub/cnb`; npmjs remains the supported install path. See [Package publishing](docs/package-publishing.md) for release and visibility rules.
 
-Install the npm package named `c-n-b`; it provides the `cnb` command. Do not run `npm install -g cnb`: that npm name is owned by an unrelated package. If `npm install -g c-n-b` returns a 404 before the rename release is published, wait for the release instead of installing `cnb`.
+Install the npm package named `claude-nb`; it provides the `cnb` command. Do not run `npm install -g cnb`: that npm name is owned by an unrelated package. A future `c-n-b` package migration is tracked separately and is not the current install path.
 
 The npm dependency count only covers JavaScript packages. cnb has no required JavaScript library dependencies, but it does have runtime requirements:
 

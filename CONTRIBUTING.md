@@ -229,7 +229,7 @@ Document which files were fabricated by tongxue versus genuine work output, and 
 
 ## Publishing
 
-The public user-facing package is the unscoped npmjs package `c-n-b`.
+The public user-facing package is the unscoped npmjs package `claude-nb`.
 Do not publish `-dev` versions to the `latest` or `stable` dist-tags.
 
 Before a release:
@@ -239,18 +239,18 @@ Before a release:
 3. Create the matching GitHub Release tag, for example `v0.5.43`.
 4. Watch the `Publish npm Release` workflow finish.
 
-The release workflow publishes `c-n-b` to npmjs through Trusted Publishing, verifies the public registry install with `cnb --version`, and mirrors the same release to GitHub Packages as `@apollozhangongithub/cnb`.
+The release workflow publishes `claude-nb` to npmjs through Trusted Publishing, verifies the public registry install with `cnb --version`, and mirrors the same release to GitHub Packages as `@apollozhangongithub/cnb`.
 
 Manual verification:
 
 ```bash
-npm view c-n-b version dist-tags
+npm view claude-nb version dist-tags
 gh workflow run publish-npm.yml -f version=<version> -f dry_run=true
 ```
 
 `npm publish` moves `latest` unless a non-default `--tag` is used. The workflow also tries to move `stable`; if npm requires token auth for post-publish dist-tag mutation, add a granular `NPM_TOKEN` secret for that operation or move `stable` manually after verifying the release.
 
-GitHub's repository Packages sidebar is separate from npmjs.com. It only shows packages published to GitHub Packages and connected to the repository. The current `c-n-b` package is intentionally unscoped for `npm install -g c-n-b`; GitHub Packages npm publishing requires a scoped package name such as `@namespace/package-name`, so do not add `publishConfig.registry=https://npm.pkg.github.com` or rename the package without an explicit migration issue.
+GitHub's repository Packages sidebar is separate from npmjs.com. It only shows packages published to GitHub Packages and connected to the repository. The current `claude-nb` package is intentionally unscoped for `npm install -g claude-nb`; GitHub Packages npm publishing requires a scoped package name such as `@namespace/package-name`, so do not add `publishConfig.registry=https://npm.pkg.github.com` or rename the package without an explicit migration issue.
 
 The repository keeps the manual GitHub Packages mirror workflow as a repair path:
 
@@ -258,6 +258,6 @@ The repository keeps the manual GitHub Packages mirror workflow as a repair path
 gh workflow run publish-github-package.yml -f version=<npmjs-release-version>
 ```
 
-That workflow downloads the already-published npmjs `c-n-b` release, rewrites package metadata to `@apollozhangongithub/cnb`, and publishes the scoped mirror with `GITHUB_TOKEN`. Use it for release versions only.
+That workflow downloads the already-published npmjs `claude-nb` release, rewrites package metadata to `@apollozhangongithub/cnb`, and publishes the scoped mirror with `GITHUB_TOKEN`. Use it for release versions only.
 
 CI warns when the npmjs package version is behind the local `VERSION`.

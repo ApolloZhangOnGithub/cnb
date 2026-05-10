@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.46-dev (unreleased)
+
+### Bug Fixes
+
+- **npm package registry fact restore** — Restored current install docs, package metadata, and release workflows to the verified npmjs package `claude-nb` until the future `c-n-b` package migration is actually claimed and published.
+
 ## 0.5.45-dev (unreleased)
 
 ### Documentation

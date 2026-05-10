@@ -9,10 +9,10 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-EXPECTED_PACKAGE = "c-n-b"
+EXPECTED_PACKAGE = "claude-nb"
 EXPECTED_HOMEPAGE = "https://c-n-b.space"
-RETIRED_PACKAGE_PATTERN = re.compile("claude" + r"-nb", re.IGNORECASE)
-WRONG_NPM_INSTALL_PATTERN = re.compile(r"npm\s+(?:install|i)\s+(?:--global|-g)\s+cnb\b")
+WRONG_CNB_INSTALL_PATTERN = re.compile(r"npm\s+(?:install|i)\s+(?:--global|-g)\s+cnb\b")
+WRONG_UNCLAIMED_INSTALL_PATTERN = re.compile(r"npm\s+(?:install|i)\s+(?:--global|-g)\s+c-n-b\b")
 SKIP_DIRS = {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__"}
 TEXT_SUFFIXES = {
     "",
@@ -73,11 +73,11 @@ def main() -> None:
             text = path.read_text()
         except UnicodeDecodeError:
             continue
-        if RETIRED_PACKAGE_PATTERN.search(text):
-            errors.append(f"{rel}: contains retired package name")
         for line_no, line in enumerate(text.splitlines(), start=1):
-            if WRONG_NPM_INSTALL_PATTERN.search(line) and "Do not" not in line and "不要" not in line:
-                errors.append(f"{rel}:{line_no}: documents the wrong npm install package")
+            if WRONG_CNB_INSTALL_PATTERN.search(line) and "Do not" not in line and "不要" not in line:
+                errors.append(f"{rel}:{line_no}: documents unrelated npm package cnb as install target")
+            if WRONG_UNCLAIMED_INSTALL_PATTERN.search(line) and "Do not" not in line and "不要" not in line:
+                errors.append(f"{rel}:{line_no}: documents unclaimed npm package c-n-b as install target")
 
     if errors:
         print("BRANDING CHECK FAILED:")

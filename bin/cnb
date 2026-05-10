@@ -15,13 +15,13 @@ _CACHE="$HOME/.cnb/latest-version"
 _check_update() {
     mkdir -p "$HOME/.cnb"
     if [ ! -f "$_CACHE" ] || [ "$(find "$_CACHE" -mmin +60 2>/dev/null)" ]; then
-        (npm view c-n-b version 2>/dev/null > "$_CACHE.tmp" && mv "$_CACHE.tmp" "$_CACHE" || rm -f "$_CACHE.tmp") &
+        (npm view claude-nb version 2>/dev/null > "$_CACHE.tmp" && mv "$_CACHE.tmp" "$_CACHE" || rm -f "$_CACHE.tmp") &
     fi
     if [ -f "$_CACHE" ]; then
         _LATEST=$(cat "$_CACHE" 2>/dev/null | tr -d '[:space:]')
         _LOCAL=$(echo "$VERSION" | sed 's/-dev$//')
         if [ -n "$_LATEST" ] && [ "$_LOCAL" != "$_LATEST" ]; then
-            printf "${Y}⬆ cnb v${_LATEST} 已发布，当前 v${VERSION}。运行 npm install -g c-n-b 更新。${N}\n"
+            printf "${Y}⬆ cnb v${_LATEST} 已发布，当前 v${VERSION}。运行 npm install -g claude-nb 更新。${N}\n"
         fi
     fi
 }
@@ -274,7 +274,7 @@ cat > "$CMD_DIR/cnb-history.md"   <<EOF
 运行 \`${BOARD} --as ${ME} log 50\`，把完整的消息历史展示给我。
 EOF
 cat > "$CMD_DIR/cnb-update.md"    <<EOF
-运行 \`npm install -g c-n-b\`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 cnb 以生效。
+运行 \`npm install -g claude-nb\`，更新到最新版本。把结果告诉我，如果更新成功提醒用户重启 cnb 以生效。
 EOF
 cat > "$CMD_DIR/cnb-help.md"      <<EOF
 列出所有 /cnb-* 命令：
