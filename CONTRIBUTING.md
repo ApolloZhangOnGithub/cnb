@@ -8,6 +8,8 @@ By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 Every change should have an issue before code is written.
 
+Use the cnb tracker for cnb work: <https://github.com/ApolloZhangOnGithub/cnb/issues>. Do not file cnb issues in Breadboard; Breadboard issues are only for cross-project coordination or Breadboard infrastructure.
+
 1. Read [ROADMAP.md](ROADMAP.md) to understand current priorities.
 2. Search open issues, related docs, recent PRs, and active branches.
 3. Open the correct issue template under `.github/ISSUE_TEMPLATE/`.

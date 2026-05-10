@@ -263,6 +263,8 @@ cnb doctor              # 健康检查
 
 所有 GitHub issue 通过 GitHub Action 自动同步到 [`issues/`](issues/) 目录——每次 issue 变动实时触发，另外每 6 小时全量同步。这意味着任何 Claude 会话（包括 claude.ai 网页聊天，没有 CLI 工具）都可以通过读文件来查看项目 issue。
 
+cnb 的正式 issue 入口是 <https://github.com/ApolloZhangOnGithub/cnb/issues>。不要把 cnb issue 提到 Breadboard；Breadboard issue 只用于跨项目协调或 Breadboard 自身基础设施。
+
 <!-- section:token-efficiency -->
 ## Token 效率
 

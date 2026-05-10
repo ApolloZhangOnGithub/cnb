@@ -1,5 +1,7 @@
 import json
+import os
 import sqlite3
+import subprocess
 import sys
 from base64 import b64encode
 from pathlib import Path
@@ -173,6 +175,11 @@ def test_project_argument_supports_legacy_claudes_dir(tmp_path):
     assert result["manifest"]["scope"] == "project"
 
 
+def test_explicit_missing_project_is_rejected(tmp_path):
+    with pytest.raises(CaptureError, match="找不到项目配置目录"):
+        ingest_capture({"mode": "page", "title": "Missing"}, project=tmp_path / "missing", notify=None)
+
+
 def test_list_captures_skips_corrupt_manifest(tmp_path):
     cnb = tmp_path / ".cnb"
     bad = cnb / "captures" / "bad"
@@ -204,3 +211,64 @@ def test_cli_ingest_list_show_round_trip(tmp_path, capsys):
     shown = capsys.readouterr().out
     assert "# CLI" in shown
     assert "hello" in shown
+
+
+def test_cli_invalid_json_file_returns_error(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    payload_file = tmp_path / "payload.json"
+    payload_file.write_text("{not json")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cmd_capture(["ingest", "--project", str(tmp_path), "--file", str(payload_file), "--no-notify"])
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "capture payload 不是有效 JSON" in err
+    assert not (tmp_path / ".cnb" / "captures").exists()
+
+
+def test_bin_cnb_capture_ingest_list_public_dispatch(tmp_path):
+    project = tmp_path / "project"
+    (project / ".cnb").mkdir(parents=True)
+    payload_file = tmp_path / "payload.json"
+    payload_file.write_text(json.dumps({"mode": "page", "title": "Public CLI", "page_text": "hello from bin"}))
+
+    env = {
+        **os.environ,
+        "HOME": str(tmp_path / "home"),
+        "VIRTUAL_ENV": str(tmp_path / "venv"),
+    }
+    cnb = Path(__file__).parent.parent / "bin" / "cnb"
+    ingest = subprocess.run(
+        [
+            "bash",
+            str(cnb),
+            "capture",
+            "ingest",
+            "--project",
+            str(project),
+            "--file",
+            str(payload_file),
+            "--no-notify",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+    assert ingest.returncode == 0, ingest.stderr
+    capture_id = next(
+        line.split(":", 1)[1].strip() for line in ingest.stdout.splitlines() if line.strip().startswith("id:")
+    )
+
+    listed = subprocess.run(
+        ["bash", str(cnb), "capture", "list", "--project", str(project), "--json"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+    assert listed.returncode == 0, listed.stderr
+    payload = json.loads(listed.stdout)
+    assert payload["captures"][0]["id"] == capture_id
+    assert payload["captures"][0]["title"] == "Public CLI"

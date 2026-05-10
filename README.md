@@ -253,6 +253,8 @@ cnb doctor              # health check
 
 All GitHub issues are auto-synced to [`issues/`](issues/) by a GitHub Action — on every issue event and every 6 hours. This means any Claude session (including claude.ai web chat, which has no CLI tools) can read project issues by just reading files.
 
+The canonical issue tracker is <https://github.com/ApolloZhangOnGithub/cnb/issues>. Do not file cnb issues in Breadboard; Breadboard issues are only for cross-project coordination or Breadboard infrastructure.
+
 <!-- section:token-efficiency -->
 ## Token efficiency
 

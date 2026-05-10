@@ -42,6 +42,8 @@ def _validate_name(name: str) -> str:
 
 MARKER_START = "<!-- cnb:start -->"
 MARKER_END = "<!-- cnb:end -->"
+PROJECT_MARKER_START = "<!-- cnb-project:start -->"
+PROJECT_MARKER_END = "<!-- cnb-project:end -->"
 
 
 def _claude_md_snippet(sessions: list[str], claudes_home: Path, personas: dict[str, str] | None = None) -> str:
@@ -94,14 +96,16 @@ def _claude_md_snippet(sessions: list[str], claudes_home: Path, personas: dict[s
     return "\n".join(lines) + "\n"
 
 
-def _update_marked_md(md_path: Path, snippet: str) -> None:
+def _update_marked_md(
+    md_path: Path, snippet: str, marker_start: str = MARKER_START, marker_end: str = MARKER_END
+) -> None:
     if md_path.exists():
         text = md_path.read_text()
-        if MARKER_START in text:
+        if marker_start in text:
             import re
 
             text = re.sub(
-                rf"{re.escape(MARKER_START)}.*?{re.escape(MARKER_END)}\n?",
+                rf"{re.escape(marker_start)}.*?{re.escape(marker_end)}\n?",
                 snippet,
                 text,
                 flags=re.DOTALL,
@@ -119,6 +123,40 @@ def _update_claude_md(project_dir: Path, snippet: str) -> None:
 
 def _update_agents_md(project_dir: Path, snippet: str) -> None:
     _update_marked_md(project_dir / "AGENTS.md", snippet)
+
+
+def _project_marker_snippet(config_dir_name: str, prefix: str) -> str:
+    return "\n".join(
+        [
+            PROJECT_MARKER_START,
+            "# CNB Project",
+            "",
+            "This directory is managed by cnb.",
+            "",
+            "Do not delete it just because it looks empty in Finder or with plain `ls`.",
+            f"Project state lives in `{config_dir_name}/`, including the SQLite board, sessions, logs, and keys.",
+            f"Project prefix: `{prefix}`.",
+            "",
+            "Useful commands:",
+            "",
+            "```bash",
+            "cnb status",
+            "cnb board --as <name> inbox",
+            "cnb board --as <name> view",
+            "```",
+            PROJECT_MARKER_END,
+            "",
+        ]
+    )
+
+
+def _update_project_marker(project_dir: Path, config_dir_name: str, prefix: str) -> None:
+    _update_marked_md(
+        project_dir / "CNB.md",
+        _project_marker_snippet(config_dir_name, prefix),
+        PROJECT_MARKER_START,
+        PROJECT_MARKER_END,
+    )
 
 
 def _hook_command(claudes_home: Path) -> str:
@@ -301,6 +339,9 @@ def main() -> None:
     # .gitignore for generated stuff
     gitignore_content = "board.db\nboard.db-shm\nboard.db-wal\nlogs/\ndispatcher.pid\nkeys/\n"
     (claudes_dir / ".gitignore").write_text(gitignore_content)
+
+    # Visible marker so a cnb-only project does not look empty in Finder or plain ls.
+    _update_project_marker(project_dir, claudes_dir.name, prefix)
 
     # Install pre-commit hook for secret scanning
     _install_pre_commit_hook(project_dir, claudes_home)

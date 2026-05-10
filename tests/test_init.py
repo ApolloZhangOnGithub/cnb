@@ -270,6 +270,30 @@ class TestInstructionFiles:
         assert "**bob**" in text
         assert "**alice**" not in text
 
+    def test_cnb_md_visible_project_marker_created(self, tmp_path):
+        init_mod._update_project_marker(tmp_path, ".cnb", "cc-test")
+
+        path = tmp_path / "CNB.md"
+        text = path.read_text()
+        assert path.exists()
+        assert "Do not delete" in text
+        assert "`.cnb/`" in text
+        assert "`cc-test`" in text
+
+    def test_cnb_md_visible_project_marker_is_idempotent(self, tmp_path):
+        path = tmp_path / "CNB.md"
+        path.write_text("human notes\n\n")
+
+        init_mod._update_project_marker(tmp_path, ".cnb", "cc-old")
+        init_mod._update_project_marker(tmp_path, ".claudes", "cc-new")
+
+        text = path.read_text()
+        assert text.startswith("human notes")
+        assert text.count(init_mod.PROJECT_MARKER_START) == 1
+        assert "`.claudes/`" in text
+        assert "`cc-new`" in text
+        assert "cc-old" not in text
+
 
 # ── session name validation (bin/init) ──
 

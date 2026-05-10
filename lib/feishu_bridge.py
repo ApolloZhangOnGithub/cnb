@@ -2816,7 +2816,7 @@ def command_help_text(cfg: FeishuBridgeConfig | None = None) -> str:
     label = role_label(cfg)
     status_scope = (
         "机器总管、设备主管、团队工作面、用户前台 CLI"
-        if cfg and cfg.pilot_role == DEVICE_CHIEF_ROLE
+        if cfg and _resolve_role(cfg.pilot_role) is CHIEF_ROLE
         else "设备主管、团队工作面、用户前台 CLI"
     )
     return (
@@ -3249,8 +3249,8 @@ def _snippet(text: str) -> str:
 
 def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeResult:
     has_chat_id = bool(args.chat_id or base.allowed_chat_ids)
-    role = _resolve_role(getattr(args, "role", "") or base.pilot_role.role_id)
-    base_role = base.pilot_role
+    role = _resolve_role(getattr(args, "role", "") or base.pilot_role)
+    base_role = _resolve_role(base.pilot_role)
     default_bridge_tmux = role.default_bridge_tmux
     default_watch_tmux = role.default_watch_tmux
     default_pilot_name = role.default_name
@@ -3851,7 +3851,7 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
     print(f"允许 sender: {', '.join(sorted(cfg.allowed_sender_ids)) if cfg.allowed_sender_ids else '(全部)'}")
     bot_bits = [bit for bit in (cfg.bot_name, cfg.bot_open_id) if bit]
     print(f"群消息路由: {cfg.group_message_routing} ({' / '.join(bot_bits) if bot_bits else '未配置 bot_open_id'})")
-    print(f"角色: {cfg.pilot_role}")
+    print(f"角色: {_resolve_role(cfg.pilot_role).role_id}")
     print(f"{role_label(cfg)}: {cfg.pilot_name}")
     print(f"{role_label(cfg)} tmux: {cfg.pilot_tmux} ({'running' if has_session(cfg.pilot_tmux) else 'stopped'})")
     print(f"bridge tmux: {cfg.bridge_tmux} ({'running' if has_session(cfg.bridge_tmux) else 'stopped'})")
