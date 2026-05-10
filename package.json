@@ -1,6 +1,6 @@
 {
   "name": "claude-nb",
-  "version": "0.5.40-dev",
+  "version": "0.5.41-dev",
   "description": "Multi-agent coordination framework for Claude Code sessions",
   "engines": {
     "node": ">=18"
@@ -28,7 +28,7 @@
     "type": "git",
     "url": "git+https://github.com/ApolloZhangOnGithub/cnb.git"
   },
-  "homepage": "https://c-n-b.space/",
+  "homepage": "https://apollozhangongithub.github.io/cnb/",
   "bugs": {
     "url": "https://github.com/ApolloZhangOnGithub/cnb/issues"
   },
