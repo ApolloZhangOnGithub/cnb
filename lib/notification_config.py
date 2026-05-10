@@ -1,4 +1,4 @@
-"""notification_config — parse .claudes/notifications.toml for push subscriptions."""
+"""notification_config — parse notifications.toml for push subscriptions."""
 
 from __future__ import annotations
 
@@ -22,6 +22,8 @@ BUILTIN_DEFAULTS: dict[str, bool] = {
 class HumanRecipient:
     name: str
     email: str
+    lark_user_id: str = ""
+    lark_chat_id: str = ""
     subscriptions: dict[str, bool] = field(default_factory=dict)
 
 
@@ -36,17 +38,33 @@ class NotificationConfig:
     def is_subscribed(self, member: str, notif_type: str) -> bool:
         if notif_type not in NOTIFICATION_TYPES:
             return False
-        if member in self.overrides and notif_type in self.overrides[member]:
-            return self.overrides[member][notif_type]
+        member_key = member.lower()
+        if member_key in self.overrides and notif_type in self.overrides[member_key]:
+            return self.overrides[member_key][notif_type]
+        if self.human and member_key == "human" and notif_type in self.human.subscriptions:
+            return self.human.subscriptions[notif_type]
         return self.defaults.get(notif_type, BUILTIN_DEFAULTS.get(notif_type, False))
 
     def channel_for(self, member: str) -> str:
-        if self.human and member == "human":
+        if self.human and member.lower() == "human":
             return self.human_channel
         return self.teammate_channel
 
     def subscribers_for(self, notif_type: str, members: list[str]) -> list[str]:
-        return [m for m in members if self.is_subscribed(m, notif_type)]
+        subscribers: list[str] = []
+        seen = set()
+        for member in members:
+            member_key = member.lower()
+            if member_key in seen:
+                continue
+            seen.add(member_key)
+            if self.is_subscribed(member, notif_type):
+                subscribers.append(member)
+
+        if self.human and "human" not in seen and self.is_subscribed("human", notif_type):
+            subscribers.append("human")
+
+        return subscribers
 
 
 def load(config_path: Path) -> NotificationConfig:
@@ -89,6 +107,8 @@ def load(config_path: Path) -> NotificationConfig:
         human = HumanRecipient(
             name=h.get("name", ""),
             email=h.get("email", ""),
+            lark_user_id=h.get("lark_user_id", h.get("lark-user-id", "")),
+            lark_chat_id=h.get("lark_chat_id", h.get("lark-chat-id", "")),
             subscriptions=human_subs,
         )
 
