@@ -1,0 +1,61 @@
+name: Maintenance task
+description: Track refactors, documentation work, cleanup, or operational tasks.
+title: "[Task]: "
+labels: ["task"]
+body:
+  - type: checkboxes
+    id: context-check
+    attributes:
+      label: Context check
+      options:
+        - label: I checked ROADMAP.md and related issues.
+          required: true
+        - label: I searched for existing docs, PRs, or branches that already cover this task.
+          required: true
+        - label: The task has a clear owner or can be routed through module ownership.
+          required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is included and what is explicitly out of scope?
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase label
+      description: Apply the matching label after opening the issue if GitHub does not add it automatically.
+      options:
+        - phase:1
+        - phase:2
+        - phase:3
+    validations:
+      required: true
+  - type: dropdown
+    id: type-label
+    attributes:
+      label: Type label
+      description: Apply the matching label after opening the issue if GitHub does not add it automatically.
+      options:
+        - task
+        - infra
+        - ownership
+        - org-design
+        - experiment
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Proposed work
+      description: Short implementation or documentation plan.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Commands, review checks, or manual evidence that will prove completion.
+    validations:
+      required: true

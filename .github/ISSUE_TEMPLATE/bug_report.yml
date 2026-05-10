@@ -1,0 +1,90 @@
+name: Bug report
+description: Report a reproducible defect or regression.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report security vulnerabilities here. Follow SECURITY.md for private reporting.
+  - type: checkboxes
+    id: context-check
+    attributes:
+      label: Context check
+      options:
+        - label: I searched open issues for duplicates.
+          required: true
+        - label: I checked whether ROADMAP.md or a known issue already covers this behavior.
+          required: true
+        - label: This report does not contain secrets, credentials, exploit details, or private logs.
+          required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase label
+      description: Apply the matching label after opening the issue if GitHub does not add it automatically.
+      options:
+        - phase:1
+        - phase:2
+        - phase:3
+    validations:
+      required: true
+  - type: dropdown
+    id: type-label
+    attributes:
+      label: Type label
+      description: Apply the matching label after opening the issue if GitHub does not add it automatically.
+      options:
+        - bug
+        - infra
+        - ownership
+        - org-design
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include commands, config, and minimal project state.
+      placeholder: |
+        1. Run ...
+        2. Configure ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Paste relevant logs or output. Redact secrets and private content.
+      render: text
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.5.23-dev / git sha / npm version"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, install method, agent CLI, tmux version, and anything else relevant.
+    validations:
+      required: true

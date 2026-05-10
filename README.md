@@ -189,7 +189,7 @@ Yes. All coordination (messages, tasks, status) runs through shell commands + SQ
 <!-- section:contributing -->
 ## Contributing
 
-Before writing code, read [CONTRIBUTING.md](.github/CONTRIBUTING.md) — it covers the issue workflow, versioning rules, naming conventions, and feature ownership model.
+Before writing code, read [CONTRIBUTING.md](CONTRIBUTING.md) — it covers the issue workflow, versioning rules, naming conventions, security policy, and feature ownership model.
 
 Key points:
 - Every change starts with an issue
