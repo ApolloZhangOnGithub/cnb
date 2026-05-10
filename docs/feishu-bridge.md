@@ -20,6 +20,13 @@ already installed and authenticated. Run `status` before `start` so missing app
 credentials, chat IDs, webhook URLs, or watch settings are visible before the
 bridge receives real messages.
 
+On macOS, `cnb feishu start` also starts a lifecycle-scoped `caffeinate -dims`
+companion when `caffeinate` is available. This keeps idle and display sleep from
+interrupting the on-duty bridge. `cnb feishu stop` stops that companion, and
+`cnb feishu status` shows whether keep-awake is active, unavailable, disabled,
+or stale. Non-macOS hosts and Macs without `caffeinate` continue to run the
+bridge normally.
+
 ## Runtime Model
 
 The production path is `local_openapi`:
@@ -94,6 +101,7 @@ watch_refresh_ms = 250
 readback_enabled = false
 resource_handoff_enabled = true
 resource_handoff_max_bytes = 26214400
+caffeine_enabled = true
 ```
 
 Legacy `terminal_supervisor_*` keys are still accepted as aliases, but new
@@ -173,6 +181,9 @@ user has scrolled away.
   binding deliberately.
 - Keep `watch_token` private. Share the full watch URL only through an
   intentional `cnb feishu watch` reply.
+- On macOS, leave `caffeine_enabled = true` unless another user-owned process
+  already manages host sleep. This uses only the local `caffeinate` command and
+  does not require sudo or system settings changes.
 
 ## Permission Manifest
 

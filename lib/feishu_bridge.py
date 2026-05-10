@@ -11,6 +11,7 @@ import re
 import secrets
 import shlex
 import shutil
+import signal
 import socket
 import sqlite3
 import subprocess
@@ -145,6 +146,7 @@ DEFAULT_READBACK_LIMIT = 12
 MAX_READBACK_LIMIT = 50
 DEFAULT_RESOURCE_HANDOFF_MAX_BYTES = 25 * 1024 * 1024
 MAX_RESOURCE_HANDOFF_BYTES = 100 * 1024 * 1024
+CAFFEINATE_ARGS = ("-dims",)
 SHORT_REPLY_MAX_CHARS = 280
 SHORT_REPLY_MAX_LINES = 4
 ACK_PREFIX = SUPERVISOR_ROLE.ack_prefix
@@ -274,6 +276,7 @@ class FeishuBridgeConfig:
     readback_max_limit: int = MAX_READBACK_LIMIT
     resource_handoff_enabled: bool = True
     resource_handoff_max_bytes: int = DEFAULT_RESOURCE_HANDOFF_MAX_BYTES
+    caffeine_enabled: bool = True
 
     @classmethod
     def load(cls, config_path: Path | None = None, project_root: Path | None = None) -> FeishuBridgeConfig:
@@ -424,6 +427,7 @@ class FeishuBridgeConfig:
                 _first_value(section, "resource_handoff_enabled", "attachment_handoff_enabled"), True
             ),
             resource_handoff_max_bytes=resource_handoff_max_bytes,
+            caffeine_enabled=_bool(_first_value(section, "caffeine_enabled", "keep_awake_enabled", "keep_awake"), True),
         )
 
 
@@ -3328,6 +3332,7 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "readback_max_limit": base.readback_max_limit,
         "resource_handoff_enabled": base.resource_handoff_enabled,
         "resource_handoff_max_bytes": base.resource_handoff_max_bytes,
+        "caffeine_enabled": base.caffeine_enabled,
     }
     if role is CHIEF_ROLE:
         section["device_chief_name"] = pilot_name
@@ -3783,9 +3788,136 @@ def consume_events(
     return 1
 
 
+def caffeine_pid_file(cfg: FeishuBridgeConfig) -> Path:
+    return cfg.config_path.parent / f"{_safe_path_part(cfg.bridge_tmux)}.caffeinate.pid"
+
+
+def _read_caffeine_pid(path: Path) -> int | None:
+    try:
+        text = path.read_text().strip()
+    except OSError:
+        return None
+    try:
+        pid = int(text)
+    except ValueError:
+        return None
+    return pid if pid > 0 else None
+
+
+def _pid_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _remove_caffeine_pid_file(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+
+
+def caffeine_status(cfg: FeishuBridgeConfig) -> tuple[str, str]:
+    if not cfg.caffeine_enabled:
+        return "disabled", "caffeine_enabled=false"
+    if sys.platform != "darwin":
+        return "unavailable", "not macOS"
+    executable = shutil.which("caffeinate")
+    if not executable:
+        return "unavailable", "caffeinate not found"
+
+    path = caffeine_pid_file(cfg)
+    pid = _read_caffeine_pid(path)
+    if pid is None:
+        if path.exists():
+            return "stale", f"invalid pid file {path}"
+        return "stopped", f"{executable} available"
+    if _pid_is_running(pid):
+        return "active", f"pid={pid}"
+    return "stale", f"pid={pid}"
+
+
+def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
+    state, detail = caffeine_status(cfg)
+    if state == "disabled":
+        return BridgeResult(True, "keep-awake disabled")
+    if state == "unavailable":
+        return BridgeResult(True, f"keep-awake unavailable ({detail})")
+    if state == "active":
+        return BridgeResult(True, f"keep-awake active ({detail})")
+    if state == "stale":
+        _remove_caffeine_pid_file(caffeine_pid_file(cfg))
+
+    executable = shutil.which("caffeinate")
+    if not executable:
+        return BridgeResult(True, "keep-awake unavailable (caffeinate not found)")
+    try:
+        proc = subprocess.Popen(
+            [executable, *CAFFEINATE_ARGS],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return BridgeResult(False, f"failed to start keep-awake companion: {exc}")
+
+    path = caffeine_pid_file(cfg)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{proc.pid}\n")
+    except OSError as exc:
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+        return BridgeResult(False, f"failed to record keep-awake pid: {exc}")
+    return BridgeResult(True, f"keep-awake active (pid={proc.pid})")
+
+
+def stop_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
+    path = caffeine_pid_file(cfg)
+    pid = _read_caffeine_pid(path)
+    if pid is None:
+        if path.exists():
+            _remove_caffeine_pid_file(path)
+            return BridgeResult(True, "cleared stale keep-awake pid file")
+        return BridgeResult(True, "keep-awake not running")
+    if not _pid_is_running(pid):
+        _remove_caffeine_pid_file(path)
+        return BridgeResult(True, f"cleared stale keep-awake pid={pid}")
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        _remove_caffeine_pid_file(path)
+        return BridgeResult(True, f"cleared stale keep-awake pid={pid}")
+    except PermissionError as exc:
+        return BridgeResult(False, f"failed to stop keep-awake pid={pid}: {exc}")
+    except OSError as exc:
+        return BridgeResult(False, f"failed to stop keep-awake pid={pid}: {exc}")
+    _remove_caffeine_pid_file(path)
+    return BridgeResult(True, f"stopped keep-awake pid={pid}")
+
+
+def _with_companion_detail(base: str, companion: BridgeResult) -> str:
+    if not companion.detail:
+        return base
+    if companion.handled:
+        return f"{base}; {companion.detail}"
+    return f"{base}; keep-awake warning: {companion.detail}"
+
+
 def start_bridge_daemon(cfg: FeishuBridgeConfig) -> BridgeResult:
     if has_session(cfg.bridge_tmux):
-        return BridgeResult(True, f"{cfg.bridge_tmux} already running")
+        caffeine = start_caffeine_companion(cfg)
+        return BridgeResult(True, _with_companion_detail(f"{cfg.bridge_tmux} already running", caffeine))
     install_home = Path(__file__).resolve().parent.parent
     cnb = install_home / "bin" / "cnb"
     command = (
@@ -3802,14 +3934,16 @@ def start_bridge_daemon(cfg: FeishuBridgeConfig) -> BridgeResult:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return BridgeResult(False, f"failed to start {cfg.bridge_tmux}: {exc}")
     if result.returncode == 0:
-        return BridgeResult(True, f"started {cfg.bridge_tmux}")
+        caffeine = start_caffeine_companion(cfg)
+        return BridgeResult(True, _with_companion_detail(f"started {cfg.bridge_tmux}", caffeine))
     detail = _snippet(result.stderr) or _snippet(result.stdout) or f"exit {result.returncode}"
     return BridgeResult(False, f"failed to start {cfg.bridge_tmux}: {detail}")
 
 
 def stop_bridge_daemon(cfg: FeishuBridgeConfig) -> BridgeResult:
     if not has_session(cfg.bridge_tmux):
-        return BridgeResult(True, f"{cfg.bridge_tmux} is not running")
+        caffeine = stop_caffeine_companion(cfg)
+        return BridgeResult(caffeine.handled, _with_companion_detail(f"{cfg.bridge_tmux} is not running", caffeine))
     try:
         result = subprocess.run(
             ["tmux", "kill-session", "-t", cfg.bridge_tmux], capture_output=True, text=True, timeout=10
@@ -3817,7 +3951,8 @@ def stop_bridge_daemon(cfg: FeishuBridgeConfig) -> BridgeResult:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return BridgeResult(False, f"failed to stop {cfg.bridge_tmux}: {exc}")
     if result.returncode == 0:
-        return BridgeResult(True, f"stopped {cfg.bridge_tmux}")
+        caffeine = stop_caffeine_companion(cfg)
+        return BridgeResult(caffeine.handled, _with_companion_detail(f"stopped {cfg.bridge_tmux}", caffeine))
     detail = _snippet(result.stderr) or _snippet(result.stdout) or f"exit {result.returncode}"
     return BridgeResult(False, f"failed to stop {cfg.bridge_tmux}: {detail}")
 
@@ -3862,6 +3997,8 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
     print(f"{role_label(cfg)} tmux: {cfg.pilot_tmux} ({'running' if has_session(cfg.pilot_tmux) else 'stopped'})")
     print(f"bridge tmux: {cfg.bridge_tmux} ({'running' if has_session(cfg.bridge_tmux) else 'stopped'})")
     print(f"watch tmux: {cfg.watch_tmux} ({'running' if has_session(cfg.watch_tmux) else 'stopped'})")
+    caffeine_state, caffeine_detail = caffeine_status(cfg)
+    print(f"Mac 防睡眠: {caffeine_state} ({caffeine_detail}; {caffeine_pid_file(cfg)})")
     print("飞书命令: /cnb_tui, /c_tui, /cnb_watch, /c_watch, /cnb_status, /c_status")
     print(
         f"Web TUI: {redacted_watch_url(watch_url(cfg, cfg.watch_port), cfg.watch_token)} "
