@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import itertools
 import json
 import time
@@ -183,7 +184,7 @@ chat_ids = ["oc_a", "oc_b"]
         path = tmp_path / "config.toml"
         path.write_text('[other]\nname = "kept"\n')
         cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
-        args = SimpleNamespace(
+        args = argparse.Namespace(
             app_id="cli_test",
             app_secret="secret",
             verification_token="verify",
@@ -562,7 +563,7 @@ class TestRouting:
         calls = []
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: calls.append((name, text)) or True)
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: calls.append((name, text)) or True)  # type: ignore[func-returns-value]
 
         def fake_run(cmd, **kwargs):
             calls.append(tuple(cmd))
@@ -590,7 +591,7 @@ class TestRouting:
         image_path = tmp_path / "feishu.png"
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: sent.append((name, text)) or True)
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: sent.append((name, text)) or True)  # type: ignore[func-returns-value]
         monkeypatch.setattr(
             feishu_bridge,
             "download_message_resource_openapi",
@@ -622,7 +623,7 @@ class TestRouting:
         sent = []
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: sent.append(text) or True)
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: sent.append(text) or True)  # type: ignore[func-returns-value]
         monkeypatch.setattr(
             feishu_bridge,
             "download_message_resource_openapi",
@@ -683,7 +684,7 @@ class TestRouting:
             feishu_bridge,
             "start_activity_monitor",
             lambda event, cfg: (
-                monitors.append((event.message_id, cfg.pilot_tmux)) or feishu_bridge.BridgeResult(True, "monitor")
+                monitors.append((event.message_id, cfg.pilot_tmux)) or feishu_bridge.BridgeResult(True, "monitor")  # type: ignore[func-returns-value]
             ),
         )
 
@@ -709,12 +710,12 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda *args, **kwargs: calls.append(args) or feishu_bridge.BridgeResult(True, "sent"),
+            lambda *args, **kwargs: calls.append(args) or feishu_bridge.BridgeResult(True, "sent")  # type: ignore[func-returns-value],
         )
         monkeypatch.setattr(
             feishu_bridge,
             "send_activity_update",
-            lambda *args, **kwargs: calls.append(args) or feishu_bridge.BridgeResult(True, "activity"),
+            lambda *args, **kwargs: calls.append(args) or feishu_bridge.BridgeResult(True, "activity")  # type: ignore[func-returns-value],
         )
 
         result = feishu_bridge.handle_payload(payload, cfg)
@@ -741,7 +742,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda cfg, mid, text, **kwargs: replies.append((mid, text)) or feishu_bridge.BridgeResult(True, "sent"),
+            lambda cfg, mid, text, **kwargs: replies.append((mid, text)) or feishu_bridge.BridgeResult(True, "sent")  # type: ignore[func-returns-value],
         )
 
         def fake_run(cmd, **kwargs):
@@ -775,7 +776,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda cfg, mid, text, **kwargs: replies.append(text) or feishu_bridge.BridgeResult(True, "sent"),
+            lambda cfg, mid, text, **kwargs: replies.append(text) or feishu_bridge.BridgeResult(True, "sent")  # type: ignore[func-returns-value],
         )
 
         def fake_run(cmd, **kwargs):
@@ -809,7 +810,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda cfg, mid, text, **kwargs: replies.append(text) or feishu_bridge.BridgeResult(True, "sent"),
+            lambda cfg, mid, text, **kwargs: replies.append(text) or feishu_bridge.BridgeResult(True, "sent")  # type: ignore[func-returns-value],
         )
 
         result = feishu_bridge.handle_payload(payload, cfg)
@@ -974,7 +975,7 @@ class TestRouting:
         calls = []
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: calls.append((name, text)) or True)
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: calls.append((name, text)) or True)  # type: ignore[func-returns-value]
 
         result = feishu_bridge.handle_payload(payload, cfg)
 
@@ -1500,7 +1501,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_activity_update",
-            lambda cfg, event, elapsed: updates.append(elapsed) or feishu_bridge.BridgeResult(True, "sent"),
+            lambda cfg, event, elapsed: updates.append(elapsed) or feishu_bridge.BridgeResult(True, "sent")  # type: ignore[func-returns-value],
         )
 
         feishu_bridge._activity_monitor_loop(event, cfg)
@@ -1552,7 +1553,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_activity_card",
-            lambda cfg, event, snapshot: snapshots.append(snapshot) or feishu_bridge.BridgeResult(True, "sent"),
+            lambda cfg, event, snapshot: snapshots.append(snapshot) or feishu_bridge.BridgeResult(True, "sent")  # type: ignore[func-returns-value],
         )
 
         result = feishu_bridge.send_activity_update(cfg, event, 20)
@@ -1816,7 +1817,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_short_reply",
-            lambda cfg, mid, text: calls.append((mid, text)) or feishu_bridge.BridgeResult(True, "short reply sent"),
+            lambda cfg, mid, text: calls.append((mid, text)) or feishu_bridge.BridgeResult(True, "short reply sent")  # type: ignore[func-returns-value],
         )
 
         code = feishu_bridge.main(["--config", str(path), "ask", "om_1", "need", "input"])
