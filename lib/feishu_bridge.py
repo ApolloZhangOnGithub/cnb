@@ -3411,7 +3411,9 @@ def _ngrok_tunnels() -> list[dict[str, Any]]:
 
 def ngrok_public_url_for(host: str, port: int) -> str:
     for tunnel in _ngrok_tunnels():
-        cfg = tunnel.get("config") if isinstance(tunnel.get("config"), dict) else {}
+        assert isinstance(tunnel, dict)
+        raw_cfg = tunnel.get("config")
+        cfg = raw_cfg if isinstance(raw_cfg, dict) else {}
         addr = str(cfg.get("addr") or "")
         if not _ngrok_addr_matches(addr, host, port):
             continue
@@ -3419,7 +3421,9 @@ def ngrok_public_url_for(host: str, port: int) -> str:
         if isinstance(url, str) and url.startswith("https://"):
             return url
     for tunnel in _ngrok_tunnels():
-        cfg = tunnel.get("config") if isinstance(tunnel.get("config"), dict) else {}
+        assert isinstance(tunnel, dict)
+        raw_cfg = tunnel.get("config")
+        cfg = raw_cfg if isinstance(raw_cfg, dict) else {}
         addr = str(cfg.get("addr") or "")
         if not _ngrok_addr_matches(addr, host, port):
             continue

@@ -6,6 +6,8 @@ All tests use tmp_path to avoid touching the real ~/.cnb/.
 """
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,6 +21,7 @@ from lib.global_registry import (
     _read_projects,
     check_credential,
     cleanup,
+    cmd_projects_scan,
     discover_projects,
     list_projects,
     register_discovered_projects,
@@ -400,6 +403,136 @@ class TestDiscoverProjects:
         registered = list_projects(registry_path=registry_file)
         assert registered[0]["name"] == "app"
         assert registered[0]["path"] == str(proj.resolve())
+
+
+# ---------------------------------------------------------------------------
+# cmd_projects_scan CLI contract
+# ---------------------------------------------------------------------------
+
+
+class TestCmdProjectsScan:
+    def test_json_output_reports_board_project_without_registering(self, tmp_path, capsys, monkeypatch):
+        import lib.global_registry as registry
+
+        monkeypatch.setattr(registry.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no tmux/git")))
+        registry_path = tmp_path / "home" / ".cnb" / "projects.json"
+        monkeypatch.setattr(registry, "CNB_HOME", registry_path.parent)
+        monkeypatch.setattr(registry, "PROJECTS_FILE", registry_path)
+        monkeypatch.setattr(registry, "_looks_like_transient_project", lambda _path: False)
+
+        proj = tmp_path / "workspace" / "app"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+        (cnb_dir / "config.toml").write_text('prefix = "cc-app"\nsessions = ["alice"]\n')
+
+        cmd_projects_scan(["--root", str(tmp_path), "--max-depth", "3", "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert [p["name"] for p in payload["projects"]] == ["app"]
+        project = payload["projects"][0]
+        assert project["config_dir"] == ".cnb"
+        assert project["configured_sessions"] == ["alice"]
+        assert project["git"]["root"] == ""
+        assert not registry_path.exists()
+
+    def test_register_in_marker_mode_skips_marker_only_projects(self, tmp_path, capsys, monkeypatch):
+        import lib.global_registry as registry
+
+        monkeypatch.setattr(registry.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no tmux/git")))
+        registry_path = tmp_path / "home" / ".cnb" / "projects.json"
+        monkeypatch.setattr(registry, "CNB_HOME", registry_path.parent)
+        monkeypatch.setattr(registry, "PROJECTS_FILE", registry_path)
+        monkeypatch.setattr(registry, "_looks_like_transient_project", lambda _path: False)
+
+        board_proj = tmp_path / "board"
+        marker_proj = tmp_path / "marker"
+        (board_proj / ".cnb").mkdir(parents=True)
+        (marker_proj / ".cnb").mkdir(parents=True)
+        (board_proj / ".cnb" / "board.db").touch()
+
+        cmd_projects_scan(["--root", str(tmp_path), "--max-depth", "1", "--mode", "marker", "--register"])
+        out = capsys.readouterr().out
+
+        assert "OK 已注册/更新 1 个 board-backed 项目" in out
+        registered = json.loads(registry_path.read_text())["projects"]
+        assert len(registered) == 1
+        assert registered[0]["name"] == "board"
+        assert registered[0]["path"] == str(board_proj.resolve())
+
+    def test_no_legacy_ignores_claudes_marker(self, tmp_path, capsys, monkeypatch):
+        import lib.global_registry as registry
+
+        monkeypatch.setattr(registry.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no tmux/git")))
+        legacy_proj = tmp_path / "legacy"
+        legacy_dir = legacy_proj / ".claudes"
+        legacy_dir.mkdir(parents=True)
+        (legacy_dir / "board.db").touch()
+
+        cmd_projects_scan(["--root", str(tmp_path), "--max-depth", "1", "--no-legacy", "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert payload["projects"] == []
+
+    def test_tmux_and_git_timeout_degrade_cleanly(self, tmp_path, capsys, monkeypatch):
+        import lib.global_registry as registry
+
+        def fake_run(*_args, **_kwargs):
+            raise subprocess.TimeoutExpired(cmd="external", timeout=3)
+
+        monkeypatch.setattr(registry.subprocess, "run", fake_run)
+        proj = tmp_path / "app"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+
+        cmd_projects_scan(["--root", str(tmp_path), "--max-depth", "1"])
+        out = capsys.readouterr().out
+
+        assert "发现 1 个 cnb 项目" in out
+        assert "app" in out
+
+    def test_bin_cnb_projects_scan_dispatches_json_contract(self, tmp_path):
+        fake_bin = tmp_path / "fake-bin"
+        fake_bin.mkdir()
+        for name in ("git", "tmux"):
+            tool = fake_bin / name
+            tool.write_text("#!/usr/bin/env bash\nexit 1\n")
+            tool.chmod(0o755)
+
+        root = tmp_path / "root"
+        proj = root / "app"
+        cnb_dir = proj / ".cnb"
+        cnb_dir.mkdir(parents=True)
+        (cnb_dir / "board.db").touch()
+        (cnb_dir / "config.toml").write_text('prefix = "cc-app"\nsessions = ["alice"]\n')
+
+        env = {
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "VIRTUAL_ENV": str(tmp_path / "venv"),
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+        }
+        result = subprocess.run(
+            [
+                "bash",
+                str(Path(__file__).parent.parent / "bin" / "cnb"),
+                "projects",
+                "scan",
+                "--root",
+                str(root),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
+        )
+
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout)
+        assert [project["name"] for project in payload["projects"]] == ["app"]
+        assert payload["projects"][0]["configured_sessions"] == ["alice"]
 
 
 # ---------------------------------------------------------------------------

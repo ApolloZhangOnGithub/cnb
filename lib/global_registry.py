@@ -409,14 +409,14 @@ def discover_projects(
 # ---------------------------------------------------------------------------
 
 
-def register_project(project_path: str | Path, name: str, *, registry_path: Path | None = None) -> None:
+def register_project(project_path: str | Path, name: str, *, registry_path: Path | None = None) -> bool:
     """Add or update a project in the global registry.
 
     If the project path already exists, updates name and last_active.
     """
     path = Path(project_path).resolve()
     if registry_path is None and _looks_like_transient_project(path):
-        return
+        return False
 
     _ensure_dirs()
     path_str = str(path)
@@ -428,7 +428,7 @@ def register_project(project_path: str | Path, name: str, *, registry_path: Path
             entry["name"] = name
             entry["last_active"] = _now_iso()
             _write_projects(data, registry_path)
-            return
+            return True
 
     data["projects"].append(
         {
@@ -438,6 +438,7 @@ def register_project(project_path: str | Path, name: str, *, registry_path: Path
         }
     )
     _write_projects(data, registry_path)
+    return True
 
 
 def list_projects(*, registry_path: Path | None = None) -> list[dict[str, str]]:
@@ -519,8 +520,8 @@ def register_discovered_projects(projects: list[dict], *, registry_path: Path | 
     for project in projects:
         if not project.get("has_board", True):
             continue
-        register_project(project["path"], project["name"], registry_path=registry_path)
-        count += 1
+        if register_project(project["path"], project["name"], registry_path=registry_path):
+            count += 1
     return count
 
 
