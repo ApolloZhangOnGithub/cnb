@@ -535,6 +535,93 @@ h3 {
   font-weight: 750;
 }
 
+.doc-page {
+  padding: clamp(44px, 7vw, 92px) clamp(20px, 5vw, 72px);
+}
+
+.doc-hero {
+  max-width: 920px;
+}
+
+.doc-hero h1 {
+  font-size: clamp(58px, 9vw, 116px);
+}
+
+.doc-hero p {
+  max-width: 760px;
+  margin: 24px 0 0;
+  color: var(--muted);
+  font-size: clamp(18px, 2vw, 24px);
+}
+
+.doc-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: clamp(28px, 5vw, 72px);
+  align-items: start;
+  margin-top: clamp(36px, 6vw, 72px);
+}
+
+.doc-sidebar {
+  position: sticky;
+  top: 96px;
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.doc-sidebar a {
+  padding: 8px 0;
+}
+
+.doc-sidebar a:hover,
+.doc-sidebar a:focus-visible {
+  color: var(--ink);
+}
+
+.doc-content {
+  display: grid;
+  gap: 34px;
+  max-width: 920px;
+}
+
+.doc-content section {
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.doc-content h2 {
+  font-size: clamp(28px, 4vw, 46px);
+}
+
+.doc-content ul,
+.doc-content ol {
+  margin: 18px 0 0;
+  padding-left: 22px;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.doc-content li + li {
+  margin-top: 10px;
+}
+
+.doc-content pre {
+  overflow-x: auto;
+  margin: 18px 0 0;
+  padding: 18px;
+  color: #e4eee7;
+  background: var(--console);
+  border: 1px solid var(--console-line);
+  border-radius: 8px;
+}
+
+.doc-content pre code {
+  white-space: pre;
+}
+
 @media (max-width: 1020px) {
   .hero,
   .demo-section {
@@ -547,6 +634,19 @@ h3 {
 
   .console {
     min-height: 0;
+  }
+
+  .doc-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .doc-sidebar {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
   }
 
   .feature-grid,

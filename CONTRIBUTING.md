@@ -69,6 +69,7 @@ python -m pytest tests/ -v --tb=short
 python bin/sync-version --check
 python bin/check-changelog
 python bin/secret-scan --all
+bin/check-npm-package --install-smoke
 ```
 
 README changes must keep the English and Chinese structure synchronized:
@@ -233,25 +234,25 @@ Do not publish `-dev` versions to the `latest` or `stable` dist-tags.
 
 Before a release:
 
-1. Start from a clean `master` checkout after the release PR is merged.
-2. Ensure `VERSION`, `package.json`, and `pyproject.toml` use the same release version without a `-dev` suffix.
-3. Ensure `CHANGELOG.md` has a dated section for that release.
-4. Run the required checks, including `python bin/sync-version --check`, `python bin/check-changelog`, and `npm pack --dry-run`.
+1. Run the `Prepare Release` workflow with the target version and changelog body.
+2. Review and merge the generated release PR after CI and CodeQL pass.
+3. Create the matching GitHub Release tag, for example `v0.5.43`.
+4. Watch the `Publish npm Release` workflow finish.
 
-After the release commit:
+The release workflow publishes `claude-nb` to npmjs through Trusted Publishing, verifies the public registry install with `cnb --version`, and mirrors the same release to GitHub Packages as `@apollozhangongithub/cnb`.
+
+Manual verification:
 
 ```bash
-npm whoami
-npm publish
-npm dist-tag add claude-nb@<version> stable
 npm view claude-nb version dist-tags
+gh workflow run publish-npm.yml -f version=<version> -f dry_run=true
 ```
 
-`npm publish` moves `latest` unless a non-default `--tag` is used. Add or move `stable` only after the published release is the supported stable CLI.
+`npm publish` moves `latest` unless a non-default `--tag` is used. The workflow also tries to move `stable`; if npm requires token auth for post-publish dist-tag mutation, add a granular `NPM_TOKEN` secret for that operation or move `stable` manually after verifying the release.
 
 GitHub's repository Packages sidebar is separate from npmjs.com. It only shows packages published to GitHub Packages and connected to the repository. The current `claude-nb` package is intentionally unscoped for `npm install -g claude-nb`; GitHub Packages npm publishing requires a scoped package name such as `@namespace/package-name`, so do not add `publishConfig.registry=https://npm.pkg.github.com` or rename the package without an explicit migration issue.
 
-The repository uses a low-risk GitHub Packages mirror for sidebar visibility:
+The repository keeps the manual GitHub Packages mirror workflow as a repair path:
 
 ```bash
 gh workflow run publish-github-package.yml -f version=<npmjs-release-version>
