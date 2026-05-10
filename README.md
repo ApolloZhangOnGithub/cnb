@@ -243,6 +243,17 @@ A 6-tongxue team running for a full shift typically spends <2% of total tokens o
 | tester | 测试加固、质量保障 |
 | sutskever | 架构重构 (#26) |
 
+<!-- section:contribution-wall -->
+## Broad Contribution Wall
+
+GitHub's native Contributors panel only counts commits. cnb also treats issue work, PR review, checks, board ownership, and visible GitHub App actions as contribution signals. The wall below is the first broad-contribution view; implementation notes live in [Contribution wall](docs/contribution-wall.md).
+
+<p>
+  <a href="https://github.com/ApolloZhangOnGithub/cnb/issues/65#issuecomment-4414136928" title="musk: GitHub App identity verified through issue activity and a guarded commit">
+    <img src="https://avatars.githubusercontent.com/u/283269623?s=96&v=4" width="48" height="48" alt="cnb-workspace-musk[bot]" />
+  </a>
+</p>
+
 <!-- section:faq -->
 ## FAQ
 
