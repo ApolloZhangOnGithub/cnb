@@ -100,3 +100,38 @@ Leaving this disabled is acceptable because the release branch and validation st
 No action needed for the current release.
 
 The repository Packages sidebar should remain populated by the scoped mirror `@apollozhangongithub/cnb`. Keep npmjs `claude-nb` as the canonical user install path until a verified package migration changes that policy.
+
+## Site HTTPS
+
+`http://c-n-b.space` is already served by GitHub Pages. GitHub Pages health reports the apex and `www` records as valid and served by Pages, but HTTPS enforcement is blocked until GitHub creates the certificate.
+
+Retry after the certificate appears:
+
+```bash
+gh api --method PUT repos/ApolloZhangOnGithub/cnb/pages \
+  -F https_enforced=true \
+  -f cname='c-n-b.space'
+```
+
+## 2026-05-10 Deployment Closeout
+
+The custom-domain deployment is live as of merge commit `c170c9c8`. The `c-n-b` package rename from that deployment is paused by issue #132 because the npm package does not exist yet.
+
+Completed:
+
+- GitHub About homepage is `c-n-b.space` with no trailing slash.
+- GitHub Pages deploy succeeded, and `http://c-n-b.space` serves the public project site.
+- PR #130 checks passed before merge, and `master` CI, CodeQL, Graph Update, and Pages completed successfully after merge.
+- The current verified package remains `claude-nb@0.5.44`; docs and release workflows should keep using it until #132 is closed by a real migration.
+
+Rollback/restoration follow-up:
+
+- Restore GitHub Release titles away from `c-n-b 0.5.44`, `c-n-b 0.5.43`, and `c-n-b 0.5.31` until the package rename is real.
+- Keep public install links on `https://www.npmjs.com/package/claude-nb`.
+
+Still pending:
+
+1. Wait for GitHub Pages to issue the certificate for `c-n-b.space`.
+2. Re-run the HTTPS enforcement command in the previous section.
+3. Complete issue #132 before advertising `c-n-b` as an npm install path.
+4. Keep warning users not to install the unrelated npm package named `cnb`.
