@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.44 (2026-05-10)
+
+### CI/CD
+
+- **npm publish verification retry** — Retry npmjs readback after Trusted Publishing so registry propagation lag does not fail an otherwise successful release.
+- **Prepare Release PR fallback** — Keep the release branch workflow successful when repository settings block GitHub Actions from creating pull requests, and write the manual compare link to the step summary.
+- **npm package metadata normalization** — Normalize the `cnb` bin path to npm's package metadata format so publish no longer auto-corrects it.
+
 ## 0.5.43 (2026-05-10)
 
 ### CI/CD
