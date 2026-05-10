@@ -6,7 +6,7 @@ Usage:
   shutdown --no-stop           Collect reports but don't stop sessions
   shutdown --skip-broadcast    Skip broadcast and ack wait
   shutdown --timeout 60        Ack wait timeout in seconds (default: 120)
-  shutdown --dry-run           Preview without sending or saving
+  shutdown --dry-run           PREVIEW ONLY / NO ACTION TAKEN; do not send, save, or stop
 """
 
 import sys

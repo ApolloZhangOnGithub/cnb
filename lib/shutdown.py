@@ -35,6 +35,7 @@ def _board_send(board_sh: str, sender: str, recipient: str, msg: str) -> bool:
 
 
 SYSTEM_SESSIONS: frozenset[str] = frozenset({"all", "dispatcher"})
+DRY_RUN_NOTICE = "PREVIEW ONLY / NO ACTION TAKEN"
 
 
 def _active_sessions(board: BoardDB, roster: list[str] | None = None) -> list[str]:
@@ -166,24 +167,33 @@ def run_shutdown(
         return None
 
     dailies_dir = env.claudes_dir / "dailies"
-    dailies_dir.mkdir(exist_ok=True)
-    shift_number = next_shift_number(dailies_dir)
+    if dry_run and not dailies_dir.exists():
+        shift_number = 1
+    else:
+        dailies_dir.mkdir(exist_ok=True)
+        shift_number = next_shift_number(dailies_dir)
     started = datetime.now()
 
-    print(f"=== Shift {shift_number:03d} 收工流程 ===")
+    title_suffix = f" — {DRY_RUN_NOTICE}" if dry_run else ""
+    print(f"=== Shift {shift_number:03d} 收工流程{title_suffix} ===")
     print(f"活跃同学: {', '.join(sessions)}")
 
     if dry_run:
-        print("[DRY RUN] 不会实际发送或停止")
+        print(f"!!! {DRY_RUN_NOTICE} !!!")
+        print("这是模拟预览：不会广播、不会等待 ack、不会写日报、不会停止 session。")
 
-    if not skip_broadcast and not dry_run:
+    if dry_run:
+        print(f"\n[1/5] {DRY_RUN_NOTICE} — would broadcast shutdown notice to: {', '.join(sessions)}")
+    elif not skip_broadcast:
         print("\n[1/5] 广播收工通知...")
         broadcast_shutdown(board_sh, "dispatcher", sessions)
         print("OK 已广播")
     else:
         print("\n[1/5] 跳过广播")
 
-    if not skip_broadcast and not dry_run:
+    if dry_run:
+        print(f"\n[2/5] {DRY_RUN_NOTICE} — would wait for ack up to {timeout}s; skipped in preview")
+    elif not skip_broadcast:
         print(f"\n[2/5] 等待 ack（超时 {timeout}s）...")
         acked, timed_out = wait_for_acks(board, sessions, timeout=timeout)
         if acked:
@@ -193,12 +203,18 @@ def run_shutdown(
     else:
         print("\n[2/5] 跳过等待 ack")
 
-    print("\n[3/5] 收集同学日报...")
+    if dry_run:
+        print(f"\n[3/5] {DRY_RUN_NOTICE} — generating in-memory report preview only")
+    else:
+        print("\n[3/5] 收集同学日报...")
     reports = collect_reports(board, sessions, since=started, project_root=env.project_root)
     for name in sessions:
         print(f"  {name}: OK")
 
-    print("\n[4/5] 生成轮次汇总...")
+    if dry_run:
+        print(f"\n[4/5] {DRY_RUN_NOTICE} — generating in-memory shift summary preview only")
+    else:
+        print("\n[4/5] 生成轮次汇总...")
     ended = datetime.now()
     meta = generate_shift_meta(
         board,
@@ -210,8 +226,10 @@ def run_shutdown(
     )
 
     if dry_run:
-        print(f"\n[DRY RUN] 将保存到 dailies/{shift_number:03d}/")
-        print(f"  _meta.md + {len(reports)} 份个人日报")
+        print(f"  WOULD SAVE: dailies/{shift_number:03d}/")
+        print(f"  NOT SAVED: _meta.md + {len(reports)} 份个人日报")
+        print(f"\n[5/5] {DRY_RUN_NOTICE} — sessions not stopped")
+        print(f"\n=== Shift {shift_number:03d} PREVIEW ONLY — NO ACTION TAKEN ===")
         return None
 
     shift_dir = save_shift(dailies_dir, shift_number, reports, meta)

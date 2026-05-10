@@ -275,8 +275,13 @@ class TestRunShutdown:
         result = run_shutdown(env, dry_run=True)
         assert result is None
         out = capsys.readouterr().out
-        assert "DRY RUN" in out
+        assert "PREVIEW ONLY / NO ACTION TAKEN" in out
+        assert "WOULD SAVE: dailies/001/" in out
+        assert "NOT SAVED: _meta.md + 2 份个人日报" in out
+        assert "sessions not stopped" in out
+        assert "收工完成" not in out
         assert "alice" in out
+        assert not (env.claudes_dir / "dailies").exists()
 
     @patch("lib.shutdown.subprocess.run")
     def test_full_flow_skip_stop(self, mock_run, tmp_path, capsys):
