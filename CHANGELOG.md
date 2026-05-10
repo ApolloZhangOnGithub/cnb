@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.42-dev (unreleased)
+
+### Documentation
+
+- **Tongxue avatar generation** — Documented safe provider choices for AI-generated tongxue avatars, including OpenAI `gpt-image-1-mini` as the default and Apple Image Playground / `ImageCreator` as a local native-app fallback.
+
 ## 0.5.38-dev (unreleased)
 
 ### Documentation

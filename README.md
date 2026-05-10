@@ -119,6 +119,7 @@ The lead tongxue talks to the user directly. Background tongxue work independent
 The README is the short path. Longer-lived documentation lives under [`docs/`](docs/):
 
 - [Ownership autonomy](docs/design-ownership-autonomy.md) — why cnb treats long-lived module ownership as the core unit of work.
+- [Tongxue avatar generation](docs/avatar-generation.md) — safe provider choices and prompt rules for AI-generated tongxue avatars.
 - [Package publishing](docs/package-publishing.md) — npm release, dist-tags, and GitHub Packages visibility rules.
 - [Public website](https://c-n-b.space/) — first-visit product entry and documentation links.
 
