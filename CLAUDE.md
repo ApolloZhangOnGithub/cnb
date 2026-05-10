@@ -151,5 +151,13 @@ board --as <name> scan                 # scan issues/CI, route to owners
 
 ### Sessions
 
-- **alice**
+- **bezos**
+- **codex**
+- **forge**
+- **lead**
+- **lisa-su**
+- **musk**
+- **smoke**
+- **sutskever**
+- **tester** — 测试工程师 Claude Frostbite，怀疑一切，亲手验证每个命令
 <!-- cnb:end -->
