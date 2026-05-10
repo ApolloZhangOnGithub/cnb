@@ -236,7 +236,10 @@ cnb board --as <name> send all "msg"     # 广播
 cnb board --as <name> ack                # 清空收件箱
 cnb board --as <name> status "desc"      # 更新状态
 cnb board --as <name> task add "desc"    # 添加任务
-cnb board --as <name> task done          # 完成当前任务
+cnb board --as <name> task done          # 完成当前任务（自动验证 + 自动 PR）
+cnb board --as <name> own claim <path>   # 认领模块 ownership
+cnb board --as <name> own map            # 查看所有 ownership
+cnb board --as <name> scan               # 扫描 issues/CI 并路由给 owner
 cnb board --as <name> pending list       # 查看待用户处理的操作
 cnb board --as <name> pending verify --retry  # 验证并重试原操作
 cnb board --as <name> view              # 团队面板
