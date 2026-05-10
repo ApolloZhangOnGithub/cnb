@@ -103,13 +103,7 @@ class TmuxBackend(SessionBackend):
         sess = self._sess(prefix, name)
         waited = 0
         while waited < timeout:
-            r = subprocess.run(
-                ["tmux", "capture-pane", "-t", sess, "-p"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            text = r.stdout.lower()
+            text = self.capture_pane(prefix, name).lower()
             # Claude and Codex use different workspace-trust copy; both default
             # to the safe "continue" choice when Enter is pressed.
             if (
@@ -119,7 +113,7 @@ class TmuxBackend(SessionBackend):
                 or "press enter to continue" in text
             ):
                 time.sleep(0.5)
-                subprocess.run(["tmux", "send-keys", "-t", sess, "Enter"], timeout=10)
+                tmux_send(sess, "")
                 return
             time.sleep(2)
             waited += 2
@@ -149,9 +143,9 @@ class TmuxBackend(SessionBackend):
         sess = self._sess(prefix, name)
         subprocess.run(["tmux", "send-keys", "-t", sess, "C-c"], timeout=10)
         time.sleep(1)
-        subprocess.run(["tmux", "send-keys", "-t", sess, f"! {save_cmd}", "Enter"], timeout=10)
+        tmux_send(sess, f"! {save_cmd}")
         time.sleep(3)
-        subprocess.run(["tmux", "send-keys", "-t", sess, "/exit", "Enter"], timeout=10)
+        tmux_send(sess, "/exit")
 
         waited = 0
         while self.is_running(prefix, name) and waited < 15:
