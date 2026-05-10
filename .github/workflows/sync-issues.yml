@@ -59,6 +59,7 @@ jobs:
             pr_body="$(printf '%s\n\n%s\n' \
               "Automated issue mirror update from GitHub Issues." \
               "This PR is maintained by the Sync Issues workflow because ${DEFAULT_BRANCH} is protected and cannot be updated directly.")"
+            pr_url="https://github.com/${GITHUB_REPOSITORY}/compare/${DEFAULT_BRANCH}...${SYNC_BRANCH}?expand=1"
             pr_number="$(gh pr list \
               --repo "$GITHUB_REPOSITORY" \
               --head "$SYNC_BRANCH" \
@@ -69,13 +70,19 @@ jobs:
             if [ -n "$pr_number" ]; then
               gh pr edit "$pr_number" \
                 --repo "$GITHUB_REPOSITORY" \
-                --body "$pr_body"
+                --body "$pr_body" || {
+                  echo "::warning::Updated ${SYNC_BRANCH}, but could not update PR #${pr_number}. Check ${pr_url}"
+                  printf '### Issue sync branch updated\n\nCould not update PR #%s automatically.\n\nOpen: %s\n' "$pr_number" "$pr_url" >> "$GITHUB_STEP_SUMMARY"
+                }
             else
               gh pr create \
                 --repo "$GITHUB_REPOSITORY" \
                 --base "$DEFAULT_BRANCH" \
                 --head "$SYNC_BRANCH" \
                 --title "sync: update issues from GitHub" \
-                --body "$pr_body"
+                --body "$pr_body" || {
+                  echo "::warning::Updated ${SYNC_BRANCH}, but this repository does not allow GitHub Actions to create PRs. Open ${pr_url} manually or enable the repository Actions setting."
+                  printf '### Issue sync branch updated\n\nThe workflow pushed generated issue files to `%s`, but could not create a PR with `GITHUB_TOKEN`.\n\nOpen: %s\n' "$SYNC_BRANCH" "$pr_url" >> "$GITHUB_STEP_SUMMARY"
+                }
             fi
           fi
