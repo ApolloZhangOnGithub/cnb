@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.32-dev (unreleased)
+
+### Bug Fixes
+
+- **Protected issue sync branch** — Updated the issue mirror workflow to push generated issue snapshots to a bot branch and open or update a pull request instead of pushing directly to protected `master`.
+
 ## 0.5.31 (2026-05-10)
 
 ### Features
@@ -14,7 +20,6 @@
 - **Automated shutdown flow (Issue #41)** — `cnb shutdown` orchestrates the full shift-end flow: broadcast shutdown notice, wait for acks (configurable timeout), auto-collect per-agent daily reports (`lib/shift_report.py`), generate `_meta.md` shift summary, save to `dailies/{shift}/`, and stop all sessions. Supports `--dry-run`, `--no-stop`, `--skip-broadcast`, `--timeout` flags. Includes `lib/shift_report.py` for per-agent report generation and shift metadata with git commit counts.
 
 ### Bug Fixes
-
 - **GitHub Packages mirror workflow** — Added a manual workflow that mirrors an already-published npmjs `claude-nb` release into the scoped GitHub Packages package `@apollozhangongithub/cnb`, keeping the GitHub sidebar populated without changing the canonical npmjs install path.
 - **npm dependency disclosure** — Added package metadata and install documentation so npm users do not mistake the JavaScript dependency count for the full runtime requirements. The package now declares Node support and optional peer CLIs for Claude Code / Codex while documenting Python, tmux, git, and `cryptography`.
 - **Package visibility documentation** — Clarified that the installable `claude-nb` package lives on npmjs.com while GitHub's repository Packages sidebar only shows GitHub Packages. Added npm release tag guidance and package metadata links.
