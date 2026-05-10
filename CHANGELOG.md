@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.35-dev (unreleased)
+## 0.5.36-dev (unreleased)
 
 ### Bug Fixes
 
@@ -8,6 +8,7 @@
 - **Issue sync PR fallback** — Let the issue mirror workflow complete after pushing the sync branch when repository settings block GitHub Actions from creating pull requests.
 - **Issue sync lease refresh** — Fetch the existing sync branch before using `--force-with-lease`, avoiding stale-lease failures on repeated workflow runs.
 - **Issue mirror version gate** — Allow generated `issues/` mirror-only changes to skip the VERSION bump requirement while preserving the gate for code and documentation updates.
+- **Issue mirror merge-base check** — Preserve full base history in the VERSION gate so `origin/master...HEAD` works for generated issue mirror branches.
 
 ## 0.5.31 (2026-05-10)
 

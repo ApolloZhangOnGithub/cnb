@@ -47,7 +47,7 @@ jobs:
       - name: Version must change on every push
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+            git fetch --no-tags origin "$GITHUB_BASE_REF"
             RANGE="origin/$GITHUB_BASE_REF...HEAD"
             PREV=$(git show "origin/$GITHUB_BASE_REF:VERSION" 2>/dev/null || echo "")
           else
