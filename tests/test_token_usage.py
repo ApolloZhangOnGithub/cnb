@@ -11,6 +11,7 @@ from lib.token_usage import (
     aggregate_by_name,
     cmd_usage,
     estimate_cost,
+    model_state_alerts,
     parse_session_usage,
 )
 
@@ -109,6 +110,23 @@ class TestParseSessionUsage:
         _write_jsonl(jf, [_make_assistant_msg(model="claude-sonnet-4-6")])
         result = parse_session_usage(jf)
         assert result["model"] == "claude-sonnet-4-6"
+        assert result["latest_model"] == "claude-sonnet-4-6"
+        assert result["models"] == ["claude-sonnet-4-6"]
+
+    def test_captures_model_changes(self, tmp_path):
+        jf = tmp_path / "test.jsonl"
+        _write_jsonl(
+            jf,
+            [
+                _make_assistant_msg(model="claude-opus-4-6"),
+                _make_assistant_msg(model="claude-sonnet-4-6"),
+                _make_assistant_msg(model="claude-sonnet-4-6"),
+            ],
+        )
+        result = parse_session_usage(jf)
+        assert result["model"] == "claude-opus-4-6"
+        assert result["latest_model"] == "claude-sonnet-4-6"
+        assert result["models"] == ["claude-opus-4-6", "claude-sonnet-4-6"]
 
 
 class TestEstimateCost:
@@ -248,6 +266,75 @@ class TestAggregateByName:
         result = aggregate_by_name(sessions)
         assert result[0]["name"] == "abc12345"
 
+    def test_tracks_latest_model(self):
+        sessions = [
+            {
+                "name": "alice",
+                "model": "claude-opus-4-6",
+                "latest_model": "claude-opus-4-6",
+                "models": ["claude-opus-4-6"],
+                "session_id": "s1",
+                "input": 0,
+                "output": 10,
+                "cache_create": 0,
+                "cache_read": 0,
+                "messages": 1,
+            },
+            {
+                "name": "alice",
+                "model": "claude-opus-4-6",
+                "latest_model": "claude-sonnet-4-6",
+                "models": ["claude-opus-4-6", "claude-sonnet-4-6"],
+                "session_id": "s2",
+                "input": 0,
+                "output": 10,
+                "cache_create": 0,
+                "cache_read": 0,
+                "messages": 1,
+            },
+        ]
+        result = aggregate_by_name(sessions)
+        assert result[0]["latest_model"] == "claude-sonnet-4-6"
+        assert result[0]["models"] == ["claude-opus-4-6", "claude-sonnet-4-6"]
+
+
+class TestModelStateAlerts:
+    def test_reports_model_downgrade(self):
+        alerts = model_state_alerts(
+            [
+                {
+                    "name": "alice",
+                    "session_id": "s1",
+                    "models": ["claude-opus-4-6", "claude-sonnet-4-6"],
+                }
+            ]
+        )
+        assert alerts == ["alice: model downgraded claude-opus-4-6 -> claude-sonnet-4-6"]
+
+    def test_ignores_upgrade(self):
+        alerts = model_state_alerts(
+            [
+                {
+                    "name": "alice",
+                    "session_id": "s1",
+                    "models": ["claude-sonnet-4-6", "claude-opus-4-6"],
+                }
+            ]
+        )
+        assert alerts == []
+
+    def test_reports_codex_mini_downgrade(self):
+        alerts = model_state_alerts(
+            [
+                {
+                    "name": "codex",
+                    "session_id": "s1",
+                    "models": ["gpt-5.4", "gpt-5.4-mini"],
+                }
+            ]
+        )
+        assert alerts == ["codex: model downgraded gpt-5.4 -> gpt-5.4-mini"]
+
 
 class TestCmdUsage:
     def test_no_project_dir_exits(self, tmp_path, capsys):
@@ -273,6 +360,7 @@ class TestCmdUsage:
         out = capsys.readouterr().out
         assert "alice" in out
         assert "合计" in out
+        assert "claude-opus-4-6" in out
 
     def test_detail_flag(self, tmp_path, capsys):
         project_dir = tmp_path / "jsonls"
@@ -286,3 +374,21 @@ class TestCmdUsage:
         out = capsys.readouterr().out
         assert "Session" in out
         assert "s1" in out
+
+    def test_budget_and_model_state_output(self, tmp_path, capsys):
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [
+                {"type": "agent-name", "agentName": "alice"},
+                _make_assistant_msg(input_tokens=1_000_000, output_tokens=1_000_000, model="claude-opus-4-6"),
+                _make_assistant_msg(input_tokens=1_000_000, output_tokens=1_000_000, model="claude-sonnet-4-6"),
+            ],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            cmd_usage(tmp_path / "project", ["--budget", "100", "--warn-pct", "50"])
+        out = capsys.readouterr().out
+        assert "WARNING: alice: model downgraded claude-opus-4-6 -> claude-sonnet-4-6" in out
+        assert "预算: $100.00" in out
+        assert "WARNING: token budget usage" in out

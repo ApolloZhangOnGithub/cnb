@@ -151,6 +151,9 @@ Use this checklist before starting a large cnb run:
 - Disable Fast mode for long unattended runs unless latency matters more than credits.
 - Use smaller models for low-risk maintenance work.
 - Stop idle tongxue instead of leaving them in active loops.
+- Use `cnb usage --budget <amount> --warn-pct <percent>` during long runs to
+  show aggregate local JSONL usage, current/latest model state, downgrade
+  warnings, and budget runway.
 
 ## Source Links
 
