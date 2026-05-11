@@ -1,7 +1,8 @@
-"""Tests for notification concerns: TimeAnnouncer, BugSLAChecker."""
+"""Tests for notification concerns: InboxNudger, QueuedMessageFlusher, TimeAnnouncer, BugSLAChecker."""
 
 import subprocess
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from lib.concerns.config import DispatcherConfig
@@ -391,14 +392,14 @@ class TestTimeAnnouncer:
 
         class FakeDT(datetime):
             @classmethod
-            def now(cls, tz=None):
+            def now(cls):
                 return fake_now
 
         return FakeDT
 
     @patch("lib.concerns.notifications.board_send")
     def test_daily_announcement_at_9am(self, mock_board, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         announcer = TimeAnnouncer(cfg)
         announcer.last_hour = 8
 
@@ -411,7 +412,7 @@ class TestTimeAnnouncer:
 
     @patch("lib.concerns.notifications.board_send")
     def test_hourly_announcement(self, mock_board, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         announcer = TimeAnnouncer(cfg)
         announcer.last_hour = 13
 
@@ -424,7 +425,7 @@ class TestTimeAnnouncer:
 
     @patch("lib.concerns.notifications.board_send")
     def test_no_announcement_mid_hour(self, mock_board, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         announcer = TimeAnnouncer(cfg)
         announcer.last_hour = 14
 
@@ -435,7 +436,7 @@ class TestTimeAnnouncer:
 
     @patch("lib.concerns.notifications.board_send")
     def test_no_repeat_same_hour(self, mock_board, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         announcer = TimeAnnouncer(cfg)
         announcer.last_hour = 10
 
@@ -448,7 +449,7 @@ class TestTimeAnnouncer:
     @patch("lib.concerns.notifications.db")
     def test_dedup_skips_when_already_sent(self, mock_db, mock_board, tmp_path):
         """If a clock message for this hour already exists in DB, skip sending."""
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         announcer = TimeAnnouncer(cfg)
         announcer.last_hour = 13
         mock_db.return_value.scalar.return_value = 1
@@ -463,7 +464,7 @@ class TestTimeAnnouncer:
     @patch("lib.concerns.notifications.db")
     def test_dedup_allows_when_not_sent(self, mock_db, mock_board, tmp_path):
         """If no clock message exists for this hour, send normally."""
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         announcer = TimeAnnouncer(cfg)
         announcer.last_hour = 13
         mock_db.return_value.scalar.return_value = 0
@@ -477,7 +478,7 @@ class TestTimeAnnouncer:
     @patch("lib.concerns.notifications.db")
     def test_dedup_db_error_allows_send(self, mock_db, mock_board, tmp_path):
         """If DB check fails, allow the send (fail-open for availability)."""
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         announcer = TimeAnnouncer(cfg)
         announcer.last_hour = 13
         mock_db.return_value.scalar.side_effect = Exception("db locked")
@@ -496,7 +497,7 @@ class TestTimeAnnouncer:
 class TestBugSLAChecker:
     @patch("subprocess.run")
     def test_pokes_coral_on_overdue(self, mock_run, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         poker = MagicMock()
         checker = BugSLAChecker(cfg, poker)
 
@@ -510,7 +511,7 @@ class TestBugSLAChecker:
 
     @patch("subprocess.run")
     def test_no_poke_when_no_overdue(self, mock_run, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         poker = MagicMock()
         checker = BugSLAChecker(cfg, poker)
 
@@ -521,7 +522,7 @@ class TestBugSLAChecker:
 
     @patch("subprocess.run")
     def test_no_poke_on_empty_output(self, mock_run, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         poker = MagicMock()
         checker = BugSLAChecker(cfg, poker)
 
@@ -532,7 +533,7 @@ class TestBugSLAChecker:
 
     @patch("subprocess.run")
     def test_silent_on_subprocess_error(self, mock_run, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         poker = MagicMock()
         checker = BugSLAChecker(cfg, poker)
 
@@ -543,7 +544,7 @@ class TestBugSLAChecker:
 
     @patch("subprocess.run")
     def test_uses_correct_board_command(self, mock_run, tmp_path):
-        cfg = make_dispatcher_config(tmp_path)
+        cfg = make_cfg(tmp_path)
         poker = MagicMock()
         checker = BugSLAChecker(cfg, poker)
 

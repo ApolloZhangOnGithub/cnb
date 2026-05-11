@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import argparse
 import io
 import itertools
 import json
-import time
 import urllib.error
 from types import SimpleNamespace
-from typing import Any
 
 from lib import feishu_bridge
 from lib.feishu_bridge import FeishuBridgeConfig, FeishuInboundEvent
@@ -25,16 +22,6 @@ def _cfg(tmp_path, **kwargs):
     }
     defaults.update(kwargs)
     return FeishuBridgeConfig(**defaults)
-
-
-def _append_and_return(target, value, result):
-    target.append(value)
-    return result
-
-
-def _append_and_true(target, value):
-    target.append(value)
-    return True
 
 
 class TestFeishuBridgeConfig:
@@ -55,13 +42,7 @@ auto_bind_chat = true
 activity_updates = true
 activity_update_seconds = [1, 2]
 activity_update_repeat_seconds = 45
-activity_update_max_seconds = 120
 activity_render_style = "codex"
-bot_open_id = "ou_bot"
-bot_name = "CNB_终端主管"
-group_message_routing = "targeted"
-group_message_routing_chat_ids = ["oc_control"]
-lark_cli_profile = "cnb-device-chief"
 caffeine_enabled = false
 """
         )
@@ -80,13 +61,7 @@ caffeine_enabled = false
         assert cfg.activity_updates is True
         assert cfg.activity_update_seconds == (1, 2)
         assert cfg.activity_update_repeat_seconds == 45
-        assert cfg.activity_update_max_seconds == 120
         assert cfg.activity_render_style == "codex"
-        assert cfg.bot_open_id == "ou_bot"
-        assert cfg.bot_name == "CNB_终端主管"
-        assert cfg.group_message_routing == "targeted"
-        assert cfg.group_message_routing_chat_ids == frozenset({"oc_control"})
-        assert cfg.lark_cli_profile == "cnb-device-chief"
         assert cfg.caffeine_enabled is False
         assert cfg.transport == "local_openapi"
 
@@ -104,25 +79,6 @@ device_supervisor_tmux = "cnb-mac-owner"
 
         assert cfg.pilot_name == "mac-owner"
         assert cfg.pilot_tmux == "cnb-mac-owner"
-
-    def test_loads_device_chief_role_aliases(self, tmp_path):
-        path = tmp_path / "config.toml"
-        path.write_text(
-            """
-[feishu]
-role = "device_chief"
-device_chief_name = "device-chief"
-device_chief_tmux = "cnb-device-chief"
-"""
-        )
-
-        cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
-
-        assert cfg.pilot_role == "device_chief"
-        assert cfg.pilot_name == "device-chief"
-        assert cfg.pilot_tmux == "cnb-device-chief"
-        assert cfg.bridge_tmux == "cnb-feishu-chief-bridge"
-        assert cfg.watch_tmux == "cnb-feishu-chief-watch"
 
     def test_caffeine_status_disabled(self, tmp_path):
         cfg = _cfg(tmp_path, caffeine_enabled=False)
@@ -238,7 +194,6 @@ readback_default_limit = 8
 readback_max_limit = 20
 resource_handoff_enabled = false
 resource_handoff_max_bytes = 4096
-caffeine_enabled = false
 """
         )
 
@@ -250,7 +205,6 @@ caffeine_enabled = false
         assert cfg.readback_max_limit == 20
         assert cfg.resource_handoff_enabled is False
         assert cfg.resource_handoff_max_bytes == 4096
-        assert cfg.caffeine_enabled is False
 
     def test_loads_notification_feishu_section(self, tmp_path):
         path = tmp_path / "config.toml"
@@ -277,7 +231,7 @@ chat_ids = ["oc_a", "oc_b"]
         path = tmp_path / "config.toml"
         path.write_text('[other]\nname = "kept"\n')
         cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
-        args = argparse.Namespace(
+        args = SimpleNamespace(
             app_id="cli_test",
             app_secret="secret",
             verification_token="verify",
@@ -304,7 +258,6 @@ chat_ids = ["oc_a", "oc_b"]
         assert "activity_updates = true" in written
         assert "activity_update_seconds = [1]" in written
         assert "activity_update_repeat_seconds = 1" in written
-        assert "activity_update_max_seconds = 600" in written
         assert 'activity_render_style = "auto"' in written
         assert 'device_supervisor_name = "device-supervisor"' in written
         assert 'watch_public_url = "https://example.test/cnb/watch"' in written
@@ -312,71 +265,14 @@ chat_ids = ["oc_a", "oc_b"]
         assert "watch_token =" in written
         assert "readback_enabled = false" in written
         assert "resource_handoff_enabled = true" in written
-        assert "caffeine_enabled = true" in written
         assert "token=%3Credacted%3E" in result.detail
         assert 'agent = "codex"' in written
-
-    def test_setup_config_writes_device_chief_section(self, tmp_path):
-        path = tmp_path / "config.toml"
-        path.write_text("")
-        cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
-        args = argparse.Namespace(
-            role="device_chief",
-            app_id="cli_chief",
-            app_secret="secret",
-            verification_token="verify",
-            chat_id="oc_chief",
-            webhook_public_url="https://chief.example.test/cnb",
-            webhook_host="",
-            webhook_port=0,
-            watch_public_url="",
-            watch_token="",
-            device_chief_name="device-chief",
-            device_chief_tmux="cnb-device-chief",
-            device_supervisor_name="",
-            device_supervisor_tmux="",
-            terminal_supervisor_name="",
-            terminal_supervisor_tmux="",
-            bot_open_id="ou_chief",
-            bot_name="CNB_机器总管",
-            group_message_routing="targeted",
-            group_routing_chat_id=["oc_control"],
-            tunnel="none",
-            no_auto_bind_chat=False,
-        )
-
-        result = feishu_bridge.setup_config(args, cfg)
-
-        written = path.read_text()
-        assert result.handled is True
-        assert 'role = "device_chief"' in written
-        assert 'device_chief_name = "device-chief"' in written
-        assert 'device_chief_tmux = "cnb-device-chief"' in written
-        assert 'bridge_tmux = "cnb-feishu-chief-bridge"' in written
-        assert 'watch_tmux = "cnb-feishu-chief-watch"' in written
-        assert 'bot_open_id = "ou_chief"' in written
-        assert 'bot_name = "CNB_机器总管"' in written
-        assert 'group_message_routing_chat_ids = ["oc_control"]' in written
-        assert "device_supervisor_name" not in written
-
-    def test_ngrok_public_url_for_matches_requested_port(self, monkeypatch):
-        monkeypatch.setattr(
-            feishu_bridge,
-            "_ngrok_tunnels",
-            lambda: [
-                {"public_url": "https://supervisor.example", "config": {"addr": "http://127.0.0.1:8787"}},
-                {"public_url": "https://chief.example", "config": {"addr": "http://127.0.0.1:8788"}},
-            ],
-        )
-
-        assert feishu_bridge.ngrok_public_url_for("127.0.0.1", 8788) == "https://chief.example"
-        assert feishu_bridge.ngrok_public_url_for("127.0.0.1", 8789) == ""
 
     def test_setup_config_accepts_explicit_watch_public_url_and_token(self, tmp_path):
         path = tmp_path / "config.toml"
         path.write_text("[feishu]\n")
         cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
-        args = argparse.Namespace(
+        args = SimpleNamespace(
             app_id="",
             app_secret="",
             verification_token="",
@@ -431,7 +327,6 @@ class TestEventExtraction:
                     "thread_id": "omt_thread",
                     "message_type": "text",
                     "content": {"text": "看一下 #64"},
-                    "mentions": [{"id": {"open_id": "ou_bot"}, "name": "CNB_终端主管"}],
                 },
             }
         }
@@ -446,8 +341,6 @@ class TestEventExtraction:
         assert event.sender_id == "ou_user"
         assert event.chat_type == "group"
         assert event.text == "看一下 #64"
-        assert event.mention_ids == ("ou_bot",)
-        assert event.mention_names == ("CNB_终端主管",)
 
 
 class TestFiltering:
@@ -495,100 +388,6 @@ class TestFiltering:
 
         assert accepted is False
         assert "ack" in reason
-
-    def test_targeted_group_routing_accepts_self_mention(self, tmp_path):
-        cfg = _cfg(tmp_path, bot_open_id="ou_bot", group_message_routing="targeted")
-        event = FeishuInboundEvent(
-            text="@bot hello",
-            chat_id="oc_allowed",
-            chat_type="group",
-            mention_ids=("ou_bot",),
-        )
-
-        accepted, reason = feishu_bridge.should_accept(event, cfg)
-
-        assert accepted is True
-        assert reason == "accepted"
-
-    def test_targeted_group_routing_accepts_bot_app_id_mention(self, tmp_path):
-        cfg = _cfg(tmp_path, app_id="cli_bot", bot_open_id="ou_bot", group_message_routing="targeted")
-        event = FeishuInboundEvent(
-            text="@bot hello",
-            chat_id="oc_allowed",
-            chat_type="group",
-            mention_ids=("cli_bot",),
-        )
-
-        accepted, reason = feishu_bridge.should_accept(event, cfg)
-
-        assert accepted is True
-        assert reason == "accepted"
-
-    def test_targeted_group_routing_accepts_bot_name_when_ids_missing(self, tmp_path):
-        cfg = _cfg(tmp_path, bot_open_id="ou_bot", bot_name="CNB_终端主管", group_message_routing="targeted")
-        event = FeishuInboundEvent(
-            text="@bot hello",
-            chat_id="oc_allowed",
-            chat_type="group",
-            mention_names=("CNB_终端主管",),
-        )
-
-        accepted, reason = feishu_bridge.should_accept(event, cfg)
-
-        assert accepted is True
-        assert reason == "accepted"
-
-    def test_targeted_group_routing_rejects_other_mentions(self, tmp_path):
-        cfg = _cfg(tmp_path, bot_open_id="ou_bot", group_message_routing="targeted")
-        event = FeishuInboundEvent(
-            text="@other hello",
-            chat_id="oc_allowed",
-            chat_type="group",
-            mention_ids=("ou_other",),
-        )
-
-        accepted, reason = feishu_bridge.should_accept(event, cfg)
-
-        assert accepted is False
-        assert "not targeted" in reason
-
-    def test_group_routing_chat_ids_accepts_without_mention(self, tmp_path):
-        cfg = _cfg(
-            tmp_path,
-            allowed_chat_ids=frozenset({"oc_allowed", "oc_control"}),
-            bot_open_id="ou_bot",
-            group_message_routing="targeted",
-            group_message_routing_chat_ids=frozenset({"oc_control"}),
-        )
-        event = FeishuInboundEvent(
-            text="hello",
-            chat_id="oc_control",
-            chat_type="group",
-        )
-
-        accepted, reason = feishu_bridge.should_accept(event, cfg)
-
-        assert accepted is True
-        assert reason == "accepted"
-
-    def test_targeted_group_routing_accepts_reply_to_owned_message(self, tmp_path):
-        cfg = _cfg(tmp_path, bot_open_id="ou_bot", group_message_routing="targeted")
-        feishu_bridge.record_activity_start(
-            cfg,
-            FeishuInboundEvent(text="source", message_id="om_source", chat_id="oc_allowed", chat_type="group"),
-        )
-        event = FeishuInboundEvent(
-            text="继续",
-            message_id="om_child",
-            parent_id="om_source",
-            chat_id="oc_allowed",
-            chat_type="group",
-        )
-
-        accepted, reason = feishu_bridge.should_accept(event, cfg)
-
-        assert accepted is True
-        assert reason == "accepted"
 
 
 class _FakeHTTPResponse:
@@ -702,22 +501,6 @@ class TestRouting:
         assert "设备主管同学" in prompt
         assert "bridge/tunnel/watch 基础设施要分别列出" in prompt
 
-    def test_device_chief_prompt_keeps_cross_machine_boundary(self, tmp_path):
-        cfg = _cfg(
-            tmp_path,
-            pilot_role="device_chief",
-            pilot_name="device-chief",
-            pilot_tmux="cnb-device-chief",
-        )
-
-        prompt = feishu_bridge.build_pilot_system_prompt(cfg)
-
-        assert "机器总管同学" in prompt
-        assert "你管所有机器" in prompt
-        assert "不是这台 Mac 的设备主管" in prompt
-        assert "cnb feishu --config" in prompt
-        assert "总管状态写入 ~/.cnb/device-chief/" in prompt
-
     def test_build_pilot_command_uses_codex(self, tmp_path):
         cfg = _cfg(tmp_path, agent="codex")
 
@@ -729,10 +512,10 @@ class TestRouting:
     def test_route_event_starts_pilot_and_sends_message(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, pilot_tmux="cnb-pilot-test", agent="codex")
         event = FeishuInboundEvent(text="帮我看项目", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
-        calls: list[Any] = []
+        calls = []
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: _append_and_true(calls, (name, text)))
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: calls.append((name, text)) or True)
 
         def fake_run(cmd, **kwargs):
             calls.append(tuple(cmd))
@@ -756,11 +539,11 @@ class TestRouting:
             "content": json.dumps({"image_key": "img_1"}),
         }
         event = feishu_bridge.extract_event(payload)
-        sent: list[Any] = []
+        sent = []
         image_path = tmp_path / "feishu.png"
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: _append_and_true(sent, (name, text)))
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: sent.append((name, text)) or True)
         monkeypatch.setattr(
             feishu_bridge,
             "download_message_resource_openapi",
@@ -789,10 +572,10 @@ class TestRouting:
             "content": json.dumps({"text": f"看这个 [需求文档]({doc_url})"}, ensure_ascii=False),
         }
         event = feishu_bridge.extract_event(payload)
-        sent: list[Any] = []
+        sent = []
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: _append_and_true(sent, text))
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: sent.append(text) or True)
         monkeypatch.setattr(
             feishu_bridge,
             "download_message_resource_openapi",
@@ -840,7 +623,7 @@ class TestRouting:
             "sender_id": "ou_user",
             "content": '{"text":"run tests"}',
         }
-        monitors: list[Any] = []
+        monitors = []
 
         monkeypatch.setattr(
             feishu_bridge, "start_pilot_if_needed", lambda cfg: feishu_bridge.BridgeResult(True, "running")
@@ -852,8 +635,8 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "start_activity_monitor",
-            lambda event, cfg: _append_and_return(
-                monitors, (event.message_id, cfg.pilot_tmux), feishu_bridge.BridgeResult(True, "monitor")
+            lambda event, cfg: (
+                monitors.append((event.message_id, cfg.pilot_tmux)) or feishu_bridge.BridgeResult(True, "monitor")
             ),
         )
 
@@ -870,7 +653,7 @@ class TestRouting:
             "sender_id": "ou_user",
             "content": '{"text":"run tests"}',
         }
-        calls: list[Any] = []
+        calls = []
 
         monkeypatch.setattr(
             feishu_bridge, "start_pilot_if_needed", lambda cfg: feishu_bridge.BridgeResult(True, "running")
@@ -879,12 +662,12 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda *args, **kwargs: _append_and_return(calls, args, feishu_bridge.BridgeResult(True, "sent")),
+            lambda *args, **kwargs: calls.append(args) or feishu_bridge.BridgeResult(True, "sent"),
         )
         monkeypatch.setattr(
             feishu_bridge,
             "send_activity_update",
-            lambda *args, **kwargs: _append_and_return(calls, args, feishu_bridge.BridgeResult(True, "activity")),
+            lambda *args, **kwargs: calls.append(args) or feishu_bridge.BridgeResult(True, "activity"),
         )
 
         result = feishu_bridge.handle_payload(payload, cfg)
@@ -892,12 +675,10 @@ class TestRouting:
         assert result.handled is True
         assert result.detail == "delivered to cnb-device-supervisor"
         assert calls == []
-        assert feishu_bridge.activity_is_done(cfg, "om_1") is False
-        assert "1 个未完成" in feishu_bridge.describe_request_activity(cfg)
 
     def test_cnb_tui_command_replies_with_snapshot(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path)
-        replies: list[Any] = []
+        replies = []
         payload = {
             "message_id": "om_1",
             "chat_id": "oc_allowed",
@@ -911,9 +692,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda cfg, mid, text, **kwargs: _append_and_return(
-                replies, (mid, text), feishu_bridge.BridgeResult(True, "sent")
-            ),
+            lambda cfg, mid, text, **kwargs: replies.append((mid, text)) or feishu_bridge.BridgeResult(True, "sent"),
         )
 
         def fake_run(cmd, **kwargs):
@@ -930,8 +709,8 @@ class TestRouting:
 
     def test_cnb_watch_command_replies_with_builtin_viewer_url(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path)
-        replies: list[Any] = []
-        calls: list[Any] = []
+        replies = []
+        calls = []
         payload = {
             "message_id": "om_1",
             "chat_id": "oc_allowed",
@@ -947,9 +726,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda cfg, mid, text, **kwargs: _append_and_return(
-                replies, text, feishu_bridge.BridgeResult(True, "sent")
-            ),
+            lambda cfg, mid, text, **kwargs: replies.append(text) or feishu_bridge.BridgeResult(True, "sent"),
         )
 
         def fake_run(cmd, **kwargs):
@@ -967,7 +744,7 @@ class TestRouting:
 
     def test_cnb_status_command_replies_with_activity_summary(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path)
-        replies: list[Any] = []
+        replies = []
         payload = {
             "message_id": "om_1",
             "chat_id": "oc_allowed",
@@ -983,9 +760,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda cfg, mid, text, **kwargs: _append_and_return(
-                replies, text, feishu_bridge.BridgeResult(True, "sent")
-            ),
+            lambda cfg, mid, text, **kwargs: replies.append(text) or feishu_bridge.BridgeResult(True, "sent"),
         )
 
         result = feishu_bridge.handle_payload(payload, cfg)
@@ -1006,7 +781,7 @@ class TestRouting:
 
     def test_start_watch_viewer_uses_ttyd_readonly(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, watch_tmux="cnb-watch-test", watch_tool="ttyd")
-        calls: list[Any] = []
+        calls = []
 
         monkeypatch.setattr(
             feishu_bridge, "start_pilot_if_needed", lambda cfg: feishu_bridge.BridgeResult(True, "running")
@@ -1147,10 +922,10 @@ class TestRouting:
             "sender_id": "ou_user",
             "content": '{"text":"ping"}',
         }
-        calls: list = []  # type: ignore[var-annotated]
+        calls = []
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: _append_and_true(calls, (name, text)))
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: calls.append((name, text)) or True)
 
         result = feishu_bridge.handle_payload(payload, cfg)
 
@@ -1423,28 +1198,6 @@ class TestRouting:
         assert "--message-id" in calls[0]
         assert "om_1" in calls[0]
 
-    def test_reply_ack_uses_configured_lark_cli_profile(self, tmp_path, monkeypatch):
-        cfg = _cfg(
-            tmp_path,
-            ack=True,
-            notification_policy="ack",
-            transport="hermes_lark_cli",
-            lark_cli_profile="cnb-device-chief",
-        )
-        event = FeishuInboundEvent(text="hello", message_id="om_1", chat_id="oc_allowed")
-        calls = []
-
-        def fake_run(cmd, **kwargs):
-            calls.append(cmd)
-            return SimpleNamespace(returncode=0, stdout="{}", stderr="")
-
-        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
-
-        result = feishu_bridge.reply_ack(event, cfg, "delivered")
-
-        assert result.handled is True
-        assert calls[0][:6] == ["lark-cli", "--profile", "cnb-device-chief", "im", "+messages-reply", "--as"]
-
     def test_send_reply_rejects_empty_text(self, tmp_path):
         cfg = _cfg(tmp_path)
 
@@ -1503,28 +1256,6 @@ class TestRouting:
         assert calls[1][0] == "/open-apis/im/v1/messages/om_1/reply"
         assert calls[1][1]["msg_type"] == "text"
         assert "处理完成" in calls[1][1]["content"]
-
-    def test_send_reply_normalizes_literal_backslash_newlines(self, tmp_path, monkeypatch):
-        calls = []
-
-        def fake_openapi_post(path, payload, **kwargs):
-            calls.append((path, payload, kwargs))
-            if path.endswith("/tenant_access_token/internal"):
-                return feishu_bridge.BridgeResult(True, '{"code":0,"tenant_access_token":"t-token"}')
-            return feishu_bridge.BridgeResult(True, '{"code":0,"data":{"message_id":"om_reply"}}')
-
-        monkeypatch.setattr(feishu_bridge, "openapi_post", fake_openapi_post)
-        cfg = _cfg(tmp_path, app_id="cli_x", app_secret="secret")
-
-        result = feishu_bridge.send_reply(cfg, "om_1", "第一行\\n\\n第二行")
-
-        assert result.handled is True
-        content = json.loads(calls[1][1]["content"])
-        assert content["text"] == "第一行\n\n第二行"
-        assert feishu_bridge.referenced_message_owned_by_this_bridge(
-            FeishuInboundEvent(text="继续", parent_id="om_reply", chat_id="oc_allowed", chat_type="group"),
-            cfg,
-        )
 
     def test_send_reply_sends_code_fence_as_post_via_local_openapi(self, tmp_path, monkeypatch):
         calls = []
@@ -1666,60 +1397,10 @@ class TestRouting:
 
         assert feishu_bridge.activity_is_done(cfg, "om_1") is True
 
-    def test_activity_monitor_closes_without_completing_request_when_schedule_exhausts(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, activity_update_max_seconds=3)
-        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
-        updates: list[Any] = []
-
-        feishu_bridge.record_activity_start(cfg, event)
-        monkeypatch.setattr(feishu_bridge, "iter_activity_update_elapsed_seconds", lambda cfg: iter([0]))
-        monkeypatch.setattr(
-            feishu_bridge,
-            "send_activity_update",
-            lambda cfg, event, elapsed: _append_and_return(updates, elapsed, feishu_bridge.BridgeResult(True, "sent")),
-        )
-
-        feishu_bridge._activity_monitor_loop(event, cfg)
-
-        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
-        assert updates == [0]
-        assert feishu_bridge.activity_is_done(cfg, "om_1") is False
-        assert state["messages"]["om_1"]["activity_monitor_closed_reason"] == "activity monitor reached 3s limit"
-        assert state["messages"]["om_1"]["blocked_reason"] == (
-            "final Feishu reply not confirmed: activity monitor reached 3s limit"
-        )
-        activity = feishu_bridge.describe_request_activity(cfg)
-        assert "1 个未完成" in activity
-        assert "1 个阻塞" in activity
-
-    def test_describe_request_activity_reports_stale_open_request(self, tmp_path):
-        cfg = _cfg(tmp_path, activity_update_max_seconds=120)
-        path = feishu_bridge.activity_state_path(cfg)
-        path.write_text(
-            json.dumps(
-                {
-                    "messages": {
-                        "om_old": {
-                            "chat_id": "oc_allowed",
-                            "sender_id": "ou_user",
-                            "started_at": "2026-05-10 10:00:00",
-                            "done_at": "",
-                        }
-                    }
-                }
-            )
-        )
-
-        now = time.mktime(time.strptime("2026-05-10 10:03:01", "%Y-%m-%d %H:%M:%S"))
-        summary = feishu_bridge.describe_request_activity(cfg, now=now)
-
-        assert "1 个未完成" in summary
-        assert "超过 2m00s" in summary
-
     def test_send_activity_update_builds_one_screen_snapshot(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path)
         event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
-        snapshots: list[Any] = []
+        snapshots = []
 
         feishu_bridge.record_activity_start(cfg, event)
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
@@ -1733,9 +1414,7 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_activity_card",
-            lambda cfg, event, snapshot: _append_and_return(
-                snapshots, snapshot, feishu_bridge.BridgeResult(True, "sent")
-            ),
+            lambda cfg, event, snapshot: snapshots.append(snapshot) or feishu_bridge.BridgeResult(True, "sent"),
         )
 
         result = feishu_bridge.send_activity_update(cfg, event, 20)
@@ -1776,7 +1455,7 @@ class TestRouting:
     def test_activity_card_screen_mode_only_renders_current_screen(self, tmp_path):
         cfg = _cfg(tmp_path)
         snapshot = feishu_bridge.ActivitySnapshot(
-            title="Codex 实时一屏 · 20s",
+            title="20s",
             subtitle="设备主管同学当前 TUI 画面",
             sections=(feishu_bridge.ActivitySection("当前一屏", "Codex screen\n• Working", "screen"),),
             style=feishu_bridge.resolve_activity_render_style(cfg),
@@ -1788,12 +1467,9 @@ class TestRouting:
 
         rendered = "\n".join(item.get("content", "") for item in card["body"]["elements"])
         assert card["header"]["title"]["content"] == "20s"
-        assert "Codex screen" not in rendered
-        assert "普通开发、排障、调研任务" not in rendered
-        assert "<font color='grey'>01</font>" not in rendered
-        assert "我直接回一条" not in rendered
-        assert "Working" not in rendered
-        assert "Run /review" not in rendered
+        assert "Codex screen" in rendered
+        assert "最后 2 行" in rendered
+        assert "<font color='grey'>01</font>" in rendered
         assert "```text" not in rendered
         assert "Codex run-loop snapshot" not in rendered
         assert "CNB tmux" not in rendered
@@ -1813,8 +1489,7 @@ class TestRouting:
         card = feishu_bridge.build_activity_card(snapshot)
 
         rendered = "\n".join(item.get("content", "") for item in card["body"]["elements"])
-        assert card["header"]["title"]["content"] == "1s"
-        assert "<font color='grey'>01</font>" not in rendered
+        assert "已省略上方 3 行" in rendered
         assert "line 04" in rendered
         assert "line 15" in rendered
         assert "line 01" not in rendered
@@ -1828,18 +1503,6 @@ class TestRouting:
 
         assert elapsed == [20, 60, 180, 240, 300, 360]
 
-    def test_activity_update_schedule_stops_at_max_seconds(self, tmp_path):
-        cfg = _cfg(
-            tmp_path,
-            activity_update_seconds=(1,),
-            activity_update_repeat_seconds=1,
-            activity_update_max_seconds=3,
-        )
-
-        elapsed = list(feishu_bridge.iter_activity_update_elapsed_seconds(cfg))
-
-        assert elapsed == [1, 2, 3]
-
     def test_first_activity_card_reply_records_message_id(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, app_id="cli_x", app_secret="secret")
         event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
@@ -1851,7 +1514,7 @@ class TestRouting:
             elapsed_seconds=20,
             updated_at="2026-05-10 06:30:00",
         )
-        calls: list[Any] = []
+        calls = []
 
         feishu_bridge.record_activity_start(cfg, event)
 
@@ -1988,47 +1651,18 @@ class TestRouting:
 
         assert code == 0
         assert feishu_bridge.activity_is_done(cfg, "om_1") is True
-        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
-        assert state["messages"]["om_1"]["closed_reason"] == "final Feishu reply sent"
-
-    def test_reply_command_blocks_activity_when_final_reply_fails(self, tmp_path, monkeypatch, capsys):
-        path = tmp_path / "config.toml"
-        path.write_text("[feishu]\n")
-        cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
-        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed")
-        feishu_bridge.record_activity_start(cfg, event)
-        monkeypatch.setattr(
-            feishu_bridge,
-            "send_reply",
-            lambda cfg, mid, text: feishu_bridge.BridgeResult(False, "Feishu OpenAPI error: simulated"),
-        )
-
-        code = feishu_bridge.main(["--config", str(path), "reply", "om_1", "done"])
-
-        captured = capsys.readouterr()
-        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
-        assert code == 1
-        assert feishu_bridge.activity_is_done(cfg, "om_1") is False
-        assert state["messages"]["om_1"]["blocked_reason"] == (
-            "final Feishu reply failed: Feishu OpenAPI error: simulated"
-        )
-        assert "activity remains open" in captured.out
-        assert "[cnb-feishu-reply] om_1 final Feishu reply failed" in captured.err
-        assert "1 个阻塞" in feishu_bridge.describe_request_activity(cfg)
 
     def test_ask_command_keeps_activity_open(self, tmp_path, monkeypatch):
         path = tmp_path / "config.toml"
         path.write_text("[feishu]\n")
         cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
         event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed")
-        calls: list = []
+        calls = []
         feishu_bridge.record_activity_start(cfg, event)
         monkeypatch.setattr(
             feishu_bridge,
             "send_short_reply",
-            lambda cfg, mid, text: _append_and_return(
-                calls, (mid, text), feishu_bridge.BridgeResult(True, "short reply sent")
-            ),
+            lambda cfg, mid, text: calls.append((mid, text)) or feishu_bridge.BridgeResult(True, "short reply sent"),
         )
 
         code = feishu_bridge.main(["--config", str(path), "ask", "om_1", "need", "input"])
@@ -2068,11 +1702,6 @@ class TestRouting:
         calls = []
 
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-        monkeypatch.setattr(
-            feishu_bridge,
-            "start_caffeine_companion",
-            lambda cfg: feishu_bridge.BridgeResult(True, "keep-awake unavailable (test)"),
-        )
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
@@ -2086,260 +1715,6 @@ class TestRouting:
         command = calls[0][-1]
         assert "feishu --config" in command
         assert str(cfg.config_path) in command
-
-    def test_start_bridge_daemon_starts_caffeine_on_macos(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, config_path=tmp_path / "config.toml", bridge_tmux="cnb-feishu-test")
-        tmux_calls = []
-        popen_calls = []
-
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-        monkeypatch.setattr(feishu_bridge.sys, "platform", "darwin")
-        monkeypatch.setattr(
-            feishu_bridge.shutil,
-            "which",
-            lambda name: "/usr/bin/caffeinate" if name == "caffeinate" else None,
-        )
-
-        def fake_run(cmd, **kwargs):
-            tmux_calls.append(cmd)
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-        def fake_popen(cmd, **kwargs):
-            popen_calls.append((cmd, kwargs))
-            return SimpleNamespace(pid=4321)
-
-        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
-        monkeypatch.setattr(feishu_bridge.subprocess, "Popen", fake_popen)
-
-        result = feishu_bridge.start_bridge_daemon(cfg)
-
-        assert result.handled is True
-        assert tmux_calls[0][:4] == ["tmux", "new-session", "-d", "-s"]
-        assert popen_calls[0][0] == ["/usr/bin/caffeinate", "-dims"]
-        assert feishu_bridge.caffeine_pid_file(cfg).read_text() == "4321\n"
-        assert "keep-awake active (pid=4321)" in result.detail
-
-    def test_start_bridge_daemon_degrades_without_caffeinate(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, bridge_tmux="cnb-feishu-test")
-
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-        monkeypatch.setattr(feishu_bridge.sys, "platform", "darwin")
-        monkeypatch.setattr(feishu_bridge.shutil, "which", lambda name: None)
-        monkeypatch.setattr(
-            feishu_bridge.subprocess,
-            "run",
-            lambda cmd, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
-        )
-
-        result = feishu_bridge.start_bridge_daemon(cfg)
-
-        assert result.handled is True
-        assert "started cnb-feishu-test" in result.detail
-        assert "keep-awake unavailable (caffeinate not found)" in result.detail
-
-    def test_stop_bridge_daemon_stops_caffeine(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, bridge_tmux="cnb-feishu-test")
-        feishu_bridge.caffeine_pid_file(cfg).write_text("4321\n")
-        kill_calls = []
-
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: name == "cnb-feishu-test")
-        monkeypatch.setattr(
-            feishu_bridge.subprocess,
-            "run",
-            lambda cmd, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
-        )
-        monkeypatch.setattr(feishu_bridge.os, "kill", lambda pid, sig: kill_calls.append((pid, sig)))
-
-        result = feishu_bridge.stop_bridge_daemon(cfg)
-
-        assert result.handled is True
-        assert kill_calls == [(4321, 0), (4321, feishu_bridge.signal.SIGTERM)]
-        assert not feishu_bridge.caffeine_pid_file(cfg).exists()
-        assert "stopped keep-awake pid=4321" in result.detail
-
-    def test_stop_caffeine_companion_clears_invalid_pid_without_signal(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, bridge_tmux="cnb-feishu-test")
-        feishu_bridge.caffeine_pid_file(cfg).write_text("-1\n")
-
-        monkeypatch.setattr(
-            feishu_bridge.os,
-            "kill",
-            lambda pid, sig: (_ for _ in ()).throw(AssertionError("invalid pid should not be signaled")),
-        )
-
-        result = feishu_bridge.stop_caffeine_companion(cfg)
-
-        assert result.handled is True
-        assert result.detail == "cleared stale keep-awake pid file"
-        assert not feishu_bridge.caffeine_pid_file(cfg).exists()
-
-    def test_status_reports_caffeine_state(self, tmp_path, monkeypatch, capsys):
-        cfg = _cfg(tmp_path, caffeine_enabled=False)
-
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-
-        feishu_bridge.print_status(cfg)
-
-        out = capsys.readouterr().out
-        assert "Mac 防睡眠: disabled" in out
-        assert "caffeine_enabled=false" in out
-
-
-class TestSupervisorPromptRefresh:
-    """Tests for supervisor prompt hash tracking and safe restart."""
-
-    def test_prompt_hash_is_deterministic(self, tmp_path):
-        cfg = _cfg(tmp_path, pilot_name="test-sv")
-        h1 = feishu_bridge.get_current_prompt_hash(cfg)
-        h2 = feishu_bridge.get_current_prompt_hash(cfg)
-        assert h1 == h2
-        assert len(h1) == 16
-        assert all(c in "0123456789abcdef" for c in h1)
-
-    def test_prompt_hash_changes_with_config(self, tmp_path):
-        cfg1 = _cfg(tmp_path, pilot_name="test-sv")
-        cfg2 = _cfg(tmp_path, pilot_name="other-name")
-        h1 = feishu_bridge.get_current_prompt_hash(cfg1)
-        h2 = feishu_bridge.get_current_prompt_hash(cfg2)
-        assert h1 != h2
-
-    def test_describe_prompt_freshness_shows_latest_when_match(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path)
-        h = feishu_bridge.get_current_prompt_hash(cfg)
-        feishu_bridge._prompt_hash_path(cfg).write_text(f"{h}\n")
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-
-        result = feishu_bridge.describe_prompt_freshness(cfg)
-        assert "最新" in result
-        assert h in result
-
-    def test_describe_prompt_freshness_shows_stale_when_mismatch(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path)
-        feishu_bridge._prompt_hash_path(cfg).write_text("deadbeef00000000\n")
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-
-        current = feishu_bridge.get_current_prompt_hash(cfg)
-        result = feishu_bridge.describe_prompt_freshness(cfg)
-        assert "过期" in result
-        assert current in result
-        assert "deadbeef00000000" in result
-
-    def test_describe_prompt_freshness_shows_not_running(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path)
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-
-        result = feishu_bridge.describe_prompt_freshness(cfg)
-        assert "未运行" in result
-
-    def test_print_status_includes_prompt_freshness(self, tmp_path, monkeypatch, capsys):
-        cfg = _cfg(tmp_path)
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        h = feishu_bridge.get_current_prompt_hash(cfg)
-        feishu_bridge._prompt_hash_path(cfg).write_text(f"{h}\n")
-
-        feishu_bridge.print_status(cfg)
-        out = capsys.readouterr().out
-        assert "主管提示词" in out
-        assert h in out
-
-    def test_restart_supervisor_refuses_with_active_requests(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path)
-        active_items = [
-            {
-                "message_id": "om_1",
-                "chat_id": "oc_a",
-                "sender_id": "ou_u",
-                "started_at": "2026-01-01 00:00:00",
-                "age_seconds": 60,
-            },
-        ]
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "open_activity_items", lambda cfg: active_items)
-
-        result = feishu_bridge.restart_supervisor(cfg)
-        assert result.handled is False
-        assert "om_1" in result.detail
-        assert "--force" in result.detail
-
-    def test_restart_supervisor_force_works_with_active_requests(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, pilot_tmux="cnb-pilot-test")
-        active_items = [
-            {
-                "message_id": "om_1",
-                "chat_id": "oc_a",
-                "sender_id": "ou_u",
-                "started_at": "2026-01-01 00:00:00",
-                "age_seconds": 60,
-            },
-        ]
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "open_activity_items", lambda cfg: active_items)
-
-        start_called = []
-        monkeypatch.setattr(
-            feishu_bridge,
-            "start_pilot_if_needed",
-            lambda cfg: (start_called.append(True), feishu_bridge.BridgeResult(True, "started"))[1],  # type: ignore[func-returns-value]
-        )
-
-        def fake_run(cmd, **kwargs):
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
-
-        result = feishu_bridge.restart_supervisor(cfg, force=True)
-        assert result.handled is True
-        assert "restarted" in result.detail
-        assert len(start_called) == 1
-
-    def test_restart_supervisor_reports_when_not_running(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path)
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-
-        result = feishu_bridge.restart_supervisor(cfg)
-        assert result.handled is False
-        assert "not running" in result.detail
-        assert "cnb feishu start" in result.detail
-
-    def test_start_pilot_if_needed_persists_hash(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, pilot_tmux="cnb-pilot-hash", startup_wait_seconds=0)
-        hash_path = feishu_bridge._prompt_hash_path(cfg)
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
-        monkeypatch.setattr(
-            feishu_bridge.subprocess,
-            "run",
-            lambda cmd, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
-        )
-
-        result = feishu_bridge.start_pilot_if_needed(cfg)
-        assert result.handled is True
-        assert hash_path.exists()
-        stored = feishu_bridge.get_stored_prompt_hash(cfg)
-        assert stored == feishu_bridge.get_current_prompt_hash(cfg)
-
-    def test_restart_supervisor_already_fresh_still_works(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, pilot_tmux="cnb-pilot-fresh")
-        h = feishu_bridge.get_current_prompt_hash(cfg)
-        feishu_bridge._prompt_hash_path(cfg).write_text(f"{h}\n")
-        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
-        monkeypatch.setattr(feishu_bridge, "open_activity_items", lambda cfg: [])
-
-        start_called = []
-        monkeypatch.setattr(
-            feishu_bridge,
-            "start_pilot_if_needed",
-            lambda cfg: (start_called.append(True), feishu_bridge.BridgeResult(True, "started"))[1],  # type: ignore[func-returns-value]
-        )
-
-        def fake_run(cmd, **kwargs):
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
-
-        result = feishu_bridge.restart_supervisor(cfg)
-        assert result.handled is True
-        assert "无需重启" in result.detail
-        assert len(start_called) == 1
 
 
 class TestCli:

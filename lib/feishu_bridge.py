@@ -417,7 +417,6 @@ class FeishuBridgeConfig:
             watch_token=str(section.get("watch_token") or ""),
             watch_tool=str(section.get("watch_tool") or "builtin"),
             watch_refresh_ms=max(100, _int(section.get("watch_refresh_ms"), DEFAULT_WATCH_REFRESH_MS)),
-            caffeine_enabled=_bool(_first_value(section, "caffeine_enabled", "keep_awake"), DEFAULT_CAFFEINE_ENABLED),
             readback_enabled=_bool(
                 _first_value(section, "readback_enabled", "enable_readback", "context_readback_enabled"), False
             ),

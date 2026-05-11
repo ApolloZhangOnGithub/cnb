@@ -371,7 +371,7 @@ def main() -> None:
         from lib.crypto import generate_keypair, public_key_to_hex, save_keypair
 
         keys_dir = claudes_dir / "keys"
-        pubkeys = _load_pubkeys(claudes_dir=claudes_dir)
+        pubkeys = _load_pubkeys()
         gen_count = 0
         for s in sessions:
             n = s.lower()
@@ -382,7 +382,7 @@ def main() -> None:
             pubkeys[n] = public_key_to_hex(public)
             gen_count += 1
         if gen_count:
-            _save_pubkeys(pubkeys, claudes_dir=claudes_dir)
+            _save_pubkeys(pubkeys)
             print(f"Generated {gen_count} encryption keypair(s).")
     except ImportError:
         pass  # cryptography not installed — skip keygen

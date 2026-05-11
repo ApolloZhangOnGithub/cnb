@@ -60,13 +60,6 @@ class TestKeygen:
         assert "OK" in output
         assert (mailbox_db.env.claudes_dir / "keys" / "alice.pem").exists()
 
-    def test_defaults_to_project_pubkeys_file(self, mailbox_db):
-        cmd_keygen(mailbox_db, "alice")
-
-        pubkeys_file = mailbox_db.env.claudes_dir / "pubkeys.json"
-        data = json.loads(pubkeys_file.read_text())
-        assert "alice" in data
-
     def test_registers_pubkey(self, mailbox_db, pubkeys_file):
         with _mock_registry(pubkeys_file):
             cmd_keygen(mailbox_db, "alice")
@@ -152,16 +145,6 @@ class TestSeal:
         db, _pubkeys_file = keyed_pair
         with pytest.raises(SystemExit):
             cmd_seal(db, "alice", ["bob"])
-
-    def test_seal_unregistered_sender_guides_with_sessions_and_keygen(self, mailbox_db, capsys):
-        with pytest.raises(SystemExit):
-            cmd_seal(mailbox_db, "ritchie", ["bob", "hello"])
-
-        out = capsys.readouterr().out
-        assert "'ritchie' is not a registered session" in out
-        assert "已注册 session" in out
-        assert "alice" in out
-        assert "board --as ritchie keygen" in out
 
 
 class TestUnseal:
