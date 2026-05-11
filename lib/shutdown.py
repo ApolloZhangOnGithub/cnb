@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from lib.board_db import BoardDB
+from lib.checkpoint import build_checkpoint, shutdown_warning_lines
 from lib.common import ClaudesEnv
 from lib.shift_report import (
     generate_agent_report,
@@ -165,6 +166,10 @@ def run_shutdown(
     if not sessions:
         print("无活跃 session")
         return None
+
+    checkpoint = build_checkpoint(env.project_root)
+    for line in shutdown_warning_lines(checkpoint):
+        print(line)
 
     dailies_dir = env.claudes_dir / "dailies"
     if dry_run and not dailies_dir.exists():

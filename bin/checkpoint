@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""checkpoint — summarize dirty worktree state before shutdown or handoff.
+
+Usage:
+  checkpoint              Report current worktree buckets and guidance
+  checkpoint --json       Print machine-readable report
+  checkpoint --staged     Check staged changes only; fails on staged secrets
+  checkpoint --strict     Fail when important uncommitted work is present
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+CLAUDES_HOME = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(CLAUDES_HOME))
+
+from lib.checkpoint import build_checkpoint, checkpoint_to_json, print_checkpoint
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if "-h" in args or "--help" in args:
+        print(__doc__.strip())
+        return 0
+
+    json_output = False
+    staged_only = False
+    strict = False
+    for arg in args:
+        if arg == "--json":
+            json_output = True
+        elif arg == "--staged":
+            staged_only = True
+        elif arg == "--strict":
+            strict = True
+        else:
+            print(f"ERROR: unknown argument '{arg}'", file=sys.stderr)
+            print(__doc__.strip(), file=sys.stderr)
+            return 2
+
+    report = build_checkpoint(Path.cwd(), staged_only=staged_only)
+    if json_output:
+        print(checkpoint_to_json(report))
+    else:
+        print_checkpoint(report)
+
+    if staged_only and report.has_staged_secret_risk:
+        return 1
+    if strict and report.has_important_work:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

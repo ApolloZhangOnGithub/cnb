@@ -253,7 +253,8 @@ The watchdog is useful, but it should be small:
 
 - monitor bridge/tunnel/watch/sync gateway health;
 - detect stale live activity and old open requests;
-- detect dirty worktree and missed checkpoint risk;
+- run `cnb checkpoint` to detect dirty worktree and missed checkpoint risk
+  before shutdown, migration, or device handoff;
 - detect long-running foreground Codex/Claude sessions;
 - check that shutdown notes are in global device-supervisor state, not project
   tongxue dailies;

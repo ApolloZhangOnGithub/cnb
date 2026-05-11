@@ -1,6 +1,7 @@
 """Tests for lib/shutdown — shutdown flow orchestration."""
 
 import sqlite3
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -282,6 +283,26 @@ class TestRunShutdown:
         assert "收工完成" not in out
         assert "alice" in out
         assert not (env.claudes_dir / "dailies").exists()
+
+    def test_warns_about_dirty_worktree_before_shutdown(self, tmp_path, capsys):
+        env = self._make_env(tmp_path)
+        _setup_db_at(env.board_db)
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+        (tmp_path / ".gitignore").write_text(".cnb/\n")
+        (tmp_path / "tracked.py").write_text("print('ok')\n")
+        subprocess.run(["git", "add", ".gitignore", "tracked.py"], cwd=tmp_path, check=True)
+        subprocess.run(
+            ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "init"],
+            cwd=tmp_path,
+            check=True,
+        )
+        (tmp_path / "tracked.py").write_text("print('changed')\n")
+
+        run_shutdown(env, skip_broadcast=True, skip_stop=True, timeout=1)
+
+        out = capsys.readouterr().out
+        assert "[checkpoint] uncommitted important work detected before shutdown" in out
+        assert "Run: cnb checkpoint" in out
 
     @patch("lib.shutdown.subprocess.run")
     def test_full_flow_skip_stop(self, mock_run, tmp_path, capsys):
