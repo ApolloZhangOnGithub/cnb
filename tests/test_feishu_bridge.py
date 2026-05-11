@@ -2092,7 +2092,7 @@ class TestSupervisorPromptRefresh:
         monkeypatch.setattr(
             feishu_bridge,
             "start_pilot_if_needed",
-            lambda cfg: (start_called.append(True), feishu_bridge.BridgeResult(True, "started"))[1],
+            lambda cfg: (start_called.append(True), feishu_bridge.BridgeResult(True, "started"))[1],  # type: ignore[func-returns-value]
         )
 
         def fake_run(cmd, **kwargs):
@@ -2141,7 +2141,7 @@ class TestSupervisorPromptRefresh:
         monkeypatch.setattr(
             feishu_bridge,
             "start_pilot_if_needed",
-            lambda cfg: (start_called.append(True), feishu_bridge.BridgeResult(True, "started"))[1],
+            lambda cfg: (start_called.append(True), feishu_bridge.BridgeResult(True, "started"))[1],  # type: ignore[func-returns-value]
         )
 
         def fake_run(cmd, **kwargs):
