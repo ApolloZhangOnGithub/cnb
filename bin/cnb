@@ -177,6 +177,7 @@ if [ $# -gt 0 ]; then
         watchdog)   shift; exec "$CLAUDES_HOME/bin/dispatcher-watchdog" "$@" ;;
         doctor)     shift; exec "$CLAUDES_HOME/bin/doctor" "$@" ;;
         hygiene)    shift; exec "$CLAUDES_HOME/bin/hygiene" "$@" ;;
+        resources|resource) shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.resources "$@" ;;
         feishu)     shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.feishu_bridge "$@" ;;
         feishu-chief)
             shift
@@ -325,6 +326,7 @@ cmd_usage(Path('$CNB_PROJECT'), sys.argv[1:])
             printf "  cnb leaderboard       贡献排行榜\n"
             printf "  cnb doctor            健康检查\n\n"
             printf "  cnb hygiene           区分可清缓存、本地状态、疑似备份\n\n"
+            printf "  cnb resources --processes  只读查看 Mac 资源压力和高占用进程分组\n\n"
             printf "  cnb feishu status     查看飞书入站 bridge 配置\n"
             printf "  cnb feishu setup      自动写配置、启动 webhook、准备公网回调\n"
             printf "  cnb feishu start      启动飞书入站 bridge，允许用户从飞书唤起本机设备主管同学\n\n"

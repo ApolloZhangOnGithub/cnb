@@ -13,6 +13,7 @@ This directory contains executable entrypoints for cnb. Keep the root README foc
 | `dispatcher` / `dispatcher-watchdog` | Monitors board activity and keeps coordination moving. | Background infrastructure; document operational changes before changing defaults. |
 | `doctor` | Health checks for local cnb prerequisites and project state. | Use before diagnosing environment issues. |
 | `hygiene` | Reports generated files, local runtime state, and suspicious untracked work. | Use before cleanup in a dirty shared worktree; it does not delete files. |
+| `cnb resources` | Read-only resource and process-pressure diagnostics. | `--processes` groups high CPU/RSS processes and recommends safe next actions without stopping anything. |
 | `registry` | Contributor registry helper. | Used by contributors to register identities and roles. |
 | `notify` | Notification delivery helper. | Check configuration and side effects before using in automation. |
 | `secret-scan` | Local secret scanning helper. | Run before committing changes that may contain credentials. |

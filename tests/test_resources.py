@@ -20,15 +20,21 @@ from lib.resources import (
     BatteryInfo,
     CPUInfo,
     MemoryInfo,
+    ProcessInfo,
     _load_prev_state,
+    _parse_ps_output,
     _run,
     _save_state,
+    build_pressure_report,
     check_battery,
     check_cpu,
     check_memory,
     get_all,
+    group_processes,
     main,
     notify_if_changed,
+    pressure_report_json,
+    print_pressure_report,
     print_status,
     to_json,
 )
@@ -325,6 +331,87 @@ class TestCheckCpu:
 
 
 # ---------------------------------------------------------------------------
+# process pressure grouping
+# ---------------------------------------------------------------------------
+
+
+class TestProcessPressure:
+    def test_parse_ps_output_keeps_command_with_spaces(self):
+        output = " 101 1 alice 55.5 2097152 01:02:03 /Applications/Xcode.app/Contents/MacOS/Xcode build project\n"
+
+        processes = _parse_ps_output(output)
+
+        assert len(processes) == 1
+        assert processes[0].pid == 101
+        assert processes[0].cpu == 55.5
+        assert processes[0].rss_mb == 2048
+        assert processes[0].command == "Xcode"
+        assert processes[0].args == "/Applications/Xcode.app/Contents/MacOS/Xcode build project"
+
+    def test_groups_processes_and_separates_cnb_owned_from_external(self):
+        processes = [
+            ProcessInfo(101, 1, "me", 70.0, 1024, "00:10", "codex", "codex --cd /repo/.cnb task"),
+            ProcessInfo(102, 1, "me", 15.0, 512, "00:11", "python", "python /repo/.cnb/dispatcher.py"),
+            ProcessInfo(201, 1, "me", 90.0, 4096, "01:00", "Docker", "Docker Desktop"),
+            ProcessInfo(301, 1, "me", 25.0, 2048, "02:00", "Google Chrome", "Google Chrome Helper"),
+        ]
+
+        groups = group_processes(processes)
+
+        codex = next(group for group in groups if group.name == "Codex/Claude agents")
+        docker = next(group for group in groups if group.name == "Docker")
+        assert codex.cnb_owned is True
+        assert "stop only clearly idle owned sessions" in codex.recommendation
+        assert docker.cnb_owned is False
+        assert "no automatic" in docker.recommendation or "inspect Docker manually" in docker.recommendation
+
+    def test_project_root_marks_agent_process_as_cnb_owned(self):
+        processes = [
+            ProcessInfo(101, 1, "me", 70.0, 1024, "00:10", "codex", "codex --cd /work/project task"),
+        ]
+
+        groups = group_processes(processes, project_roots=[Path("/work/project")])
+
+        assert groups[0].name == "Codex/Claude agents"
+        assert groups[0].cnb_owned is True
+
+    def test_pressure_report_json_includes_safety_note(self):
+        with (
+            patch(
+                "lib.resources.get_all",
+                return_value=(BatteryInfo("AC", 100, False, "—"), MemoryInfo("OK", 50, "normal"), CPUInfo("OK", 20)),
+            ),
+            patch(
+                "lib.resources.collect_processes",
+                return_value=[ProcessInfo(201, 1, "me", 90.0, 4096, "01:00", "Docker", "Docker Desktop")],
+            ),
+        ):
+            payload = json.loads(pressure_report_json(build_pressure_report()))
+
+        assert payload["safety_note"].startswith("Read-only diagnosis")
+        assert payload["groups"][0]["name"] == "Docker"
+        assert payload["groups"][0]["severity"] == "high"
+
+    def test_print_pressure_report_plain_text(self, capsys):
+        with (
+            patch(
+                "lib.resources.get_all",
+                return_value=(BatteryInfo("AC", 100, False, "—"), MemoryInfo("OK", 50, "normal"), CPUInfo("OK", 20)),
+            ),
+            patch(
+                "lib.resources.collect_processes",
+                return_value=[ProcessInfo(301, 1, "me", 35.0, 2048, "02:00", "Google Chrome", "Google Chrome Helper")],
+            ),
+        ):
+            print_pressure_report("status")
+
+        out = capsys.readouterr().out
+        assert "Mac Resource Pressure" in out
+        assert "Read-only diagnosis" in out
+        assert "Browser" in out
+
+
+# ---------------------------------------------------------------------------
 # _load_prev_state / _save_state
 # ---------------------------------------------------------------------------
 
@@ -458,3 +545,19 @@ class TestMain:
         ):
             main()
         mock_ps.assert_called_once_with("json")
+
+    def test_process_mode(self):
+        with (
+            patch.object(sys, "argv", ["resources.py", "--processes"]),
+            patch("lib.resources.print_pressure_report") as mock_report,
+        ):
+            main()
+        mock_report.assert_called_once_with("status")
+
+    def test_process_json_mode(self):
+        with (
+            patch.object(sys, "argv", ["resources.py", "--processes", "--json"]),
+            patch("lib.resources.print_pressure_report") as mock_report,
+        ):
+            main()
+        mock_report.assert_called_once_with("json")
