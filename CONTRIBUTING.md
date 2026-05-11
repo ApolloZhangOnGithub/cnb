@@ -285,17 +285,17 @@ Demo instances live in `instances/<name>/`. Unlike normal projects, demo instanc
 
 Commit:
 
-- `.claudes/board.db`
-- `.claudes/config.toml`
-- `.claudes/sessions/*.md`
+- `.cnb/board.db`
+- `.cnb/config.toml`
+- `.cnb/sessions/*.md`
 - All project files produced during the demo
 
 Exclude:
 
-- `.claude/`
-- `.claudes/board.db-shm`
-- `.claudes/board.db-wal`
-- `.claudes/logs/`
+- `.cnb/board.db-shm`
+- `.cnb/board.db-wal`
+- `.cnb/logs/`
+- `.claudes/` (legacy, do not commit new data here)
 - `.DS_Store`
 - Duplicate exports when a canonical version exists
 

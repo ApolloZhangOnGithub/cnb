@@ -202,7 +202,13 @@ README 只保留最短路径。深入用法与架构文档在 **[GitHub Wiki](ht
 - [Feishu bridge](docs/feishu-bridge.md) — 从飞书唤醒 Mac 设备主管、安静通知、Web TUI 观察、资源交接和回读边界。
 - [Codex engine notes](docs/codex-engine.md) — Codex 启动参数、权限模式和 smoke test。
 - [Mac companion and Island](docs/terminal-supervisor-island.md) — Mac companion 优先，可选 iPhone Live Activity bridge 其次。
+- [Device chief and multi-device supervisors](docs/device-chief-and-multidevice-supervisors.md) — 跨设备协调、租约、交接和飞书群路由。
+- [Architecture reconstruction](docs/architecture-reconstruction.md) — 架构深度分析和重构计划。
 - [Ownership autonomy](docs/design-ownership-autonomy.md) — 模块 owner 自治能力的设计方向。
+- [Model management](docs/cnb-model.md) — LLM provider 切换和模型 profile 管理。
+- [Sync gateway](docs/cnb-sync-gateway.md) — 跨设备事件同步和状态导出。
+- [Capture protocol](docs/capture-protocol.md) — Safari 网页捕获和内容摄取。
+- [Mac team host capacity](docs/mac-team-host-capacity.md) — 多实例运行的容量规划假设。
 - [Tongxue avatar generation](docs/avatar-generation.md) — 生成同学头像时的安全 provider 和 prompt 规则。
 - [Package publishing](docs/package-publishing.md) — npm 发布、dist-tags 和 GitHub Packages 可见性规则。
 - [Website frontend](docs/website-frontend.md) — 静态 GitHub Pages 源码和验证流程。

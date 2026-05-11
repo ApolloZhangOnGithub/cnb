@@ -189,7 +189,13 @@ Longer product documentation lives under [`docs/`](docs/index.md):
 - [Feishu bridge](docs/feishu-bridge.md) — wake the Mac device supervisor from Feishu, manage quiet notifications, Web TUI viewing, resource handoff, and readback.
 - [Codex engine notes](docs/codex-engine.md) — Codex launch flags, permission mode, and smoke testing.
 - [Mac companion and Island](docs/terminal-supervisor-island.md) — Mac companion first, optional iPhone Live Activity bridge second.
+- [Device chief and multi-device supervisors](docs/device-chief-and-multidevice-supervisors.md) — cross-device coordination, leases, handoff, and Feishu group routing.
+- [Architecture reconstruction](docs/architecture-reconstruction.md) — deep architectural analysis and reconstruction plan.
 - [Ownership autonomy](docs/design-ownership-autonomy.md) — the design direction for self-managing module owners.
+- [Model management](docs/cnb-model.md) — LLM provider switching and model profiles.
+- [Sync gateway](docs/cnb-sync-gateway.md) — cross-device event sync and state export.
+- [Capture protocol](docs/capture-protocol.md) — Safari web capture and content ingestion.
+- [Mac team host capacity](docs/mac-team-host-capacity.md) — planning assumptions for multi-instance runs.
 - [Tongxue avatar generation](docs/avatar-generation.md) — safe provider choices and prompt rules for AI-generated tongxue avatars.
 - [Package publishing](docs/package-publishing.md) — npm release, dist-tags, and GitHub Packages visibility rules.
 - [Website frontend](docs/website-frontend.md) — static GitHub Pages source and verification flow.
