@@ -4034,6 +4034,7 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
     print(f"角色: {_resolve_role(cfg.pilot_role).role_id}")
     print(f"{role_label(cfg)}: {cfg.pilot_name}")
     print(f"{role_label(cfg)} tmux: {cfg.pilot_tmux} ({'running' if has_session(cfg.pilot_tmux) else 'stopped'})")
+    print(describe_prompt_freshness(cfg))
     print(f"bridge tmux: {cfg.bridge_tmux} ({'running' if has_session(cfg.bridge_tmux) else 'stopped'})")
     print(f"watch tmux: {cfg.watch_tmux} ({'running' if has_session(cfg.watch_tmux) else 'stopped'})")
     caffeine_state, caffeine_detail = caffeine_status(cfg)
