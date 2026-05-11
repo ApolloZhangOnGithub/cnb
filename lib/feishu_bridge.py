@@ -892,6 +892,44 @@ def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
     )
 
 
+def get_current_prompt_hash(cfg: FeishuBridgeConfig) -> str:
+    prompt = build_pilot_system_prompt(cfg)
+    return hashlib.sha256(prompt.encode()).hexdigest()[:16]
+
+
+def _prompt_hash_path(cfg: FeishuBridgeConfig) -> Path:
+    return cfg.config_path.with_name("feishu_prompt_hash")
+
+
+def get_stored_prompt_hash(cfg: FeishuBridgeConfig) -> str | None:
+    path = _prompt_hash_path(cfg)
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text().strip()
+    except OSError:
+        return None
+    return text if len(text) == 16 and all(c in "0123456789abcdef" for c in text) else None
+
+
+def _save_prompt_hash(cfg: FeishuBridgeConfig, hash_value: str) -> None:
+    path = _prompt_hash_path(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{hash_value}\n")
+
+
+def describe_prompt_freshness(cfg: FeishuBridgeConfig) -> str:
+    if not has_session(cfg.pilot_tmux):
+        return "主管提示词: (主管未运行)"
+    current = get_current_prompt_hash(cfg)
+    stored = get_stored_prompt_hash(cfg)
+    if stored is None:
+        return f"主管提示词: 未知 (hash: {current}, 建议执行 cnb feishu restart-supervisor)"
+    if stored == current:
+        return f"主管提示词: 最新 (hash: {current})"
+    return f"主管提示词: 过期! 当前hash: {current}, 运行中hash: {stored} (建议执行 cnb feishu restart-supervisor)"
+
+
 def _project_lines(cfg: FeishuBridgeConfig, limit: int = 20) -> list[str]:
     lines: list[str] = []
     for project in discover_project_activity(cfg, limit=limit):
@@ -927,6 +965,7 @@ def start_pilot_if_needed(cfg: FeishuBridgeConfig) -> BridgeResult:
         return BridgeResult(False, f"failed to start {cfg.pilot_tmux}: {detail}")
     if cfg.startup_wait_seconds > 0:
         time.sleep(cfg.startup_wait_seconds)
+    _save_prompt_hash(cfg, get_current_prompt_hash(cfg))
     return BridgeResult(True, f"started {cfg.pilot_tmux}")
 
 
