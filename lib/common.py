@@ -329,17 +329,30 @@ def parse_flags(
     positional: list[str] = []
     i = 0
     while i < len(args):
-        if args[i] in val_lookup:
-            canonical = val_lookup[args[i]]
+        arg = args[i]
+        # Support --key=value syntax
+        if "=" in arg:
+            key, val = arg.split("=", 1)
+            if key in val_lookup:
+                result[val_lookup[key]] = val
+                i += 1
+                continue
+            if key in bool_lookup:
+                print(f"ERROR: {arg} 不接受参数值（布尔型）")
+                raise SystemExit(1)
+            positional.append(arg)
+            i += 1
+        elif arg in val_lookup:
+            canonical = val_lookup[arg]
             if i + 1 >= len(args):
-                print(f"ERROR: {args[i]} 需要一个参数值")
+                print(f"ERROR: {arg} 需要一个参数值")
                 raise SystemExit(1)
             result[canonical] = args[i + 1]
             i += 2
-        elif args[i] in bool_lookup:
-            result[bool_lookup[args[i]]] = True
+        elif arg in bool_lookup:
+            result[bool_lookup[arg]] = True
             i += 1
         else:
-            positional.append(args[i])
+            positional.append(arg)
             i += 1
     return result, positional

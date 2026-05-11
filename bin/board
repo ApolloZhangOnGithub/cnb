@@ -42,13 +42,6 @@ COMMANDS: list[Command] = [
     Command("status", "lib.board_msg", "cmd_status", "update your current task", "status <description>", hidden=True),
     Command("inbox", "lib.board_msg", "cmd_inbox", "check unread messages", "inbox", takes_rest=False, hidden=True),
     Command("ack", "lib.board_msg", "cmd_ack", "clear inbox", "ack", takes_rest=False, hidden=True),
-    Command(
-        "inspect",
-        "lib.board_msg",
-        "cmd_inspect",
-        "read-only session inbox/tasks inspection",
-        "inspect {inbox|tasks} <session>",
-    ),
     Command("log", "lib.board_msg", "cmd_log", "message history", "log [n] [--mine]"),
     Command(
         "inspect",
@@ -101,7 +94,7 @@ COMMANDS: list[Command] = [
     ),
     Command(
         "files",
-        "lib.board_view",
+        "lib.board_files",
         "cmd_files",
         "list shared files",
         "files",
@@ -111,7 +104,7 @@ COMMANDS: list[Command] = [
     ),
     Command(
         "get",
-        "lib.board_view",
+        "lib.board_files",
         "cmd_get",
         "view shared file content",
         "get <hash|name>",
@@ -130,7 +123,7 @@ COMMANDS: list[Command] = [
     ),
     Command(
         "history",
-        "lib.board_view",
+        "lib.board_msg",
         "cmd_history",
         "session message history",
         "history <session> [limit]",

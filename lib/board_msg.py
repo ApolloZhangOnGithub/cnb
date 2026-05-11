@@ -6,7 +6,8 @@ import shutil
 from pathlib import Path
 
 from lib.board_db import BoardDB, ts
-from lib.common import is_privileged, parse_flags, validate_identity
+from lib.board_display import print_task_queue, print_unread_inbox
+from lib.common import escape_like, parse_flags, validate_identity
 from lib.tmux_utils import capture_pane, has_session, tmux_send
 
 
@@ -140,66 +141,8 @@ def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
 def cmd_inbox(db: BoardDB, identity: str) -> None:
     validate_identity(db, identity)
     name = identity.lower()
-    _print_unread_inbox(db, name, write_ack_marker=True)
-
-    _task_print_queue_short(db, name)
-
-
-def _print_unread_inbox(db: BoardDB, name: str, *, write_ack_marker: bool) -> None:
-    count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
-    if not count:
-        print("收件箱为空")
-    else:
-        rows = db.query(
-            "SELECT i.message_id, m.ts, m.sender, m.body "
-            "FROM inbox i JOIN messages m ON i.message_id=m.id "
-            "WHERE i.session=? AND i.read=0 ORDER BY m.ts",
-            (name,),
-        )
-        max_id = 0
-        for msg_id, msg_ts, sender, body in rows:
-            print(f'<message from="{sender}" ts="{msg_ts}">\n{body}\n</message>')
-            if msg_id > max_id:
-                max_id = msg_id
-        if write_ack_marker and max_id > 0:
-            _ack_marker_path(db, name).write_text(str(max_id))
-
-
-def _task_print_queue_short(db: BoardDB, target: str) -> None:
-    rows = db.query(
-        "SELECT id, status, priority, description FROM tasks "
-        "WHERE session=? AND status != 'done' "
-        "ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, priority DESC, id ASC",
-        (target,),
-    )
-    print("\n任务队列:")
-    if not rows:
-        print("  (无待办任务)")
-        return
-    for tid, status, priority, desc in rows:
-        marker = "*" if status == "active" else " "
-        print(f"  {marker} #{tid} [{status} p{priority}] {desc}")
-
-
-def cmd_inspect(db: BoardDB, identity: str, args: list[str]) -> None:
-    validate_identity(db, identity)
-    observer = identity.lower()
-    if len(args) != 2 or args[0] not in {"inbox", "task", "tasks"}:
-        print("Usage: ./board --as <lead|dispatcher> inspect {inbox|tasks} <session>")
-        raise SystemExit(1)
-
-    kind = args[0]
-    target = args[1].lower()
-    validate_identity(db, target)
-    if target != observer and not is_privileged(observer):
-        print("ERROR: inspect of another session requires lead or dispatcher")
-        raise SystemExit(1)
-
-    if kind == "inbox":
-        _print_unread_inbox(db, target, write_ack_marker=False)
-        return
-
-    _task_print_queue_short(db, target)
+    print_unread_inbox(db, name, write_ack_marker=True)
+    print_task_queue(db, name)
 
 
 def cmd_ack(db: BoardDB, identity: str) -> None:
@@ -265,3 +208,30 @@ def cmd_log(db: BoardDB, identity: str, args: list[str]) -> None:
         )
     for (line,) in reversed(rows):
         print(line)
+
+
+def cmd_history(db: BoardDB, args: list[str]) -> None:
+    if not args:
+        print("Usage: board history <session|topic> [limit]")
+        raise SystemExit(1)
+    subject = args[0].lower()
+    try:
+        limit = int(args[1]) if len(args) > 1 else 20
+    except ValueError:
+        print(f"ERROR: 无效的数字: {args[1]}")
+        raise SystemExit(1)
+
+    print(f"=== History: {args[0]} ===\n")
+    print(f"Messages involving {args[0]} (last {limit}):")
+    rows = db.query(
+        "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 100) "
+        "FROM messages WHERE sender=? OR recipient=? OR (recipient='all' AND sender=?) "
+        "OR body LIKE '%' || ? || '%' ESCAPE '\\' ORDER BY id DESC LIMIT ?",
+        (subject, subject, subject, escape_like(subject), limit),
+    )
+    for (line,) in reversed(rows):
+        print(f"  {line}")
+    print()
+    print("Status changes:")
+    for updated_at, status in db.query("SELECT updated_at, status FROM sessions WHERE name=?", (subject,)):
+        print(f"  [{updated_at}] {status}")

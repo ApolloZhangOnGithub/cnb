@@ -2,7 +2,8 @@
 
 import pytest
 
-from lib.board_msg import cmd_ack, cmd_inbox, cmd_inspect, cmd_log, cmd_send, cmd_status
+from lib.board_inspect import cmd_inspect
+from lib.board_msg import cmd_ack, cmd_inbox, cmd_log, cmd_send, cmd_status
 
 
 class TestCmdSend:

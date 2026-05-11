@@ -11,18 +11,20 @@ def cmd_bug(db: BoardDB, identity: str, args: list[str]) -> None:
     validate_identity(db, identity)
     subcmd = args[0] if args else "list"
     rest = args[1:] if len(args) > 1 else []
-    dispatch = {
-        "report": lambda: _bug_report(db, identity, rest),
-        "assign": lambda: _bug_assign(db, identity, rest),
-        "fix": lambda: _bug_fix(db, identity, rest),
-        "list": lambda: _bug_list(db, rest),
-        "overdue": lambda: _bug_overdue(db),
-    }
-    fn = dispatch.get(subcmd)
-    if not fn:
+
+    if subcmd == "report":
+        _bug_report(db, identity, rest)
+    elif subcmd == "assign":
+        _bug_assign(db, identity, rest)
+    elif subcmd == "fix":
+        _bug_fix(db, identity, rest)
+    elif subcmd == "list":
+        _bug_list(db, rest)
+    elif subcmd == "overdue":
+        _bug_overdue(db)
+    else:
         print("Usage: ./board --as <name> bug {report|assign|fix|list|overdue}")
         raise SystemExit(1)
-    fn()
 
 
 def _bug_report(db: BoardDB, identity: str, args: list[str]) -> None:

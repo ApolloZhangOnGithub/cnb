@@ -1,14 +1,12 @@
-"""board_view — read-only views: view, dashboard, p0, dirty, prebuild, freshness, relations, history, roster, files, get."""
+"""board_view — read-only views: view, dashboard, p0, dirty, prebuild, freshness, relations, roster."""
 
-import glob
-import os
 import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from lib.board_db import BoardDB
-from lib.common import escape_like, validate_identity
+from lib.common import validate_identity
 from lib.tmux_utils import capture_pane, has_session, pane_command
 
 SHELL_COMMANDS = {"zsh", "bash", "sh", "-zsh", "-bash", ""}
@@ -302,51 +300,6 @@ def cmd_dashboard(db: BoardDB) -> None:
         print("  dispatcher: NOT RUNNING")
 
 
-def cmd_files(db: BoardDB) -> None:
-    assert db.env is not None
-    print("=== 共享文件 ===\n")
-    rows = db.query("SELECT hash, original_name, sender, ts FROM files ORDER BY ts DESC")
-    if not rows:
-        print("  (none)")
-    else:
-        for h, orig, sender, date in rows:
-            size = 0
-            for f in glob.glob(str(db.env.claudes_dir / "files" / f"{h}.*")):
-                if os.path.isfile(f):
-                    size = os.path.getsize(f)
-                    break
-            print(f"  {h:<14s} {orig:<30s} {size:>6d} bytes  by {sender:<6s}  {date}")
-    print("\n查看文件: ./board get <hash前缀或文件名>")
-
-
-def cmd_get(db: BoardDB, args: list[str]) -> None:
-    assert db.env is not None
-    if not args:
-        print("Usage: ./board get <hash-prefix|filename>")
-        raise SystemExit(1)
-    query = args[0]
-    row = db.query_one(
-        "SELECT hash, original_name, sender, ts, stored_path FROM files "
-        "WHERE hash LIKE ? ESCAPE '\\' OR original_name=? LIMIT 1",
-        (escape_like(query) + "%", query),
-    )
-    if not row:
-        print(f"ERROR: no file matching '{query}'")
-        raise SystemExit(1)
-    h, orig, sender, date, path = row
-    print("--- 文件信息 ---")
-    print(f"  Name: {orig}")
-    print(f"  Hash: {h}")
-    print(f"  Sender: {sender}")
-    print(f"  Date: {date}")
-    print("\n--- 内容 ---")
-    full_path = db.env.claudes_dir / path
-    if full_path.is_file():
-        print(full_path.read_text(), end="")
-    else:
-        print("(file content not on disk)")
-
-
 def cmd_freshness(db: BoardDB) -> None:
     print("=== 数据新鲜度 ===\n")
     print(f"  {'Session':<8s}  {'Last status':<20s}  {'Last heartbeat':<20s}  {'Unread'}")
@@ -368,33 +321,6 @@ def cmd_relations(db: BoardDB) -> None:
     )
     for sender, recipient, count in rows:
         print(f"  {sender} → {recipient}: {count} messages")
-
-
-def cmd_history(db: BoardDB, args: list[str]) -> None:
-    if not args:
-        print("Usage: ./board history <session|topic> [limit]")
-        raise SystemExit(1)
-    subject = args[0].lower()
-    try:
-        limit = int(args[1]) if len(args) > 1 else 20
-    except ValueError:
-        print(f"ERROR: 无效的数字: {args[1]}")
-        raise SystemExit(1)
-
-    print(f"=== History: {args[0]} ===\n")
-    print(f"Messages involving {args[0]} (last {limit}):")
-    rows = db.query(
-        "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 100) "
-        "FROM messages WHERE sender=? OR recipient=? OR (recipient='all' AND sender=?) "
-        "OR body LIKE '%' || ? || '%' ESCAPE '\\' ORDER BY id DESC LIMIT ?",
-        (subject, subject, subject, escape_like(subject), limit),
-    )
-    for (line,) in reversed(rows):
-        print(f"  {line}")
-    print()
-    print("Status changes:")
-    for updated_at, status in db.query("SELECT updated_at, status FROM sessions WHERE name=?", (subject,)):
-        print(f"  [{updated_at}] {status}")
 
 
 def cmd_roster(db: BoardDB) -> None:

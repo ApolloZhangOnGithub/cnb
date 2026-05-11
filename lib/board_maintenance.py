@@ -1,42 +1,51 @@
 """board_maintenance — data maintenance: prune, backup, restore."""
 
+import shutil
+import sqlite3
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from lib.board_db import BoardDB
+from lib.common import parse_flags
 
 # ---------------------------------------------------------------------------
 # prune
 # ---------------------------------------------------------------------------
 
 
-def cmd_prune(db: BoardDB, args: list[str]) -> None:
-    """Prune old messages and inbox entries.
-
-    Usage: board --as <name> prune [--before YYYY-MM-DD] [--dry-run]
-    """
-    usage = "Usage: board --as <name> prune [--before YYYY-MM-DD] [--dry-run]"
-
-    before_days = 90  # default: keep 90 days
-    dry_run = False
-    positional: list[str] = []
-
-    i = 0
-    while i < len(args):
-        if args[i] == "--before" and i + 1 < len(args):
-            before_days = _parse_days(args[i + 1])
-            i += 2
-        elif args[i] == "--dry-run":
-            dry_run = True
-            i += 1
-        else:
-            positional.append(args[i])
-            i += 1
-
-    if positional:
-        print(usage)
+def _parse_days(arg: str) -> int:
+    try:
+        target = datetime.strptime(arg, "%Y-%m-%d")
+        return (datetime.now() - target).days
+    except ValueError:
+        pass
+    try:
+        return int(arg)
+    except ValueError:
+        print(f"ERROR: invalid date/days: '{arg}'. Use YYYY-MM-DD or a number.")
         raise SystemExit(1)
 
+
+def _days_ago_ts(days: int) -> str:
+    return (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def cmd_prune(db: BoardDB, args: list[str]) -> None:
+    if "--help" in args or "-h" in args:
+        print("Usage: board prune [--before YYYY-MM-DD|DAYS] [--dry-run]")
+        return
+    flags, positional = parse_flags(
+        args,
+        value_flags={"before": ["--before"]},
+        bool_flags={"dry_run": ["--dry-run"]},
+    )
+    if positional:
+        print("Usage: board prune [--before YYYY-MM-DD|DAYS] [--dry-run]")
+        raise SystemExit(1)
+
+    before_days = _parse_days(str(flags.get("before", "90")))
+    dry_run = bool(flags.get("dry_run"))
     cutoff = _days_ago_ts(before_days)
 
     # Count what would be deleted
@@ -94,63 +103,27 @@ def cmd_prune(db: BoardDB, args: list[str]) -> None:
         print(f"OK pruned {total_deleted} rows (messages older than {before_days} days)")
 
 
-def _parse_days(arg: str) -> int:
-    """Parse a date or day-count argument.
-
-    Accepts: 'YYYY-MM-DD' (exact date), or integer (days ago).
-    """
-    from datetime import datetime
-
-    try:
-        target = datetime.strptime(arg, "%Y-%m-%d")
-        now = datetime.now()
-        return (now - target).days
-    except ValueError:
-        pass
-    try:
-        return int(arg)
-    except ValueError:
-        print(f"ERROR: invalid date/days: '{arg}'. Use YYYY-MM-DD or a number.")
-        raise SystemExit(1)
-
-
-def _days_ago_ts(days: int) -> str:
-    """Return a timestamp string for *days* ago."""
-    from datetime import datetime, timedelta
-
-    return (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-
-
 # ---------------------------------------------------------------------------
 # backup
 # ---------------------------------------------------------------------------
 
 
 def cmd_backup(db: BoardDB, args: list[str]) -> None:
-    """Backup board.db to a timestamped file.
+    if "--help" in args or "-h" in args:
+        print("Usage: board backup [--output <path>]")
+        return
+    flags, positional = parse_flags(args, value_flags={"output": ["--output"]})
+    if positional:
+        print("Usage: board backup [--output <path>]")
+        raise SystemExit(1)
 
-    Usage: board backup [--output <path>]
-    """
-    import shutil as _shutil
-
-    output: Path | None = None
-    for arg in args:
-        if arg.startswith("--output="):
-            output = Path(arg.split("=", 1)[1])
-        elif arg == "--output" and len(args) > args.index(arg) + 1:
-            output = Path(args[args.index(arg) + 1])
-        elif arg == "--help":
-            print("Usage: board backup [--output <path>]")
-            return
-
+    output_str = flags.get("output")
+    output = Path(str(output_str)) if output_str else None
     if output is None:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         output = db.db_path.parent / f"backup-{stamp}.db"
 
-    _shutil.copy2(db.db_path, output)
-
-    # Verify the backup
-    import sqlite3
+    shutil.copy2(db.db_path, output)
 
     try:
         conn = sqlite3.connect(str(output))
@@ -173,32 +146,20 @@ def cmd_backup(db: BoardDB, args: list[str]) -> None:
 
 
 def cmd_restore(db: BoardDB, args: list[str]) -> None:
-    """Restore board.db from a backup file.
+    if "--help" in args or "-h" in args:
+        print("Usage: board restore <backup-file> [--force]")
+        return
+    flags, positional = parse_flags(args, bool_flags={"force": ["--force", "-f"]})
+    force = bool(flags.get("force"))
 
-    Usage: board restore <backup-file> [--force]
-    """
-    force = False
-    source: Path | None = None
-    for arg in args:
-        if arg in ("--force", "-f"):
-            force = True
-        elif arg in ("--help", "-h"):
-            print("Usage: board restore <backup-file> [--force]")
-            print()
-            print("  --force  Skip confirmation prompt")
-            return
-        else:
-            source = Path(arg)
-
-    if source is None:
+    if not positional:
         print("Usage: board restore <backup-file> [--force]")
         raise SystemExit(1)
+
+    source = Path(positional[0])
     if not source.exists():
         print(f"ERROR: backup file not found: {source}")
         raise SystemExit(1)
-
-    # Verify the backup
-    import sqlite3
 
     try:
         conn = sqlite3.connect(str(source))
@@ -224,9 +185,6 @@ def cmd_restore(db: BoardDB, args: list[str]) -> None:
         if answer not in ("y", "yes"):
             print("Cancelled.")
             return
-
-    # Atomic restore: copy to temp, rename
-    import shutil
 
     tmp = db.db_path.with_suffix(".db.restore-tmp")
     shutil.copy2(source, tmp)

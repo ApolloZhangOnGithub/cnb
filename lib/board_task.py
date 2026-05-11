@@ -1,6 +1,7 @@
 """board_task — task queue: add / done / list / next."""
 
 from lib.board_db import BoardDB, ts
+from lib.board_display import print_task_queue
 from lib.board_own import auto_pr, verify_task
 from lib.common import is_privileged, is_terminal_task_status, parse_flags, validate_identity
 
@@ -17,35 +18,6 @@ def _promote_next(db: BoardDB, target: str) -> None:
         )
         if next_id:
             db.execute("UPDATE tasks SET status='active' WHERE id=?", (next_id,), c=c)
-
-
-def _print_queue(db: BoardDB, target: str, include_done: bool = False) -> None:
-    if include_done:
-        rows = db.query(
-            "SELECT id, status, priority, description, created_at, COALESCE(done_at, '') "
-            "FROM tasks WHERE session=? "
-            "ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, "
-            "priority DESC, id ASC",
-            (target,),
-        )
-    else:
-        rows = db.query(
-            "SELECT id, status, priority, description, created_at, '' "
-            "FROM tasks WHERE session=? AND status NOT IN ('done') "
-            "ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, "
-            "priority DESC, id ASC",
-            (target,),
-        )
-    print("\n任务队列:")
-    if not rows:
-        print("  (无待办任务)")
-        return
-    for tid, status, priority, desc, _created, done_at in rows:
-        marker = "*" if status == "active" else " "
-        if status == "done":
-            print(f"  {marker} #{tid} [{status} p{priority}] {desc} (done {done_at})")
-        else:
-            print(f"  {marker} #{tid} [{status} p{priority}] {desc}")
 
 
 def cmd_task(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -97,7 +69,7 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
         if target != name:
             db.post_message(name, target, f"[TASK #{task_id}] {desc}", deliver=True, c=c)
             print(f"OK notified {target}")
-    _print_queue(db, target)
+    print_task_queue(db, target)
 
 
 def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -115,7 +87,7 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
         )
     if not raw_id:
         print(f"No active task for {name}.")
-        _print_queue(db, name)
+        print_task_queue(db, name)
         return
 
     try:
@@ -135,7 +107,7 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
 
     if is_terminal_task_status(status):
         print(f"Task #{task_id} is already done.")
-        _print_queue(db, assignee)
+        print_task_queue(db, assignee)
         return
 
     # --- Verify: run tests before marking done ---
@@ -170,7 +142,7 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
         print(f"Next: #{nxt[0]} {nxt[1]}")
     else:
         print(f"No remaining active/pending tasks for {assignee}.")
-    _print_queue(db, assignee)
+    print_task_queue(db, assignee)
 
 
 def _task_list(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -215,11 +187,11 @@ def _task_list(db: BoardDB, identity: str, args: list[str]) -> None:
             print("Usage: ./board task list [session|--all] [--done]")
             raise SystemExit(1)
         target = identity.lower()
-    _print_queue(db, target, include_done)
+    print_task_queue(db, target, include_done=include_done)
 
 
 def _task_next(db: BoardDB, identity: str) -> None:
     name = identity.lower()
 
     _promote_next(db, name)
-    _print_queue(db, name)
+    print_task_queue(db, name)
