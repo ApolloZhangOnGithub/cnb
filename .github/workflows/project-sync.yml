@@ -1,0 +1,50 @@
+name: Auto-add issues to project boards
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  add-to-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@v1
+        with:
+          project-url: https://github.com/users/ApolloZhangOnGithub/projects/1
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+
+  add-to-core:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'infra') || contains(github.event.issue.labels.*.name, 'bug') || contains(github.event.issue.labels.*.name, 'module:runtime')
+    steps:
+      - uses: actions/add-to-project@v1
+        with:
+          project-url: https://github.com/users/ApolloZhangOnGithub/projects/2
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+
+  add-to-feishu:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'module:feishu')
+    steps:
+      - uses: actions/add-to-project@v1
+        with:
+          project-url: https://github.com/users/ApolloZhangOnGithub/projects/3
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+
+  add-to-companion:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'module:mac-companion')
+    steps:
+      - uses: actions/add-to-project@v1
+        with:
+          project-url: https://github.com/users/ApolloZhangOnGithub/projects/4
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+
+  add-to-org-design:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'org-design') || contains(github.event.issue.labels.*.name, 'ownership') || contains(github.event.issue.labels.*.name, 'experiment')
+    steps:
+      - uses: actions/add-to-project@v1
+        with:
+          project-url: https://github.com/users/ApolloZhangOnGithub/projects/5
+          github-token: ${{ secrets.PROJECT_TOKEN }}

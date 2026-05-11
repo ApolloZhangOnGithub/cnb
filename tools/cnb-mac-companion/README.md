@@ -13,8 +13,9 @@ extra.
 ./script/build_and_run.sh
 ```
 
-The script builds a SwiftPM app, stages `dist/CNBMacCompanion.app`, kills any old
-`CNBMacCompanion` process, and opens the fresh app bundle.
+The script builds a SwiftPM app, installs `CNBMacCompanion.app` to
+`~/Applications/`, and opens it. Build cache goes to
+`~/.cnb/build-cache/cnb-mac-companion/` to keep the project directory clean.
 
 Use `./script/build_and_run.sh --verify` to build, launch, and assert that the
 app process is running. Use `./script/build_and_run.sh --no-launch` for a build

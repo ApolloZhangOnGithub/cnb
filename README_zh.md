@@ -191,7 +191,12 @@ cnb feishu start
 <!-- section:docs -->
 ## 文档
 
-README 只保留最短路径。更完整的产品文档放在 [`docs/`](docs/index.md)：
+README 只保留最短路径。深入用法与架构文档在 **[GitHub Wiki](https://github.com/ApolloZhangOnGithub/cnb/wiki)**：
+
+- [Commands](https://github.com/ApolloZhangOnGithub/cnb/wiki/Commands) — `/` 斜杠命令 vs 终端 `cnb`、两层架构
+- [Skills](https://github.com/ApolloZhangOnGithub/cnb/wiki/Skills) — 技能生态、注册表、自定义开发
+
+更完整的产品文档放在 [`docs/`](docs/index.md)：
 
 - [Pricing and usage](docs/pricing.md) — cnb 如何对应 Claude Code、Codex、credits、Fast mode 和团队规模。
 - [Feishu bridge](docs/feishu-bridge.md) — 从飞书唤醒 Mac 设备主管、安静通知、Web TUI 观察、资源交接和回读边界。
@@ -206,20 +211,30 @@ README 只保留最短路径。更完整的产品文档放在 [`docs/`](docs/ind
 <!-- section:slash-commands -->
 ## 斜杠命令
 
-当设备主管同学运行在 Claude Code 中：
+在 Claude Code 对话中输入 `/` 开头的命令。CNB 的命令有两层：
 
-| 命令 | 功能 |
+| 层 | 给谁用 | 风格 | 例子 |
+|---|--------|------|------|
+| `cnb-*` | 人 → Claude | 自然语言，说人话 | `/cnb-status`、`/cnb-model 切ds` |
+| `cnbx-*` | Claude → 程序 | 纯 CLI 透传 | `/cnbx-board overview` |
+
+| 命令 | 用途 |
 |------|------|
-| `/cnb-overview` | 团队面板——谁在做什么、谁卡了、谁闲着 |
-| `/cnb-watch <name>` | 看某个同学在做什么 |
-| `/cnb-progress` | 最近进展汇总——新消息、已完成任务 |
-| `/cnb-history` | 完整消息历史 |
-| `/cnb-pending` | 查看待用户处理的操作，并验证/重试 |
-| `/cnb-model [menu|list|current|use profile]` | 通过直接 shell 执行查看菜单或切换模型/provider profile |
-| `/cnb-model-current` | 查看当前模型/provider profile |
-| `/cnb-model-list` | 列出可用模型/provider profiles |
-| `/cnb-update` | 更新 cnb 到最新版 |
-| `/cnb-help` | 列出所有 `/cnb-*` 命令 |
+| `/cnb` | 全局体检 — 团队状态 + 待处理 + 系统健康 |
+| `/cnb-status` | 团队总览 — 谁在干什么、进展如何 |
+| `/cnb-watch <名字>` | 聚焦单个同学 |
+| `/cnb-pending` | 待用户处理的操作 |
+| `/cnb-history` | 消息历史 |
+| `/cnb-model` | 模型管理（查看/列出/切换） |
+| `/cnb-update` | 更新 cnb（或全工具链） |
+| `/cnb-config` | 快捷配置（effort、permission） |
+| `/cnb-supervisor` | 机器主管运行状态 |
+| `/cnb-skills` | 技能目录 — 列出 cnb 生态所有可用技能 |
+| `/cnb-help` | 自动扫描列出所有命令 |
+
+**详细说明、架构原理、自定义开发** → [GitHub Wiki](https://github.com/ApolloZhangOnGithub/cnb/wiki)
+
+> 上述命令列表由 `/cnb-help` 自动扫描生成，保持与源码同步。
 
 <!-- section:demo -->
 ## Demo
@@ -270,6 +285,41 @@ cnb doctor              # 健康检查
 所有 GitHub issue 通过 GitHub Action 自动同步到 [`issues/`](issues/) 目录——每次 issue 变动实时触发，另外每 6 小时全量同步。这意味着任何 Claude 会话（包括 claude.ai 网页聊天，没有 CLI 工具）都可以通过读文件来查看项目 issue。
 
 cnb 的正式 issue 入口是 <https://github.com/ApolloZhangOnGithub/cnb/issues>。不要把 cnb issue 提到 Breadboard；Breadboard issue 只用于跨项目协调或 Breadboard 自身基础设施。
+
+<!-- section:project-management -->
+## 项目管理
+
+cnb 以 GitHub Issues 为所有工作的唯一真相源。5 个 Project Board 按模块提供过滤视图——同学用 `gh issue` 创建和更新 issue，board 自动同步。
+
+| Board | 跟踪什么 | 链接 |
+|-------|---------|------|
+| **cnb** | 所有 issue——全局视图 | [projects/1](https://github.com/users/ApolloZhangOnGithub/projects/1) |
+| **cnb Core** | CLI、board、数据库、runtime、测试、CI、打包 | [projects/2](https://github.com/users/ApolloZhangOnGithub/projects/2) |
+| **Feishu Bridge** | 飞书 bridge、bot、TUI、消息路由 | [projects/3](https://github.com/users/ApolloZhangOnGithub/projects/3) |
+| **Mac Companion** | SwiftUI Mac 应用、iPhone 应用 | [projects/4](https://github.com/users/ApolloZhangOnGithub/projects/4) |
+| **Org Design** | 组织架构、ownership 模型、实验 | [projects/5](https://github.com/users/ApolloZhangOnGithub/projects/5) |
+
+路由规则（通过 `.github/workflows/project-sync.yml`）：
+- 每个新 issue → 全局 board
+- `infra` / `bug` / `module:runtime` → Core
+- `module:feishu` → Feishu Bridge
+- `module:mac-companion` → Mac Companion
+- `org-design` / `ownership` / `experiment` → Org Design
+
+**去哪里找什么：**
+
+| 需要 | 去哪里 |
+|------|--------|
+| 下一步做什么 | [ROADMAP.md](ROADMAP.md)——优先级和依赖关系 |
+| 跟踪某个模块 | 上面的 Project Board——按模块看板视图 |
+| 所有 open issue | [GitHub Issues](https://github.com/ApolloZhangOnGithub/cnb/issues) 或 [`issues/`](issues/) 镜像 |
+| 架构和设计 | [`docs/`](docs/index.md)——持久化产品文档 |
+| 命令和技能 | [GitHub Wiki](https://github.com/ApolloZhangOnGithub/cnb/wiki) |
+| 团队规范 | [CLAUDE.md](CLAUDE.md)——同学行为规则 |
+| 贡献规则 | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| 公开网站 | [c-n-b.space](https://c-n-b.space) |
+
+**给同学的提醒：** 继续用 `gh issue create/list/comment`。不要直接调 `gh project`——board 通过标签自动同步。
 
 <!-- section:token-efficiency -->
 ## Token 效率

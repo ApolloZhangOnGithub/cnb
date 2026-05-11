@@ -178,7 +178,12 @@ The device supervisor can use `cnb feishu ask` for short clarification, `cnb fei
 <!-- section:docs -->
 ## Docs
 
-The README is the short path. Longer product documentation lives under [`docs/`](docs/index.md):
+The README is the short path. In-depth usage and architecture docs live on the **[GitHub Wiki](https://github.com/ApolloZhangOnGithub/cnb/wiki)**:
+
+- [Commands](https://github.com/ApolloZhangOnGithub/cnb/wiki/Commands) — `/` slash commands vs terminal `cnb`, two-tier architecture
+- [Skills](https://github.com/ApolloZhangOnGithub/cnb/wiki/Skills) — skill ecosystem, registry, custom command development
+
+Longer product documentation lives under [`docs/`](docs/index.md):
 
 - [Pricing and usage](docs/pricing.md) — how cnb maps to Claude Code, Codex, credits, Fast mode, and team size.
 - [Feishu bridge](docs/feishu-bridge.md) — wake the Mac device supervisor from Feishu, manage quiet notifications, Web TUI viewing, resource handoff, and readback.
@@ -193,20 +198,30 @@ The README is the short path. Longer product documentation lives under [`docs/`]
 <!-- section:slash-commands -->
 ## Slash commands
 
-When the device supervisor tongxue is running in Claude Code:
+在 Claude Code 对话中输入 `/` 开头的命令。CNB 的命令有两层：
 
-| Command | What it does |
-|---------|-------------|
-| `/cnb-overview` | Team dashboard — who's doing what, who's stuck, who's idle |
-| `/cnb-watch <name>` | Peek at what a specific tongxue is working on |
-| `/cnb-progress` | Recent progress summary — new messages, completed tasks |
-| `/cnb-history` | Full message log |
-| `/cnb-pending` | Pending user actions with verify/retry loop |
-| `/cnb-model [menu|list|current|use profile]` | Model/provider menu or switch through direct shell execution |
-| `/cnb-model-current` | Show current model/provider profile |
-| `/cnb-model-list` | List available model/provider profiles |
-| `/cnb-update` | Update cnb to latest version |
-| `/cnb-help` | List all `/cnb-*` commands |
+| 层 | 给谁用 | 风格 | 例子 |
+|---|--------|------|------|
+| `cnb-*` | 人 → Claude | 自然语言，说人话 | `/cnb-status`、`/cnb-model 切ds` |
+| `cnbx-*` | Claude → 程序 | 纯 CLI 透传 | `/cnbx-board overview` |
+
+| 命令 | 用途 |
+|------|------|
+| `/cnb` | 全局体检 — 团队状态 + 待处理 + 系统健康 |
+| `/cnb-status` | 团队总览 — 谁在干什么、进展如何 |
+| `/cnb-watch <名字>` | 聚焦单个同学 |
+| `/cnb-pending` | 待用户处理的操作 |
+| `/cnb-history` | 消息历史 |
+| `/cnb-model` | 模型管理（查看/列出/切换） |
+| `/cnb-update` | 更新 cnb（或全工具链） |
+| `/cnb-config` | 快捷配置（effort、permission） |
+| `/cnb-supervisor` | 机器主管运行状态 |
+| `/cnb-skills` | 技能目录 — 列出 cnb 生态所有可用技能 |
+| `/cnb-help` | 自动扫描列出所有命令 |
+
+**详细说明、架构原理、自定义开发** → [GitHub Wiki](https://github.com/ApolloZhangOnGithub/cnb/wiki)
+
+> 上述命令列表由 `/cnb-help` 自动扫描生成，保持与源码同步。
 
 <!-- section:demo -->
 ## Demo
@@ -257,6 +272,41 @@ cnb doctor              # health check
 All GitHub issues are auto-synced to [`issues/`](issues/) by a GitHub Action — on every issue event and every 6 hours. This means any Claude session (including claude.ai web chat, which has no CLI tools) can read project issues by just reading files.
 
 The canonical issue tracker is <https://github.com/ApolloZhangOnGithub/cnb/issues>. Do not file cnb issues in Breadboard; Breadboard issues are only for cross-project coordination or Breadboard infrastructure.
+
+<!-- section:project-management -->
+## Project management
+
+cnb uses GitHub Issues as the single source of truth for all work. Five Project boards provide filtered views by module — tongxue create and update issues with `gh issue`, boards sync automatically.
+
+| Board | What it tracks | Link |
+|-------|---------------|------|
+| **cnb** | All issues — the global view | [projects/1](https://github.com/users/ApolloZhangOnGithub/projects/1) |
+| **cnb Core** | CLI, board, database, runtime, testing, CI, packaging | [projects/2](https://github.com/users/ApolloZhangOnGithub/projects/2) |
+| **Feishu Bridge** | Feishu bridge, bot, TUI, message routing | [projects/3](https://github.com/users/ApolloZhangOnGithub/projects/3) |
+| **Mac Companion** | SwiftUI Mac app, iPhone app | [projects/4](https://github.com/users/ApolloZhangOnGithub/projects/4) |
+| **Org Design** | Organization architecture, ownership model, experiments | [projects/5](https://github.com/users/ApolloZhangOnGithub/projects/5) |
+
+Routing rules (via `.github/workflows/project-sync.yml`):
+- Every new issue → global board
+- `infra` / `bug` / `module:runtime` → Core
+- `module:feishu` → Feishu Bridge
+- `module:mac-companion` → Mac Companion
+- `org-design` / `ownership` / `experiment` → Org Design
+
+**Where to find what:**
+
+| Need | Where |
+|------|-------|
+| What to work on next | [ROADMAP.md](ROADMAP.md) — priorities and dependencies |
+| Track a specific module | Project board above — kanban view by module |
+| All open issues | [GitHub Issues](https://github.com/ApolloZhangOnGithub/cnb/issues) or [`issues/`](issues/) mirror |
+| Architecture and design | [`docs/`](docs/index.md) — durable product docs |
+| Commands and skills | [GitHub Wiki](https://github.com/ApolloZhangOnGithub/cnb/wiki) |
+| Team conventions | [CLAUDE.md](CLAUDE.md) — rules for tongxue |
+| Contribution rules | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Public site | [c-n-b.space](https://c-n-b.space) |
+
+**For tongxue:** keep using `gh issue create/list/comment`. Never call `gh project` directly — boards sync automatically from labels.
 
 <!-- section:token-efficiency -->
 ## Token efficiency

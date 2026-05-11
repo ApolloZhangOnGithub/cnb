@@ -34,6 +34,13 @@ struct FeishuSettingsView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
+
+            Section {
+                LabeledContent("版本", value: AppBuildInfo.shared.displayVersion)
+                LabeledContent("构建", value: AppBuildInfo.shared.buildDetail)
+            } header: {
+                Text("关于 CNB Companion")
+            }
         }
         .formStyle(.grouped)
         .padding(24)
