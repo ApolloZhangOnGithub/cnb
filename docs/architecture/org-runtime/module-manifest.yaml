@@ -1,0 +1,204 @@
+version: 1
+architecture: cnb-org-runtime
+summary: >
+  Local-first AI organization runtime. All organization facts change through
+  command -> policy -> event -> projection. Runtime, adapters, and CLI are
+  boundaries around the organization kernel.
+
+layers:
+  bin:
+    rule: Process shims only.
+    files:
+      bin/cnb:
+        purpose: Main executable shim.
+        contains:
+          - exec python module or installed console entry
+        forbidden:
+          - business logic
+          - sqlite access
+          - tmux control
+      bin/board:
+        purpose: Legacy compatibility shim.
+        contains:
+          - old argument translation
+          - compatibility warnings
+        forbidden:
+          - new domain behavior
+
+  cli:
+    path: lib/cnb/cli
+    rule: Parse args, submit commands, render output. No policy or persistence.
+    files:
+      main.py:
+        purpose: Top-level CLI entrypoint.
+        public:
+          - main(argv=None) -> int
+      client.py:
+        purpose: Submit commands/queries to daemon or local kernel.
+        public:
+          - CommandClient.submit(command)
+          - CommandClient.query(query)
+      org.py:
+        purpose: Organization health, brief, actor/scope listing commands.
+      owner.py:
+        purpose: Ownership, route, explain, transfer, health, brief commands.
+      obligation.py:
+        purpose: Obligation lifecycle commands.
+      task.py:
+        purpose: Task lifecycle commands.
+      runtime.py:
+        purpose: Runtime start/stop/list/capture commands.
+
+  daemon:
+    path: lib/cnb/daemon
+    rule: Local API, single writer, capability auth, request routing.
+    files:
+      main.py:
+        purpose: cnbd entrypoint and lifecycle.
+      ipc.py:
+        purpose: Unix socket/local HTTP protocol.
+      auth.py:
+        purpose: Capability token authentication.
+      server.py:
+        purpose: Connect IPC requests to OrgKernel.
+
+  org:
+    path: lib/cnb/org
+    rule: Domain model and policies. Pure Python where possible.
+    files:
+      kernel.py:
+        purpose: Single entrypoint for commands and queries.
+      commands.py:
+        purpose: Command envelope and typed payloads.
+      events.py:
+        purpose: Event definitions and serialization.
+      actors.py:
+        purpose: Durable actor identity lifecycle.
+      roles.py:
+        purpose: Role constants and default capabilities.
+      capabilities.py:
+        purpose: Scoped capability evaluation.
+      sessions.py:
+        purpose: SessionRun domain state from observations.
+      scopes.py:
+        purpose: Scope definitions, patterns, hierarchy, validation.
+      contracts.py:
+        purpose: Scope completion, verification, review, approval rules.
+      ownership.py:
+        purpose: Ownership assignment lifecycle.
+      routing.py:
+        purpose: Signal to explainable RouteDecision.
+      obligations.py:
+        purpose: Obligation lifecycle.
+      tasks.py:
+        purpose: Task lifecycle and scoped completion.
+      handoff.py:
+        purpose: Ownership transfer continuity.
+      policies.py:
+        purpose: Authorization and domain policy decisions.
+      health.py:
+        purpose: Organization and ownership health analysis.
+      memory.py:
+        purpose: Owner/task/project/handoff brief generation.
+      approvals.py:
+        purpose: High-risk approval lifecycle.
+
+  store:
+    path: lib/cnb/store
+    rule: Persistence only. No domain policy.
+    files:
+      unit_of_work.py:
+        purpose: Transaction boundary.
+      event_store.py:
+        purpose: Append/read durable events.
+      command_store.py:
+        purpose: Command log and idempotency.
+      projections.py:
+        purpose: Apply/rebuild current-state projections.
+      queries.py:
+        purpose: Read-only projection queries.
+      migrations.py:
+        purpose: Schema and legacy data migration.
+
+  scheduler:
+    path: lib/cnb/scheduler
+    rule: Durable jobs and leases.
+    files:
+      jobs.py:
+        purpose: Job model and payload validation.
+      worker.py:
+        purpose: Claim and execute jobs.
+      leases.py:
+        purpose: Lease claim and expiry.
+
+  runtime:
+    path: lib/cnb/runtime
+    rule: Process control and observation only.
+    files:
+      backend.py:
+        purpose: Abstract runtime backend interface.
+      tmux_backend.py:
+        purpose: Concrete tmux implementation.
+      monitor.py:
+        purpose: Convert backend snapshots to observation events.
+      protection.py:
+        purpose: Runtime stop/restart protection integration.
+
+  adapters:
+    path: lib/cnb/adapters
+    rule: External systems as signal/notification translators only.
+    files:
+      github.py:
+        purpose: GitHub issue/PR/CI signal adapter.
+      feishu.py:
+        purpose: Feishu/Lark message and approval adapter.
+      sync_gateway.py:
+        purpose: Publish main event store and projections.
+      web.py:
+        purpose: Web/Mac companion API boundary.
+
+  legacy:
+    path: lib/cnb/legacy
+    rule: Compatibility only. Must shrink over time.
+    files:
+      board_compat.py:
+        purpose: Translate old board commands to new command API.
+      migrations.py:
+        purpose: Migrate old board data into new events/projections.
+
+concept_owners:
+  actor_identity: lib/cnb/org/actors.py
+  session_state: lib/cnb/org/sessions.py
+  runtime_process_control: lib/cnb/runtime/backend.py
+  tmux_implementation: lib/cnb/runtime/tmux_backend.py
+  role_defaults: lib/cnb/org/roles.py
+  capability_checks: lib/cnb/org/capabilities.py
+  command_authorization: lib/cnb/org/policies.py
+  scope_definitions: lib/cnb/org/scopes.py
+  contracts: lib/cnb/org/contracts.py
+  ownership_lifecycle: lib/cnb/org/ownership.py
+  routing_decisions: lib/cnb/org/routing.py
+  obligations: lib/cnb/org/obligations.py
+  tasks: lib/cnb/org/tasks.py
+  handoff: lib/cnb/org/handoff.py
+  health: lib/cnb/org/health.py
+  briefs: lib/cnb/org/memory.py
+  events: lib/cnb/org/events.py
+  event_persistence: lib/cnb/store/event_store.py
+  projections: lib/cnb/store/projections.py
+  jobs: lib/cnb/scheduler/jobs.py
+  job_execution: lib/cnb/scheduler/worker.py
+  external_github: lib/cnb/adapters/github.py
+  external_feishu: lib/cnb/adapters/feishu.py
+
+forbidden_patterns:
+  - cli imports sqlite directly
+  - adapter writes projection tables
+  - runtime backend checks ownership state
+  - store layer decides domain policy
+  - routing sends notifications directly
+  - task service runs shell verification directly
+  - ownership service calculates issue keyword route scores
+  - handoff service mutates tmux sessions
+  - health service appends events
+  - brief service invents facts not present in events/projections
