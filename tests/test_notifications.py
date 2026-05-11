@@ -19,7 +19,7 @@ class TestTimeAnnouncer:
 
         class FakeDT(datetime):
             @classmethod
-            def now(cls):
+            def now(cls, tz=None):
                 return fake_now
 
         return FakeDT

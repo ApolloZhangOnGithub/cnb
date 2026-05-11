@@ -241,7 +241,7 @@ class TestTmuxStartSession:
             result = b.start_session("cnb", "alice", Path("/project"), "claude --name alice")
         assert result == "cnb-alice"
         commands = [cmd for cmd, _ in calls]
-        inputs = [kwargs.get("input") for _, kwargs in calls if "input" in kwargs]
+        inputs = [kwargs["input"] for _, kwargs in calls if "input" in kwargs]
         assert ["tmux", "new-session", "-d", "-s", "cnb-alice", "-x", "200", "-y", "50"] in commands
         assert any("cd /project && export CNB_PROJECT=/project" in item for item in inputs)
         assert "claude --name alice" in inputs

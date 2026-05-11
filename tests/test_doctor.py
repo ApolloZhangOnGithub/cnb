@@ -263,7 +263,7 @@ class TestCheckPython:
     def test_old_python_fails(self, capsys):
         from collections import namedtuple
 
-        FakeVI = namedtuple("version_info", ["major", "minor", "micro", "releaselevel", "serial"])
+        FakeVI = namedtuple("version_info", ["major", "minor", "micro", "releaselevel", "serial"])  # type: ignore[name-match]
         fake_info = FakeVI(3, 9, 0, "final", 0)
         with patch.object(_doctor.sys, "version_info", fake_info):
             assert check_python() is False
