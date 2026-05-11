@@ -7,8 +7,10 @@ All tests use tmp_path to avoid touching the real ~/.cnb/.
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -541,6 +543,71 @@ class TestCmdProjectsScan:
         payload = json.loads(result.stdout)
         assert [project["name"] for project in payload["projects"]] == ["app"]
         assert payload["projects"][0]["configured_sessions"] == ["alice"]
+
+    def test_bin_cnb_projects_scan_registers_board_projects_without_home_pollution(self, tmp_path):
+        workspace = Path(tempfile.mkdtemp(prefix="cnb-projects-cli-"))
+        try:
+            fake_bin = workspace / "fake-bin"
+            fake_bin.mkdir()
+            for name in ("git", "tmux"):
+                tool = fake_bin / name
+                tool.write_text("#!/usr/bin/env bash\nexit 1\n")
+                tool.chmod(0o755)
+
+            root = workspace / "root"
+            board_proj = root / "board-app"
+            marker_proj = root / "marker-app"
+            legacy_proj = root / "legacy-app"
+            (board_proj / ".cnb").mkdir(parents=True)
+            (marker_proj / ".cnb").mkdir(parents=True)
+            (legacy_proj / ".claudes").mkdir(parents=True)
+            (board_proj / ".cnb" / "board.db").touch()
+            (legacy_proj / ".claudes" / "board.db").touch()
+            (board_proj / ".cnb" / "config.toml").write_text('prefix = "cc-board"\nsessions = ["alice"]\n')
+
+            home = tmp_path / "isolated-home"
+            env = {
+                **os.environ,
+                "HOME": str(home),
+                "VIRTUAL_ENV": str(tmp_path / "venv"),
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            }
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(Path(__file__).parent.parent / "bin" / "cnb"),
+                    "projects",
+                    "scan",
+                    "--root",
+                    str(root),
+                    "--max-depth",
+                    "1",
+                    "--mode",
+                    "marker",
+                    "--no-legacy",
+                    "--register",
+                    "--json",
+                ],
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=env,
+            )
+
+            assert result.returncode == 0, result.stderr
+            payload = json.loads(result.stdout)
+            assert [project["name"] for project in payload["projects"]] == ["board-app", "marker-app"]
+            marker = next(project for project in payload["projects"] if project["name"] == "marker-app")
+            assert marker["has_board"] is False
+            assert marker["discovery"] == "marker"
+
+            registry_path = home / ".cnb" / "projects.json"
+            registered = json.loads(registry_path.read_text())["projects"]
+            assert [project["name"] for project in registered] == ["board-app"]
+            assert registered[0]["path"] == str(board_proj.resolve())
+        finally:
+            shutil.rmtree(workspace, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

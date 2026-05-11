@@ -207,6 +207,14 @@ class TestSystemPrompt:
         assert "engine: codex" in r.stdout
         assert "BYPASS=1" in r.stdout
 
+    def test_codex_agent_from_swarm_env_when_cnb_agent_unset(self, fake_project):
+        r = _run(fake_project, env={"SWARM_AGENT": "codex"})
+        assert r.returncode == 0
+        assert "engine: codex" in r.stdout
+        assert "BYPASS=1" in r.stdout
+        assert "APPROVAL=" not in r.stdout
+        assert "SANDBOX=" not in r.stdout
+
 
 class TestSlashCommands:
     def test_slash_commands_created(self, fake_project):
