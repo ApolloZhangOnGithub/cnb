@@ -1998,6 +1998,163 @@ class TestRouting:
         assert "caffeine_enabled=false" in out
 
 
+class TestSupervisorPromptRefresh:
+    """Tests for supervisor prompt hash tracking and safe restart."""
+
+    def test_prompt_hash_is_deterministic(self, tmp_path):
+        cfg = _cfg(tmp_path, pilot_name="test-sv")
+        h1 = feishu_bridge.get_current_prompt_hash(cfg)
+        h2 = feishu_bridge.get_current_prompt_hash(cfg)
+        assert h1 == h2
+        assert len(h1) == 16
+        assert all(c in "0123456789abcdef" for c in h1)
+
+    def test_prompt_hash_changes_with_config(self, tmp_path):
+        cfg1 = _cfg(tmp_path, pilot_name="test-sv")
+        cfg2 = _cfg(tmp_path, pilot_name="other-name")
+        h1 = feishu_bridge.get_current_prompt_hash(cfg1)
+        h2 = feishu_bridge.get_current_prompt_hash(cfg2)
+        assert h1 != h2
+
+    def test_describe_prompt_freshness_shows_latest_when_match(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        h = feishu_bridge.get_current_prompt_hash(cfg)
+        feishu_bridge._prompt_hash_path(cfg).write_text(f"{h}\n")
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        result = feishu_bridge.describe_prompt_freshness(cfg)
+        assert "最新" in result
+        assert h in result
+
+    def test_describe_prompt_freshness_shows_stale_when_mismatch(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        feishu_bridge._prompt_hash_path(cfg).write_text("deadbeef00000000\n")
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        current = feishu_bridge.get_current_prompt_hash(cfg)
+        result = feishu_bridge.describe_prompt_freshness(cfg)
+        assert "过期" in result
+        assert current in result
+        assert "deadbeef00000000" in result
+
+    def test_describe_prompt_freshness_shows_not_running(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+
+        result = feishu_bridge.describe_prompt_freshness(cfg)
+        assert "未运行" in result
+
+    def test_print_status_includes_prompt_freshness(self, tmp_path, monkeypatch, capsys):
+        cfg = _cfg(tmp_path)
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        h = feishu_bridge.get_current_prompt_hash(cfg)
+        feishu_bridge._prompt_hash_path(cfg).write_text(f"{h}\n")
+
+        feishu_bridge.print_status(cfg)
+        out = capsys.readouterr().out
+        assert "主管提示词" in out
+        assert h in out
+
+    def test_restart_supervisor_refuses_with_active_requests(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        active_items = [
+            {
+                "message_id": "om_1",
+                "chat_id": "oc_a",
+                "sender_id": "ou_u",
+                "started_at": "2026-01-01 00:00:00",
+                "age_seconds": 60,
+            },
+        ]
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(feishu_bridge, "open_activity_items", lambda cfg: active_items)
+
+        result = feishu_bridge.restart_supervisor(cfg)
+        assert result.handled is False
+        assert "om_1" in result.detail
+        assert "--force" in result.detail
+
+    def test_restart_supervisor_force_works_with_active_requests(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, pilot_tmux="cnb-pilot-test")
+        active_items = [
+            {
+                "message_id": "om_1",
+                "chat_id": "oc_a",
+                "sender_id": "ou_u",
+                "started_at": "2026-01-01 00:00:00",
+                "age_seconds": 60,
+            },
+        ]
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(feishu_bridge, "open_activity_items", lambda cfg: active_items)
+
+        start_called = []
+        monkeypatch.setattr(
+            feishu_bridge,
+            "start_pilot_if_needed",
+            lambda cfg: (start_called.append(True), feishu_bridge.BridgeResult(True, "started"))[1],
+        )
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+
+        result = feishu_bridge.restart_supervisor(cfg, force=True)
+        assert result.handled is True
+        assert "restarted" in result.detail
+        assert len(start_called) == 1
+
+    def test_restart_supervisor_reports_when_not_running(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+
+        result = feishu_bridge.restart_supervisor(cfg)
+        assert result.handled is False
+        assert "not running" in result.detail
+        assert "cnb feishu start" in result.detail
+
+    def test_start_pilot_if_needed_persists_hash(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, pilot_tmux="cnb-pilot-hash", startup_wait_seconds=0)
+        hash_path = feishu_bridge._prompt_hash_path(cfg)
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda cmd, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+        )
+
+        result = feishu_bridge.start_pilot_if_needed(cfg)
+        assert result.handled is True
+        assert hash_path.exists()
+        stored = feishu_bridge.get_stored_prompt_hash(cfg)
+        assert stored == feishu_bridge.get_current_prompt_hash(cfg)
+
+    def test_restart_supervisor_already_fresh_still_works(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, pilot_tmux="cnb-pilot-fresh")
+        h = feishu_bridge.get_current_prompt_hash(cfg)
+        feishu_bridge._prompt_hash_path(cfg).write_text(f"{h}\n")
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(feishu_bridge, "open_activity_items", lambda cfg: [])
+
+        start_called = []
+        monkeypatch.setattr(
+            feishu_bridge,
+            "start_pilot_if_needed",
+            lambda cfg: (start_called.append(True), feishu_bridge.BridgeResult(True, "started"))[1],
+        )
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+
+        result = feishu_bridge.restart_supervisor(cfg)
+        assert result.handled is True
+        assert "无需重启" in result.detail
+        assert len(start_called) == 1
+
+
 class TestCli:
     def test_handle_event_cli_dry_run(self, tmp_path, capsys):
         path = tmp_path / "config.toml"

@@ -1211,6 +1211,7 @@ def describe_activity(cfg: FeishuBridgeConfig) -> str:
     return "\n".join(
         (
             f"- {role_label(cfg)}：{describe_pilot_activity(cfg)}",
+            f"- {describe_prompt_freshness(cfg)}",
             f"- 飞书请求：{describe_request_activity(cfg)}",
             f"- CNB tmux 运行面：{describe_cnb_tmux_sessions(cfg)}",
             f"- 团队工作面：{describe_team_activity(cfg)}",
@@ -4011,6 +4012,61 @@ def stop_watch_viewer(cfg: FeishuBridgeConfig) -> BridgeResult:
     return BridgeResult(False, f"failed to stop {cfg.watch_tmux}: {detail}")
 
 
+def restart_supervisor(cfg: FeishuBridgeConfig, *, force: bool = False) -> BridgeResult:
+    if not has_session(cfg.pilot_tmux):
+        return BridgeResult(
+            False,
+            f"{cfg.pilot_tmux} is not running; use 'cnb feishu start' to start",
+        )
+
+    if not force:
+        open_items = open_activity_items(cfg)
+        if open_items:
+            count = len(open_items)
+            items_summary = ", ".join(
+                f"{item['message_id']} ({_format_duration(item['age_seconds'])})" for item in open_items[:3]
+            )
+            if count > 3:
+                items_summary += f" 等{count}个"
+            return BridgeResult(
+                False,
+                f"{role_label(cfg)} 正在处理 {count} 个飞书请求: {items_summary}; "
+                f"使用 --force 强制重启，但可能中断进行中的工作",
+            )
+
+    current_hash = get_current_prompt_hash(cfg)
+    stored_hash = get_stored_prompt_hash(cfg)
+    if stored_hash == current_hash:
+        freshness_note = " (提示词已是最新，无需重启)"
+    else:
+        freshness_note = f" (更新提示词: {stored_hash} -> {current_hash})"
+
+    try:
+        result = subprocess.run(
+            ["tmux", "kill-session", "-t", cfg.pilot_tmux],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return BridgeResult(False, f"failed to stop {cfg.pilot_tmux}: {exc}")
+
+    if result.returncode != 0:
+        detail = _snippet(result.stderr) or _snippet(result.stdout) or f"exit {result.returncode}"
+        return BridgeResult(False, f"failed to stop {cfg.pilot_tmux}: {detail}")
+
+    start_result = start_pilot_if_needed(cfg)
+    if start_result.handled:
+        return BridgeResult(
+            True,
+            f"{cfg.pilot_tmux} has been restarted{freshness_note}",
+        )
+    return BridgeResult(
+        False,
+        f"{cfg.pilot_tmux} stopped but failed to restart: {start_result.detail}",
+    )
+
+
 def print_status(cfg: FeishuBridgeConfig) -> None:
     print(f"配置文件: {cfg.config_path}")
     print(f"启用: {'是' if cfg.enabled else '否'}")
@@ -4119,6 +4175,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("start", help="start the bridge listener in tmux")
     sub.add_parser("stop", help="stop the bridge listener tmux session")
+    restart_sv = sub.add_parser(
+        "restart-supervisor", help="safely restart the supervisor to pick up an updated system prompt"
+    )
+    restart_sv.add_argument(
+        "--force", action="store_true", help="restart even while the supervisor is actively working"
+    )
     sub.add_parser("activity", help="print the current device supervisor TUI screen")
     sub.add_parser("tui", help="print the device supervisor TUI snapshot")
     sub.add_parser("watch", help="start the read-only Web TUI viewer")
@@ -4179,6 +4241,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.handled else 1
     if args.cmd == "stop":
         result = stop_bridge_daemon(cfg)
+        print(result.detail)
+        return 0 if result.handled else 1
+    if args.cmd == "restart-supervisor":
+        result = restart_supervisor(cfg, force=args.force)
         print(result.detail)
         return 0 if result.handled else 1
     if args.cmd == "activity":
