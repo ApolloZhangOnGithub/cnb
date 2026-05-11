@@ -80,24 +80,8 @@ def _find_project_settings() -> Path | None:
     return None
 
 
-def _switch(env: ClaudesEnv, profile_name: str, scope: str) -> None:
-    profiles = _load_profiles(env)
-    resolved = _resolve_profile(profiles, profile_name)
-    if not resolved:
-        print(f"ERROR: 未找到 profile '{profile_name}'")
-        print(f"可用: {', '.join(profiles.keys())}")
-        raise SystemExit(1)
-
-    profile = profiles[resolved]
-
-    if scope == "project":
-        settings_path = _find_project_settings()
-        if not settings_path:
-            print("ERROR: 未找到项目级 .claude/settings.json")
-            raise SystemExit(1)
-    else:
-        settings_path = Path.home() / ".claude" / "settings.json"
-
+def _update_settings(settings_path: Path, profile: dict[str, Any]) -> dict[str, Any]:
+    """Update a settings JSON file with the profile's env and permissions."""
     settings = {}
     if settings_path.exists():
         with open(settings_path) as f:
@@ -125,9 +109,40 @@ def _switch(env: ClaudesEnv, profile_name: str, scope: str) -> None:
         json.dump(settings, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
+    return settings
+
+
+def _switch(env: ClaudesEnv, profile_name: str, scope: str) -> None:
+    profiles = _load_profiles(env)
+    resolved = _resolve_profile(profiles, profile_name)
+    if not resolved:
+        print(f"ERROR: 未找到 profile '{profile_name}'")
+        print(f"可用: {', '.join(profiles.keys())}")
+        raise SystemExit(1)
+
+    profile = profiles[resolved]
+
+    if scope == "project":
+        settings_path = _find_project_settings()
+        if not settings_path:
+            print("ERROR: 未找到项目级 .claude/settings.json")
+            raise SystemExit(1)
+    else:
+        settings_path = Path.home() / ".claude" / "settings.json"
+
+    settings = _update_settings(settings_path, profile)
+
+    local_path = settings_path.parent / "settings.local.json"
+    if local_path.exists():
+        _update_settings(local_path, profile)
+
+    current_env = settings.get("env", {})
+    perms = profile.get("permissions")
     display = profile.get("name", resolved)
     print(f"OK 已切换到 [{display}]")
     print(f"   配置: {settings_path}")
+    if local_path.exists():
+        print(f"         {local_path}")
     for k in PROVIDER_ENV_KEYS:
         if k in current_env:
             v = current_env[k]
@@ -135,7 +150,7 @@ def _switch(env: ClaudesEnv, profile_name: str, scope: str) -> None:
                 v = v[:8] + "..." if len(v) > 8 else "***"
             print(f"   {k}={v}")
     if perms:
-        print(f"   permissions: {merged}")
+        print(f"   permissions: {settings.get('permissions', {})}")
     if not profile.get("env"):
         print("   已清空 provider 变量 (恢复 Anthropic 原生)")
     print("\n重启 Claude Code 后生效。")
@@ -146,19 +161,31 @@ def _show_current() -> None:
         ("全局", Path.home() / ".claude" / "settings.json"),
         ("项目", _find_project_settings()),
     ]:
-        if path and path.exists():
-            with open(path) as f:
-                env_vars = json.load(f).get("env", {})
-            provider_vars = {k: v for k, v in env_vars.items() if k in PROVIDER_ENV_KEYS}
-            if provider_vars:
-                print(f"{label} ({path}):")
-                for k, v in provider_vars.items():
-                    if "KEY" in k or "TOKEN" in k:
-                        v = v[:8] + "..." if len(v) > 8 else "***"
-                    print(f"  {k}={v}")
-            else:
+        if not path or not path.exists():
+            if label == "全局":
                 print(f"{label}: 默认 (Anthropic 原生)")
-        elif label == "全局":
+            continue
+
+        with open(path) as f:
+            env_vars = json.load(f).get("env", {})
+        provider_vars = {k: v for k, v in env_vars.items() if k in PROVIDER_ENV_KEYS}
+
+        local_path = path.parent / "settings.local.json"
+        local_vars = {}
+        if local_path.exists():
+            with open(local_path) as f:
+                local_env = json.load(f).get("env", {})
+            local_vars = {k: v for k, v in local_env.items() if k in PROVIDER_ENV_KEYS}
+
+        effective = {**provider_vars, **local_vars}
+        if effective:
+            print(f"{label} ({path}):")
+            for k, v in effective.items():
+                if "KEY" in k or "TOKEN" in k:
+                    v = v[:8] + "..." if len(v) > 8 else "***"
+                src = " (local override)" if k in local_vars else ""
+                print(f"  {k}={v}{src}")
+        else:
             print(f"{label}: 默认 (Anthropic 原生)")
 
 
