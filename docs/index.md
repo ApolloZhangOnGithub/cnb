@@ -1,46 +1,37 @@
-# cnb Docs
+# cnb Documentation
 
-cnb documentation should work like product documentation, not like a pile of notes. Keep the README short, then move durable operating details into docs pages with stable links.
+## Get started
 
-## Start Here
+| | |
+|---|---|
+| [Getting started](getting-started.md) | Install, first team, first task |
+| [Commands reference](commands.md) | CLI commands and slash commands |
+| [Pricing and usage](pricing.md) | Cost mapping for Claude Code, Codex, credits |
 
-| Page | Purpose |
-|------|---------|
-| [Website](https://c-n-b.space) | Public GitHub Pages entry for first-time visitors. |
-| [README](../README.md) | Product overview, install, quick start, and the shortest command reference. |
-| [Pricing and usage](pricing.md) | How cnb usage maps to Claude Code, Codex, credits, Fast mode, and team size. |
-| [Feishu bridge](feishu-bridge.md) | Wake the Mac device supervisor from Feishu, quiet notifications, Web TUI viewing, resource handoff, and readback boundaries. |
-| [Device chief and multi-device supervisors](device-chief-and-multidevice-supervisors.md) | Cross-device supervisor roles, Feishu group handshake, leases, state boundaries, and watchdog plan. |
-| [Mac companion and Island](terminal-supervisor-island.md) | Mac companion first, optional iPhone Live Activity bridge second. |
-| [Mac team host capacity](mac-team-host-capacity.md) | Planning assumptions and benchmark plan for running many cnb team instances on one high-memory Mac. |
-| [Roadmap](../ROADMAP.md) | Product direction and active development themes. |
-| [Contributing](../CONTRIBUTING.md) | Contributor workflow, style, and review expectations. |
-| [Package publishing](package-publishing.md) | npm release, dist-tags, and GitHub Packages visibility rules. |
-| [Website frontend](website-frontend.md) | Static GitHub Pages source, local preview, and layout verification. |
-| [Custom domain operations](custom-domain.md) | DNS records and GoDaddy helper for the public site domain. |
-| [Tongxue avatar generation](avatar-generation.md) | Safe provider choices and prompt rules for AI-generated tongxue avatars. |
+## Guides
 
-## Concepts
+| | |
+|---|---|
+| [Feishu bridge](feishu-bridge.md) | Wake the Mac supervisor from Feishu, Web TUI, quiet notifications |
+| [Codex engine](codex-engine.md) | Launch cnb with Codex, permission modes, smoke testing |
+| [Model management](cnb-model.md) | Switch LLM providers and model profiles |
 
-| Page | Purpose |
-|------|---------|
-| [Ownership autonomy](design-ownership-autonomy.md) | Why cnb treats long-lived module ownership as the core unit of work. |
-| [Codex engine notes](codex-engine.md) | How cnb launches Codex, including permission mode and smoke testing. |
-| [CNB sync gateway](cnb-sync-gateway.md) | Small event-log gateway for companion clients and future sync/relay paths. |
-| [Contribution wall](contribution-wall.md) | Broad contribution signals beyond GitHub's commit-only Contributors panel. |
+## Project
 
-## Documentation System
+| | |
+|---|---|
+| [Roadmap](../ROADMAP.md) | Priorities and development direction |
+| [Contributing](../CONTRIBUTING.md) | Issue workflow, code style, PR process |
+| [Project boards](../README.md#project-management) | GitHub Projects for tracking work |
 
-Use this information architecture as the docs grow:
+## Developer docs
 
-| Section | What belongs here |
-|---------|-------------------|
-| Getting Started | Installation, quick start, first team, first task. |
-| Using cnb | Board commands, slash commands, swarm control, shutdown flow. |
-| Concepts | Tongxue model, ownership, task lifecycle, inbox, dispatcher, security model. |
-| Configuration | `.claudes/config.toml`, engines, roles, permissions, registries, hooks. |
-| Operations | Health checks, usage/cost control, recovery, migrations, upgrades. |
-| Reference | CLI command reference, schema, environment variables, file layout. |
-| Development | Roadmap, architecture notes, contributing, release process. |
+Internal architecture, design decisions, operations, and research live in [`dev/`](dev/):
 
-This mirrors the useful shape of OpenAI and Anthropic docs: a short overview, task-oriented guides, conceptual pages, configuration reference, operational guidance, and explicit pricing/usage notes.
+| | |
+|---|---|
+| [Developer index](dev/index.md) | Full listing of internal docs |
+| [Architecture](dev/architecture-reconstruction.md) | Deep architectural analysis |
+| [Ownership design](dev/design-ownership-autonomy.md) | Self-managing module owners |
+| [Device chief](dev/device-chief-and-multidevice-supervisors.md) | Multi-device coordination |
+| [Package publishing](dev/package-publishing.md) | npm release and dist-tag rules |
