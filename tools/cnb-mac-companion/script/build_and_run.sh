@@ -44,6 +44,13 @@ if [[ -d "$BUILD_RESOURCE_BUNDLE" ]]; then
   cp -R "$BUILD_RESOURCE_BUNDLE" "$APP_BUNDLE/$RESOURCE_BUNDLE_NAME"
 fi
 
+ICON_SRC="$ROOT_DIR/Sources/CNBMacCompanion/Resources/AppIcon.icns"
+if [[ -f "$ICON_SRC" ]]; then
+  APP_RESOURCES="$APP_CONTENTS/Resources"
+  mkdir -p "$APP_RESOURCES"
+  cp "$ICON_SRC" "$APP_RESOURCES/AppIcon.icns"
+fi
+
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -74,6 +81,8 @@ cat >"$INFO_PLIST" <<PLIST
     <key>NSAllowsLocalNetworking</key>
     <true/>
   </dict>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>

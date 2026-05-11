@@ -1,47 +1,20 @@
 # cnb Wiki
 
-cnb (claude-nb) — project ownership layer for LLM teams.
-
-## Start Here
-
-- **[Commands](Commands)** ([中文](Commands‐zh)) — Slash commands vs terminal `cnb`, two-tier architecture
-- **[Skills](Skills)** ([中文](Skills‐zh)) — Skill ecosystem, registry, custom command development
-- [Getting Started](Getting-Started) — Install, first run, engines
+> **Canonical documentation lives in [`docs/`](https://github.com/ApolloZhangOnGithub/cnb/tree/master/docs).** This wiki mirrors selected pages for GitHub's wiki tab. When in doubt, trust the repo docs.
 
 ## Pages
 
-| Page | Content |
-|------|---------|
-| [Commands](Commands) ([中文](Commands‐zh)) | Slash commands vs terminal, cnb/cnbx two-tier architecture |
-| [Skills](Skills) ([中文](Skills‐zh)) | Skill ecosystem, registry, custom command development |
-| [Getting Started](Getting-Started) | Install, first run, engines, and command basics |
-| [Architecture](Architecture) | Board, dispatcher, tmux, and local state |
-| [Roadmap](Roadmap) | Current priorities and active issue map |
-| [Capture Protocol](Capture-Protocol) | Browser/app capture payloads and artifacts |
-| [Codex Engine](Codex-Engine) | Codex launch forms and permission mode |
-| [Project Discovery](Project-Discovery) | `cnb projects scan` and marker audit |
-| [Pricing and Usage](Pricing-and-Usage) | How cnb maps to engine usage and cost controls |
-| [Registry](Registry) | Contributor identity chain |
-| [Encrypted Mailbox](Encrypted-Mailbox) | Encrypted private messaging |
-| [The Bitter Lesson](The-Bitter-Lesson) | Design philosophy |
-| [Fun Facts](Fun-Facts) | About the project name |
+- **[Commands](Commands)** ([中文](Commands‐zh)) — Slash commands vs terminal `cnb`
+- **[Skills](Skills)** ([中文](Skills‐zh)) — Skill ecosystem and custom command development
 
-## Quick Start
+## Main docs
 
-```bash
-npm install -g claude-nb
-
-# Activate governance from an existing Claude Code session
-claude
-/cnb
-
-# Or launch a local team from a project
-cd your-project
-cnb
-```
-
-## Links
-
-- [Source code](https://github.com/ApolloZhangOnGithub/cnb)
-- [Issues](https://github.com/ApolloZhangOnGithub/cnb/issues)
-- [Contributing](https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md)
+| Need | Link |
+|------|------|
+| Get started | [docs/getting-started.md](https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/getting-started.md) |
+| All commands | [docs/commands.md](https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/commands.md) |
+| Feishu bridge | [docs/feishu-bridge.md](https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/feishu-bridge.md) |
+| Pricing | [docs/pricing.md](https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/pricing.md) |
+| Architecture | [docs/dev/](https://github.com/ApolloZhangOnGithub/cnb/tree/master/docs/dev) |
+| Contributing | [CONTRIBUTING.md](https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md) |
+| Roadmap | [ROADMAP.md](https://github.com/ApolloZhangOnGithub/cnb/blob/master/ROADMAP.md) |

@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.5.52-dev (unreleased)
+
+### Features
+
+- **Project boards** — Added 5 GitHub Project boards (cnb, Core, Feishu Bridge, Mac Companion, Org Design) with auto-sync workflow routing issues by label.
+- **Mac Companion version management** — Added VERSION file, build_meta.json, version display in settings, externalized build to `~/Applications/` and `~/.cnb/build-cache/`.
+- **Mac Companion app icon** — Generated AppIcon.icns from project favicon and embedded it in the app bundle.
+- **`/cnb-supervisor` command** — New slash command to check device supervisor runtime status.
+
+### Documentation
+
+- **README rewrite** — Rewrote both READMEs from 400+ lines to ~80 lines as a landing pad.
+- **Docs reorganization** — Separated user docs (docs/) from internal docs (docs/dev/) and research (docs/dev/research/).
+- **New user docs** — Added getting-started.md and commands.md.
+- **CONTRIBUTING fix** — Updated demo instance paths from legacy `.claudes/` to `.cnb/`.
+
+## 0.5.51-dev (unreleased)
+
+### Features
+
+- **Command codebase cleanup** — Deduplicated, unified, and split cnb slash commands into two-tier architecture (cnb-* for humans, cnbx-* for programs).
+- **Model settings sync** — Also sync settings.local.json when switching LLM provider.
+
+## 0.5.50-dev (unreleased)
+
+### Features
+
+- **Feishu bridge prompt freshness** — Added prompt hash detection and safe supervisor restart on stale prompts.
+- **Process pressure report** — Added read-only Mac resource pressure monitoring.
+- **Model downgrade surfacing** — Surface automatic model downgrade and token budget state.
+
+### Bug Fixes
+
+- **Shutdown preview** — Made dry-run shutdown unmistakably different from real stop.
+- **Feishu bridge fail-closed** — Fail closed when a low-tier model skips a required Feishu reply.
+- **Dirty shutdown guard** — Added checkpoint guard for dirty shutdown handoffs.
+
 ## 0.5.49-dev (unreleased)
 
 ### Bug Fixes
