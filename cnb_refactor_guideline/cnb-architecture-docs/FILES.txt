@@ -1,0 +1,14 @@
+docs/adr/0001-org-runtime-kernel.md
+docs/adr/0002-ownership-as-accountability-contract.md
+docs/adr/0003-runtime-is-not-truth.md
+docs/architecture/org-runtime/00-principles.md
+docs/architecture/org-runtime/01-domain-model.md
+docs/architecture/org-runtime/02-file-contracts.md
+docs/architecture/org-runtime/03-command-event-policy.md
+docs/architecture/org-runtime/04-data-model.md
+docs/architecture/org-runtime/05-ownership-design.md
+docs/architecture/org-runtime/06-runtime-scheduler-adapters.md
+docs/architecture/org-runtime/07-migration-plan.md
+docs/architecture/org-runtime/08-testing-and-quality.md
+docs/architecture/org-runtime/README.md
+docs/architecture/org-runtime/module-manifest.yaml

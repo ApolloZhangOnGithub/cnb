@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import io
 import itertools
 import json
 import time
+import urllib.error
 from types import SimpleNamespace
 from typing import Any
 
@@ -60,6 +62,7 @@ bot_name = "CNB_终端主管"
 group_message_routing = "targeted"
 group_message_routing_chat_ids = ["oc_control"]
 lark_cli_profile = "cnb-device-chief"
+caffeine_enabled = false
 """
         )
 
@@ -84,6 +87,7 @@ lark_cli_profile = "cnb-device-chief"
         assert cfg.group_message_routing == "targeted"
         assert cfg.group_message_routing_chat_ids == frozenset({"oc_control"})
         assert cfg.lark_cli_profile == "cnb-device-chief"
+        assert cfg.caffeine_enabled is False
         assert cfg.transport == "local_openapi"
 
     def test_loads_device_supervisor_aliases(self, tmp_path):
@@ -119,6 +123,82 @@ device_chief_tmux = "cnb-device-chief"
         assert cfg.pilot_tmux == "cnb-device-chief"
         assert cfg.bridge_tmux == "cnb-feishu-chief-bridge"
         assert cfg.watch_tmux == "cnb-feishu-chief-watch"
+
+    def test_caffeine_status_disabled(self, tmp_path):
+        cfg = _cfg(tmp_path, caffeine_enabled=False)
+
+        assert feishu_bridge.caffeine_status(cfg) == "disabled"
+
+    def test_caffeine_status_unavailable_off_mac(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        monkeypatch.setattr(feishu_bridge.sys, "platform", "linux")
+
+        assert feishu_bridge.caffeine_status(cfg) == "unavailable (non-macOS)"
+
+    def test_start_bridge_starts_caffeine_on_mac(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, bridge_tmux="cnb-feishu-test")
+        calls = []
+
+        class FakePopen:
+            pid = 4321
+
+            def __init__(self, args, **kwargs):
+                calls.append(("popen", args, kwargs))
+
+        def fake_run(args, **kwargs):
+            calls.append(("run", args, kwargs))
+            if args[:2] == ["ps", "-p"]:
+                return SimpleNamespace(returncode=0, stdout="/usr/bin/caffeinate\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.sys, "platform", "darwin")
+        monkeypatch.setattr(
+            feishu_bridge.shutil, "which", lambda name: "/usr/bin/caffeinate" if name == "caffeinate" else None
+        )
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+        monkeypatch.setattr(feishu_bridge.subprocess, "Popen", FakePopen)
+        monkeypatch.setattr(feishu_bridge.os, "kill", lambda pid, sig: None)
+
+        result = feishu_bridge.start_bridge_daemon(cfg)
+
+        assert result.handled is True
+        assert "started cnb-feishu-test" in result.detail
+        assert "caffeine active (pid 4321)" in result.detail
+        assert feishu_bridge.caffeine_pid_path(cfg).read_text() == "4321"
+        assert calls[0][1][:4] == ["tmux", "new-session", "-d", "-s"]
+        assert calls[-1][1] == ["caffeinate", "-di"]
+
+    def test_stop_bridge_stops_caffeine_on_mac(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, bridge_tmux="cnb-feishu-test")
+        feishu_bridge.caffeine_pid_path(cfg).parent.mkdir(parents=True)
+        feishu_bridge.caffeine_pid_path(cfg).write_text("4321")
+        killed = []
+
+        def fake_run(args, **kwargs):
+            if args[:2] == ["ps", "-p"]:
+                return SimpleNamespace(returncode=0, stdout="/usr/bin/caffeinate\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        def fake_kill(pid, sig):
+            if sig != 0:
+                killed.append((pid, sig))
+
+        monkeypatch.setattr(feishu_bridge.sys, "platform", "darwin")
+        monkeypatch.setattr(
+            feishu_bridge.shutil, "which", lambda name: "/usr/bin/caffeinate" if name == "caffeinate" else None
+        )
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+        monkeypatch.setattr(feishu_bridge.os, "kill", fake_kill)
+
+        result = feishu_bridge.stop_bridge_daemon(cfg)
+
+        assert result.handled is True
+        assert "stopped cnb-feishu-test" in result.detail
+        assert "caffeine stopped" in result.detail
+        assert killed == [(4321, feishu_bridge.signal.SIGTERM)]
+        assert not feishu_bridge.caffeine_pid_path(cfg).exists()
 
     def test_loads_tui_and_watch_settings(self, tmp_path):
         path = tmp_path / "config.toml"
@@ -509,6 +589,81 @@ class TestFiltering:
 
         assert accepted is True
         assert reason == "accepted"
+
+
+class _FakeHTTPResponse:
+    def __init__(self, body: str):
+        self.body = body.encode()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self.body
+
+
+class TestOpenAPITransport:
+    def test_openapi_request_reports_http_error_body(self, monkeypatch):
+        def fake_urlopen(request, timeout):
+            raise urllib.error.HTTPError(
+                request.full_url,
+                400,
+                "Bad Request",
+                hdrs={},
+                fp=io.BytesIO(b'{"code":999,"msg":"bad app_id"}'),
+            )
+
+        monkeypatch.setattr(feishu_bridge.urllib.request, "urlopen", fake_urlopen)
+
+        result = feishu_bridge.openapi_post("/open-apis/test", {"hello": "world"})
+
+        assert result.handled is False
+        assert "HTTP 400" in result.detail
+        assert "bad app_id" in result.detail
+
+    def test_openapi_request_reports_network_failure(self, monkeypatch):
+        def fake_urlopen(request, timeout):
+            raise urllib.error.URLError("timed out")
+
+        monkeypatch.setattr(feishu_bridge.urllib.request, "urlopen", fake_urlopen)
+
+        result = feishu_bridge.openapi_post("/open-apis/test", {"hello": "world"})
+
+        assert result.handled is False
+        assert "Feishu OpenAPI failed" in result.detail
+        assert "timed out" in result.detail
+
+    def test_openapi_request_rejects_non_json_response(self, monkeypatch):
+        monkeypatch.setattr(
+            feishu_bridge.urllib.request,
+            "urlopen",
+            lambda request, timeout: _FakeHTTPResponse("not json"),
+        )
+
+        result = feishu_bridge.openapi_post("/open-apis/test", {"hello": "world"})
+
+        assert result.handled is False
+        assert "returned non-json" in result.detail
+        assert "not json" in result.detail
+
+    def test_send_reply_stops_when_tenant_token_fails(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, app_id="cli_x", app_secret="secret")
+        calls = []
+
+        def fake_openapi_post(path, payload, **kwargs):
+            calls.append((path, payload, kwargs))
+            return feishu_bridge.BridgeResult(False, "tenant token failed")
+
+        monkeypatch.setattr(feishu_bridge, "openapi_post", fake_openapi_post)
+
+        result = feishu_bridge.send_reply(cfg, "om_1", "处理完成")
+
+        assert result.handled is False
+        assert result.detail == "tenant token failed"
+        assert [call[0] for call in calls] == ["/open-apis/auth/v3/tenant_access_token/internal"]
 
 
 class TestRouting:

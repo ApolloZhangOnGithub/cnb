@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Validate static site docs entrypoints and local links."""
+
+from __future__ import annotations
+
+import html.parser
+import re
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+ROOT = Path(__file__).resolve().parent.parent
+SITE = ROOT / "site"
+CONTRIBUTING = ROOT / "CONTRIBUTING.md"
+CONTRIBUTING_URL = "https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md"
+LOCAL_ATTRS = {
+    "a": ("href",),
+    "link": ("href",),
+    "script": ("src",),
+    "img": ("src",),
+}
+REMOTE_SCHEMES = {"http", "https", "mailto", "tel"}
+
+
+class SiteHTMLParser(html.parser.HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.refs: list[tuple[str, str]] = []
+        self.ids: set[str] = set()
+        self.canonicals: list[str] = []
+        self.refreshes: list[str] = []
+        self.links: list[str] = []
+        self.visible_text: list[str] = []
+        self._hidden_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_map = {name.lower(): value or "" for name, value in attrs}
+        if tag in {"script", "style"}:
+            self._hidden_depth += 1
+        if "id" in attr_map:
+            self.ids.add(attr_map["id"])
+        if "name" in attr_map:
+            self.ids.add(attr_map["name"])
+        for attr in LOCAL_ATTRS.get(tag, ()):
+            if value := attr_map.get(attr):
+                self.refs.append((attr, value))
+                if tag == "a":
+                    self.links.append(value)
+        if tag == "link" and attr_map.get("rel") == "canonical":
+            self.canonicals.append(attr_map.get("href", ""))
+        if tag == "meta" and attr_map.get("http-equiv", "").lower() == "refresh":
+            self.refreshes.append(attr_map.get("content", ""))
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"} and self._hidden_depth:
+            self._hidden_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._hidden_depth == 0:
+            self.visible_text.append(data)
+
+
+def parse_html(path: Path) -> SiteHTMLParser:
+    parser = SiteHTMLParser()
+    parser.feed(path.read_text())
+    return parser
+
+
+def is_remote(ref: str) -> bool:
+    return urlparse(ref).scheme in REMOTE_SCHEMES or ref.startswith("//")
+
+
+def local_target(source: Path, ref: str) -> tuple[Path, str]:
+    parsed = urlparse(ref)
+    raw_path = unquote(parsed.path)
+    if not raw_path:
+        target = source
+    else:
+        target = (source.parent / raw_path).resolve()
+    return target, unquote(parsed.fragment)
+
+
+def contributing_headings() -> set[str]:
+    headings = set()
+    for line in CONTRIBUTING.read_text().splitlines():
+        match = re.match(r"#{1,3}\s+(.+)", line)
+        if match:
+            headings.add(match.group(1).strip())
+    return headings
+
+
+def check_contributing_redirect(path: Path, parser: SiteHTMLParser) -> list[str]:
+    errors: list[str] = []
+    refresh_matches = [content for content in parser.refreshes if CONTRIBUTING_URL in content]
+    if parser.canonicals != [CONTRIBUTING_URL]:
+        errors.append(f"{path.relative_to(ROOT)} must canonicalize to {CONTRIBUTING_URL}")
+    if not refresh_matches:
+        errors.append(f"{path.relative_to(ROOT)} must meta-refresh to {CONTRIBUTING_URL}")
+    if CONTRIBUTING_URL not in parser.links:
+        errors.append(f"{path.relative_to(ROOT)} must link to canonical CONTRIBUTING.md")
+
+    text = " ".join(part.strip() for part in parser.visible_text if part.strip())
+    copied_headings = sorted(
+        heading
+        for heading in contributing_headings()
+        if heading != "Contributing" and " " in heading and heading in text
+    )
+    if copied_headings:
+        errors.append(
+            f"{path.relative_to(ROOT)} appears to duplicate CONTRIBUTING.md headings: {', '.join(copied_headings)}"
+        )
+    if len(text.split()) > 80:
+        errors.append(f"{path.relative_to(ROOT)} should stay a compact redirect, not a hand-maintained docs copy")
+    return errors
+
+
+def main() -> None:
+    errors: list[str] = []
+    html_files = sorted(SITE.glob("*.html"))
+    if not html_files:
+        errors.append("site/*.html is empty")
+
+    parsed = {path: parse_html(path) for path in html_files}
+    for path, parser in parsed.items():
+        for attr, ref in parser.refs:
+            if is_remote(ref):
+                continue
+            target, fragment = local_target(path, ref)
+            rel = path.relative_to(ROOT)
+            if SITE not in target.parents and target != SITE:
+                errors.append(f"{rel}: {attr}={ref!r} points outside site/")
+                continue
+            if not target.exists():
+                errors.append(f"{rel}: {attr}={ref!r} points to missing local file")
+                continue
+            if fragment and target.suffix == ".html":
+                target_parser = parsed.get(target) or parse_html(target)
+                if fragment not in target_parser.ids:
+                    errors.append(f"{rel}: {attr}={ref!r} points to missing #{fragment}")
+
+    contributing_page = SITE / "contributing.html"
+    if contributing_page not in parsed:
+        errors.append("site/contributing.html is missing")
+    else:
+        errors.extend(check_contributing_redirect(contributing_page, parsed[contributing_page]))
+
+    if errors:
+        print("SITE DOCS CHECK FAILED:")
+        for error in errors:
+            print(f"  - {error}")
+        raise SystemExit(1)
+
+    print(f"OK site docs and links passed ({len(html_files)} HTML files)")
+
+
+if __name__ == "__main__":
+    main()

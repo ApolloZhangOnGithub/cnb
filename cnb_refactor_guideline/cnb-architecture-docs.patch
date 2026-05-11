@@ -1,0 +1,5180 @@
+diff --git a/docs/adr/0001-org-runtime-kernel.md b/docs/adr/0001-org-runtime-kernel.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/adr/0001-org-runtime-kernel.md
++# ADR 0001 — Introduce Organization Kernel
++
++## Status
++
++Proposed
++
++## Context
++
++The current system mixes CLI handlers, SQLite mutations, tmux process control, task state changes, ownership routing, and external adapters. This makes it hard to explain responsibility, recover after crashes, and enforce authorization.
++
++## Decision
++
++Introduce `OrgKernel` as the domain entrypoint. All organization state changes go through:
++
++```text
++Command -> Policy -> Event -> Projection
++```
++
++CLI, adapters, daemon, and scheduler call the kernel rather than directly mutating state.
++
++## Consequences
++
++Positive:
++
++- state changes become auditable,
++- projections can be rebuilt,
++- adapters cannot bypass policy,
++- ownership and obligation flows become explicit.
++
++Negative:
++
++- more upfront structure,
++- migration must preserve legacy behavior,
++- command/event schema needs careful versioning.
+
+diff --git a/docs/adr/0002-ownership-as-accountability-contract.md b/docs/adr/0002-ownership-as-accountability-contract.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/adr/0002-ownership-as-accountability-contract.md
++# ADR 0002 — Model Ownership as Accountability Contract
++
++## Status
++
++Proposed
++
++## Context
++
++Path-prefix ownership is insufficient. It cannot express scope risk, verification standards, owner availability, backup, review rules, handoff, or routing evidence.
++
++## Decision
++
++Model ownership as:
++
++```text
++Actor owns Scope under Contract
++```
++
++A signal creates a `RouteDecision`, which opens an `Obligation`. The owner must accept, reject, delegate, escalate, or satisfy the obligation.
++
++## Consequences
++
++Positive:
++
++- routing becomes explainable,
++- owner rejection becomes useful feedback,
++- task execution can be delegated without losing accountability,
++- handoff and runtime protection can be enforced.
++
++Negative:
++
++- more concepts than old `session/path_pattern`,
++- requires new health and migration logic.
+
+diff --git a/docs/adr/0003-runtime-is-not-truth.md b/docs/adr/0003-runtime-is-not-truth.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/adr/0003-runtime-is-not-truth.md
++# ADR 0003 — Runtime Observation Is Not Organization Truth
++
++## Status
++
++Proposed
++
++## Context
++
++tmux pane content and process status are unreliable as organization truth. A prompt marker does not mean an agent is ready; a changed pane does not mean progress; a stopped pane does not mean ownership is gone.
++
++## Decision
++
++Runtime backends only start, stop, send input, and capture snapshots. Runtime monitor emits observation events. Organization state is decided by policy and projections.
++
++## Consequences
++
++Positive:
++
++- process control is isolated,
++- owner protection can be enforced,
++- future backends can replace tmux.
++
++Negative:
++
++- idle/health logic must move into explicit observation and policy services,
++- some old heuristics need migration.
+
+diff --git a/docs/architecture/org-runtime/00-principles.md b/docs/architecture/org-runtime/00-principles.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/00-principles.md
++# 00 — Principles, Goals, Non-Goals, and Invariants
++
++## Goal
++
++cnb should become a local-first AI organization runtime.
++
++It must help multiple AI actors collaborate around a project while preserving:
++
++- responsibility continuity,
++- explicit authority,
++- explainable routing,
++- durable memory,
++- verifiable work completion,
++- safe handoff,
++- recoverability after crashes and restarts.
++
++## Non-goals for the first rewrite
++
++Do not start with:
++
++- cloud multi-tenancy,
++- complex workflow DSLs,
++- black-box routing models,
++- full UI rewrite,
++- replacing tmux immediately,
++- mandatory ownership for every file,
++- full daemonization before the domain model is stable.
++
++The first implementation may run in library mode, but it must already be structured as if it will later run behind `cnbd`.
++
++## Core invariants
++
++### I1. Organization facts only change through commands and events
++
++Allowed:
++
++```text
++submit command -> authenticate -> authorize -> validate -> append event -> update projection
++```
++
++Forbidden:
++
++```text
++CLI handler -> direct SQLite UPDATE
++adapter -> direct ownership/task mutation
++dispatcher -> direct status mutation from tmux observation
++Feishu bridge -> tmux send that changes organization facts
++```
++
++### I2. Actor is not session
++
++`Actor` is a durable identity.
++
++`SessionRun` is one runtime instance of that actor.
++
++Ownership must bind to actor identity, not tmux pane, terminal session, or process ID.
++
++### I3. Scope is not path
++
++A path may be evidence for a scope. A scope is a responsibility boundary.
++
++A scope can be defined by paths, labels, keywords, CI jobs, tests, external systems, docs, or symbols.
++
++### I4. Ownership is not task assignment
++
++Ownership is accountability for a scope.
++
++A task is an execution unit that may be delegated.
++
++The owner may delegate work but remains accountable until obligation satisfaction, transfer, or archive.
++
++### I5. Message is not obligation
++
++A notification tells someone something.
++
++An obligation requires an accountable actor to accept, reject, delegate, escalate, or satisfy.
++
++Every routed external signal that requires responsibility must create an obligation, not only a message.
++
++### I6. Runtime observation is not organization truth
++
++tmux output, prompt shape, pane command, and capture text are observations.
++
++They can create events such as `SessionIdleObserved`, but policy and projections decide state.
++
++### I7. Low confidence must fallback
++
++The routing system must prefer fallback over silent misrouting.
++
++If confidence is low, candidates conflict, owner is orphaned, or scope is ambiguous, route to project-manager or configured fallback.
++
++### I8. Responsibility requires authority
++
++An owner must have enough authority to close its obligations: review changes, reject wrong routing, request verification, delegate execution, and escalate risk.
++
++High-risk actions may still require supervisor or user approval.
++
++### I9. Every state transition must be explainable
++
++A human or AI reviewer must be able to answer:
++
++- What command caused this?
++- Which actor submitted it?
++- Which policy allowed or denied it?
++- Which events were produced?
++- Which projection changed?
++- Which obligations or tasks are affected?
++
++### I10. Rebuild must be possible
++
++Projection tables are views. Events are the durable fact source.
++
++`cnb store rebuild-projections` must reconstruct current views from events.
++
++## Architectural review checklist
++
++For any new code path that changes state, ask:
++
++1. Is this a command?
++2. Who is the actor?
++3. What capability is required?
++4. Which policy authorizes it?
++5. Which event is appended?
++6. Which projection changes?
++7. Can it be rebuilt from events?
++8. Does it create, close, or affect an obligation?
++9. Does it require a job, notification, review, or approval?
++10. Can it recover after process crash?
+
+diff --git a/docs/architecture/org-runtime/01-domain-model.md b/docs/architecture/org-runtime/01-domain-model.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/01-domain-model.md
++# 01 — Domain Model
++
++This document defines the vocabulary for the rewrite. These words must be used consistently across code, schema, tests, CLI, and docs.
++
++## Organization
++
++An organization is the project-local system of actors, roles, scopes, ownership, work, authority, communication, and memory.
++
++It is not merely a list of running agents.
++
++An organization answers:
++
++- Who exists?
++- Who has which role?
++- Who owns which scope?
++- Who can decide what?
++- What signals are active?
++- What obligations are open?
++- What tasks are being executed?
++- What counts as done?
++- What memory must be restored after restart?
++
++## Actor
++
++An actor is a durable identity.
++
++Examples:
++
++- `device-supervisor`
++- `project-manager`
++- `lisa-su`
++- `dario`
++- `github-adapter`
++- `feishu-adapter`
++
++Actor fields:
++
++```text
++id
++kind: human | ai | system | adapter
++display_name
++status
++roles
++capabilities
++created_at
++updated_at
++```
++
++Actor is not a process. Actor is not a tmux pane.
++
++## SessionRun
++
++A session run is one runtime instance of an actor.
++
++Fields:
++
++```text
++id
++actor_id
++engine: claude | codex | qwen | shell
++backend: tmux | process | screen
++runtime_ref
++state: starting | ready | busy | idle | stopped | crashed
++started_at
++last_heartbeat
++stopped_at
++```
++
++A single actor can have many session runs over time.
++
++A session crash must not erase ownership.
++
++## Role
++
++A role is a behavior template, not responsibility ownership.
++
++Examples:
++
++- `device-supervisor`
++- `project-manager`
++- `scope-owner`
++- `executor`
++- `reviewer`
++- `release-manager`
++- `adapter`
++
++Role answers: "How may this actor act?"
++
++Ownership answers: "What scope is this actor accountable for?"
++
++## Capability
++
++A capability is a permission to submit a command or perform a class of actions.
++
++Examples:
++
++```text
++read_own_inbox
++ack_own_delivery
++accept_own_obligation
++reject_own_obligation
++delegate_own_obligation
++update_own_status
++create_task
++complete_assigned_task
++review_owned_scope
++assign_task
++transfer_ownership
++approve_high_risk_action
++manage_runtime
++submit_external_signal
++```
++
++Capabilities may be scoped:
++
++```text
++actor lisa-su has review_owned_scope for scope feishu-bridge
++```
++
++## Scope
++
++A scope is a responsibility boundary.
++
++A scope may correspond to a module, service, integration, release process, security concern, runtime concern, or documentation area.
++
++Scope is not equal to path.
++
++Fields:
++
++```text
++id
++kind: module | service | integration | runtime | docs | release | security | infra
++title
++description
++parent_scope_id
++risk_level: green | yellow | red | critical
++active
++```
++
++Scope patterns may include:
++
++```text
++path
++label
++keyword
++test_file
++ci_job
++symbol
++doc_section
++external_system
++```
++
++## Contract
++
++A contract defines what responsible operation of a scope means.
++
++It includes:
++
++- verification commands,
++- review rules,
++- approval rules,
++- handoff requirements,
++- runtime protection,
++- escalation policy,
++- red flags.
++
++Without a contract, ownership is only a label.
++
++Example:
++
++```toml
++[scope.feishu-bridge.contract]
++verify = [
++  "python -m pytest tests/test_feishu_bridge.py -q",
++  "ruff check lib/feishu_bridge.py tests/test_feishu_bridge.py"
++]
++review_required = true
++handoff_required = true
++stop_protection = "protected"
++requires_user_approval_if = [
++  "auth token handling",
++  "public webhook behavior",
++  "allowed chat id policy"
++]
++```
++
++## OwnershipAssignment
++
++Ownership is an accountability relationship between actor and scope.
++
++Fields:
++
++```text
++id
++scope_id
++owner_actor_id
++backup_actor_id
++state: proposed | active | probation | transferring | orphaned | suspended | archived
++source: manual | migration | handoff | inferred
++confidence
++assigned_by
++assigned_at
++accepted_at
++archived_at
++```
++
++Ownership does not mean the owner must execute every task. It means the owner is accountable for scope health, triage, review, verification, escalation, and handoff.
++
++## Signal
++
++A signal is input that may require organization response.
++
++Examples:
++
++- GitHub issue
++- GitHub PR
++- CI failure
++- user request
++- Feishu message
++- runtime alert
++- file change
++- scheduled check
++
++A signal does not directly become a task. It first goes through routing.
++
++## RouteDecision
++
++A route decision explains how a signal was interpreted.
++
++Fields:
++
++```text
++id
++source_type
++source_id
++decision: routed | routed_cc | fallback | conflict | ignored
++chosen_scope_id
++chosen_owner_actor_id
++fallback_actor_id
++confidence
++candidates_json
++evidence_json
++reason
++created_at
++```
++
++A route decision must be explainable.
++
++## Obligation
++
++An obligation is ownership activated by a signal.
++
++Fields:
++
++```text
++id
++route_decision_id
++scope_id
++owner_actor_id
++kind: triage | fix | review | verify | maintain | handoff
++source_type
++source_id
++state: open | accepted | rejected | delegated | escalated | satisfied | expired | cancelled
++delegated_to
++due_at
++created_at
++updated_at
++```
++
++Owner actions:
++
++```text
++accept
++reject
++delegate
++escalate
++satisfy
++```
++
++The organization cannot assume responsibility was accepted until the obligation state says so.
++
++## Task
++
++A task is an execution unit.
++
++Fields:
++
++```text
++id
++title
++description
++source_type
++source_id
++obligation_id
++scope_id
++creator_actor_id
++assignee_actor_id
++state: draft | assigned | accepted | in_progress | blocked | awaiting_user | verifying | review | done | failed | cancelled
++priority
++risk_level
++verification_policy_id
++created_at
++updated_at
++```
++
++A task may satisfy an obligation, but it is not itself the accountability relationship.
++
++## Job
++
++A job is a durable system action.
++
++Examples:
++
++- `RunVerification`
++- `SendNotification`
++- `RouteGitHubIssue`
++- `RouteCIFailure`
++- `GenerateOwnerBrief`
++- `DetectOrphanOwner`
++- `PrepareHandoffChecklist`
++- `CaptureSessionSnapshot`
++- `CheckSessionHealth`
++
++Jobs are scheduled, leased, retried, and recoverable.
++
++## Artifact
++
++An artifact is something produced or modified by work.
++
++Examples:
++
++- file diff,
++- PR,
++- issue comment,
++- verification result,
++- release package,
++- migration file,
++- documentation change.
++
++Artifacts should connect tasks and obligations to concrete outputs.
++
++## Policy
++
++A policy decides whether a command or state transition is allowed, denied, requires approval, requires review, requires fallback, or requires handoff.
++
++Examples:
++
++- ownership policy,
++- routing policy,
++- task policy,
++- runtime protection policy,
++- handoff policy,
++- approval policy,
++- notification policy.
++
++## Memory
++
++Memory is durable organizational history.
++
++It includes:
++
++- events,
++- route decisions,
++- accepted/rejected obligations,
++- verification results,
++- handoff notes,
++- reviews,
++- generated briefs.
++
++Prompt is not memory. Prompt consumes memory.
++
++## Main relationships
++
++```text
++Organization contains Actors, Scopes, Policies, Memory.
++Actor occupies Roles and holds Capabilities.
++Actor runs SessionRuns.
++Scope has Contract and Patterns.
++Actor owns Scope through OwnershipAssignment.
++Signal produces RouteDecision.
++RouteDecision opens Obligation.
++Obligation may create Task, Review, Escalation, or Handoff.
++Task creates Jobs and Artifacts.
++Contract defines Verification and Review.
++Events record all durable facts.
++Projections expose current views.
++Briefs summarize memory for AI actors.
++```
+
+diff --git a/docs/architecture/org-runtime/02-file-contracts.md b/docs/architecture/org-runtime/02-file-contracts.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/02-file-contracts.md
++# 02 — File Contracts
++
++This document explains exactly what each proposed source file should contain.
++
++The point is not only package organization. The point is preventing responsibility drift.
++
++Every file below has:
++
++- **Purpose** — why the file exists.
++- **Contains** — allowed classes/functions.
++- **Must not contain** — boundaries that prevent future mess.
++- **Public surface** — expected interfaces.
++- **Tests** — where behavior should be tested.
++
++## Layer rules
++
++```text
++bin/                 process shims only
++lib/cnb/cli/          parse args, print output, submit commands
++lib/cnb/daemon/       local API, single-writer coordination, capability auth
++lib/cnb/org/          domain concepts, policies, command handlers
++lib/cnb/store/        persistence, events, commands, projections, migrations
++lib/cnb/scheduler/    durable jobs and leases
++lib/cnb/runtime/      process/tmux backend and observations
++lib/cnb/adapters/     external systems as signal/notification adapters
++lib/cnb/legacy/       compatibility wrappers only
++```
++
++Dependency direction:
++
++```text
++cli -> daemon client or org kernel
++adapter -> command/signal API
++scheduler -> org services + store
++runtime -> backend primitives only
++org -> store interfaces, not concrete CLI
++store -> no org policy decisions
++```
++
++Forbidden dependency examples:
++
++```text
++org imports cli                      forbidden
++store imports tmux backend           forbidden
++adapter mutates projection directly  forbidden
++runtime changes task state           forbidden
++cli updates SQLite directly          forbidden
++```
++
++---
++
++# bin/
++
++## `bin/cnb`
++
++**Purpose**
++
++Executable shim for the main CLI.
++
++**Contains**
++
++Only shell or Python bootstrap that execs `python -m cnb.cli.main` or installed console entry.
++
++**Must not contain**
++
++- business logic,
++- database access,
++- tmux control,
++- ownership logic,
++- update checks mixed with command execution.
++
++**Public surface**
++
++```bash
++cnb <subcommand> ...
++```
++
++**Tests**
++
++Smoke test that `bin/cnb --help` dispatches to CLI.
++
++## `bin/board`
++
++**Purpose**
++
++Legacy compatibility shim.
++
++**Contains**
++
++Argument translation from old `board --as actor ...` form into new command API where possible.
++
++**Must not contain**
++
++New features. It should shrink over time.
++
++**Public surface**
++
++Existing board commands only.
++
++**Tests**
++
++Legacy compatibility tests.
++
++---
++
++# `lib/cnb/cli/`
++
++CLI files parse arguments, call a command client or local kernel, and render output. They do not decide policy.
++
++## `lib/cnb/cli/main.py`
++
++**Purpose**
++
++Top-level CLI entrypoint and subcommand router.
++
++**Contains**
++
++- `main(argv=None) -> int`
++- construction of subparsers,
++- dispatch to subcommand modules,
++- common output format flags,
++- error rendering.
++
++**Must not contain**
++
++- direct SQLite writes,
++- ownership resolver logic,
++- policy checks,
++- tmux calls.
++
++**Public surface**
++
++```python
++def main(argv: list[str] | None = None) -> int
++```
++
++**Tests**
++
++CLI parser smoke tests and command dispatch tests.
++
++## `lib/cnb/cli/client.py`
++
++**Purpose**
++
++Client for sending command envelopes to `cnbd`, or to in-process `OrgKernel` during pre-daemon phase.
++
++**Contains**
++
++- `CommandClient`
++- daemon socket request/response handling,
++- fallback to local kernel when daemon disabled,
++- timeout and retry behavior for command submission.
++
++**Must not contain**
++
++- domain policy,
++- projection update logic,
++- command construction for specific domains beyond generic envelope submission.
++
++**Public surface**
++
++```python
++class CommandClient:
++    def submit(self, command: CommandEnvelope) -> CommandResult: ...
++    def query(self, query: QueryEnvelope) -> QueryResult: ...
++```
++
++**Tests**
++
++Fake daemon client tests; local mode tests.
++
++## `lib/cnb/cli/org.py`
++
++**Purpose**
++
++CLI commands for organization-wide status and health.
++
++**Contains**
++
++Commands:
++
++```bash
++cnb org health
++cnb org brief
++cnb org actors
++cnb org scopes
++```
++
++**Must not contain**
++
++Health calculation logic. It should call query APIs.
++
++**Public surface**
++
++```python
++def register(subparsers) -> None
++```
++
++**Tests**
++
++Output rendering tests with fixed query results.
++
++## `lib/cnb/cli/owner.py`
++
++**Purpose**
++
++CLI commands for scope, ownership, routing, handoff, and owner health.
++
++**Contains**
++
++Commands:
++
++```bash
++cnb owner scope list
++cnb owner scope show <scope>
++cnb owner route issue <id>
++cnb owner explain <decision-id>
++cnb owner claim <scope>
++cnb owner assign <scope> <actor>
++cnb owner transfer <scope> <from> <to>
++cnb owner health
++cnb owner brief <actor>
++```
++
++**Must not contain**
++
++- resolver scoring,
++- route decision storage,
++- handoff policy.
++
++**Public surface**
++
++```python
++def register(subparsers) -> None
++```
++
++**Tests**
++
++Golden CLI output for route explanation and health.
++
++## `lib/cnb/cli/obligation.py`
++
++**Purpose**
++
++CLI commands for obligation lifecycle.
++
++**Contains**
++
++Commands:
++
++```bash
++cnb obligation list
++cnb obligation show <id>
++cnb obligation accept <id>
++cnb obligation reject <id> <reason>
++cnb obligation delegate <id> <actor>
++cnb obligation escalate <id> <reason>
++cnb obligation satisfy <id>
++```
++
++**Must not contain**
++
++State transition legality. It submits commands only.
++
++**Public surface**
++
++```python
++def register(subparsers) -> None
++```
++
++**Tests**
++
++Command envelope construction tests.
++
++## `lib/cnb/cli/task.py`
++
++**Purpose**
++
++CLI commands for task lifecycle.
++
++**Contains**
++
++Commands:
++
++```bash
++cnb task add
++cnb task list
++cnb task show
++cnb task accept
++cnb task block
++cnb task complete
++```
++
++**Must not contain**
++
++- verification execution,
++- direct task state changes,
++- review policy.
++
++**Public surface**
++
++```python
++def register(subparsers) -> None
++```
++
++**Tests**
++
++Command envelope and output tests.
++
++## `lib/cnb/cli/runtime.py`
++
++**Purpose**
++
++CLI commands for runtime sessions.
++
++**Contains**
++
++Commands:
++
++```bash
++cnb runtime list
++cnb runtime start <actor>
++cnb runtime stop <actor>
++cnb runtime restart <actor>
++cnb runtime capture <actor>
++```
++
++**Must not contain**
++
++- direct tmux calls,
++- stop protection logic,
++- session state mutation.
++
++**Public surface**
++
++```python
++def register(subparsers) -> None
++```
++
++**Tests**
++
++Runtime command envelope tests.
++
++---
++
++# `lib/cnb/daemon/`
++
++Daemon files manage local API, single-writer behavior, command authentication, and scheduling coordination.
++
++## `lib/cnb/daemon/main.py`
++
++**Purpose**
++
++Entrypoint for `cnbd`.
++
++**Contains**
++
++- daemon argument parsing,
++- startup/shutdown,
++- initialization of store, kernel, scheduler, runtime backends,
++- signal handling.
++
++**Must not contain**
++
++Domain command logic.
++
++**Public surface**
++
++```python
++def main(argv: list[str] | None = None) -> int
++```
++
++**Tests**
++
++Daemon startup smoke with temp project.
++
++## `lib/cnb/daemon/ipc.py`
++
++**Purpose**
++
++Local IPC protocol over Unix socket or local HTTP.
++
++**Contains**
++
++- request/response schema,
++- socket server/client helpers,
++- serialization/deserialization,
++- basic timeouts.
++
++**Must not contain**
++
++- command policy,
++- domain-specific routing,
++- database schema.
++
++**Public surface**
++
++```python
++class IpcServer: ...
++class IpcClient: ...
++```
++
++**Tests**
++
++Round-trip serialization and error handling.
++
++## `lib/cnb/daemon/auth.py`
++
++**Purpose**
++
++Validate actor capability tokens and daemon-local identities.
++
++**Contains**
++
++- token loading,
++- token verification,
++- actor resolution,
++- expiration checks.
++
++**Must not contain**
++
++Authorization policy beyond token validity. Domain capability checks live in `org/policies.py`.
++
++**Public surface**
++
++```python
++class Authenticator:
++    def authenticate(self, request) -> AuthenticatedActor: ...
++```
++
++**Tests**
++
++Token valid/expired/missing cases.
++
++## `lib/cnb/daemon/server.py`
++
++**Purpose**
++
++Request handler connecting IPC to command/query handlers.
++
++**Contains**
++
++- receive command/query,
++- authenticate,
++- call `OrgKernel`,
++- return result,
++- structured error mapping.
++
++**Must not contain**
++
++Domain logic or SQL.
++
++**Public surface**
++
++```python
++class DaemonServer:
++    def handle_request(self, request) -> response: ...
++```
++
++**Tests**
++
++Command request integration with fake kernel.
++
++---
++
++# `lib/cnb/org/`
++
++The org package owns domain rules. It should be mostly pure Python and heavily tested.
++
++## `lib/cnb/org/kernel.py`
++
++**Purpose**
++
++Single entrypoint for domain commands and queries.
++
++**Contains**
++
++- command dispatch,
++- transaction boundaries through store unit of work,
++- invocation of policy services,
++- event appending,
++- projection update request,
++- job scheduling request.
++
++**Must not contain**
++
++- CLI parsing,
++- tmux operations,
++- adapter-specific API calls.
++
++**Public surface**
++
++```python
++class OrgKernel:
++    def handle_command(self, command: CommandEnvelope) -> CommandResult: ...
++    def handle_query(self, query: QueryEnvelope) -> QueryResult: ...
++```
++
++**Tests**
++
++End-to-end domain command tests with in-memory/temp SQLite store.
++
++## `lib/cnb/org/commands.py`
++
++**Purpose**
++
++Typed command envelope and domain command payloads.
++
++**Contains**
++
++- dataclasses or pydantic-like typed structures,
++- command type constants,
++- validation of payload shape only.
++
++**Must not contain**
++
++- policy decisions,
++- database writes,
++- CLI output.
++
++**Public surface**
++
++```python
++@dataclass(frozen=True)
++class CommandEnvelope: ...
++```
++
++**Tests**
++
++Payload validation tests.
++
++## `lib/cnb/org/events.py`
++
++**Purpose**
++
++Typed event definitions.
++
++**Contains**
++
++- event names,
++- event payload dataclasses,
++- serialization helpers,
++- schema versioning for event payloads.
++
++**Must not contain**
++
++Projection logic.
++
++**Public surface**
++
++```python
++@dataclass(frozen=True)
++class Event: ...
++def make_event(...) -> Event: ...
++```
++
++**Tests**
++
++Event serialization and version compatibility tests.
++
++## `lib/cnb/org/actors.py`
++
++**Purpose**
++
++Actor domain model and actor lifecycle commands.
++
++**Contains**
++
++- actor creation/update logic,
++- actor status updates,
++- actor lookup helpers,
++- actor-state events.
++
++**Must not contain**
++
++Session runtime backend logic. Session state lives in `sessions.py`.
++
++**Public surface**
++
++```python
++class ActorService:
++    def register_actor(...): ...
++    def update_status(...): ...
++```
++
++**Tests**
++
++Actor registration, status, duplicate actor tests.
++
++## `lib/cnb/org/roles.py`
++
++**Purpose**
++
++Role definitions and role assignment semantics.
++
++**Contains**
++
++- role constants,
++- default capabilities per role,
++- role assignment validation.
++
++**Must not contain**
++
++Ownership assignment. Roles are not ownership.
++
++**Public surface**
++
++```python
++ROLE_PROJECT_MANAGER = "project-manager"
++def default_capabilities_for_role(role: str) -> set[str]: ...
++```
++
++**Tests**
++
++Role default capability tests.
++
++## `lib/cnb/org/capabilities.py`
++
++**Purpose**
++
++Capability data model and capability checks.
++
++**Contains**
++
++- capability constants,
++- scope-aware capability matching,
++- expiration-aware capability evaluation.
++
++**Must not contain**
++
++Token authentication. That is daemon auth.
++
++**Public surface**
++
++```python
++class CapabilityService:
++    def has_capability(actor_id, capability, scope_id=None) -> bool: ...
++```
++
++**Tests**
++
++Scoped capability matching tests.
++
++## `lib/cnb/org/sessions.py`
++
++**Purpose**
++
++SessionRun domain state and session events.
++
++**Contains**
++
++- session state transitions,
++- handling runtime observations,
++- mapping actor to current sessions.
++
++**Must not contain**
++
++Actual tmux/process calls. Runtime backend lives in `runtime/`.
++
++**Public surface**
++
++```python
++class SessionService:
++    def record_started(...): ...
++    def record_observation(...): ...
++    def mark_stopped(...): ...
++```
++
++**Tests**
++
++Session state machine tests.
++
++## `lib/cnb/org/scopes.py`
++
++**Purpose**
++
++Scope model, scope pattern import, and scope validation.
++
++**Contains**
++
++- scope definitions,
++- pattern loading from org spec,
++- conflict detection between scopes,
++- scope hierarchy checks.
++
++**Must not contain**
++
++Routing decisions. Resolver lives in `routing.py`.
++
++**Public surface**
++
++```python
++class ScopeService:
++    def import_spec(...): ...
++    def validate_scopes(...): ...
++    def list_active_scopes(...): ...
++```
++
++**Tests**
++
++Scope import, parent-child, overlap detection tests.
++
++## `lib/cnb/org/contracts.py`
++
++**Purpose**
++
++Scope contract model and contract evaluation helpers.
++
++**Contains**
++
++- verification command selection,
++- review policy evaluation,
++- red-flag detection inputs,
++- contract freshness metadata.
++
++**Must not contain**
++
++Running shell commands. Verification execution is scheduler/runtime job.
++
++**Public surface**
++
++```python
++class ContractService:
++    def verification_plan_for(scope_id, task_id=None) -> VerificationPlan: ...
++    def review_required_for(change) -> ReviewDecision: ...
++```
++
++**Tests**
++
++Contract plan and review decision tests.
++
++## `lib/cnb/org/ownership.py`
++
++**Purpose**
++
++Ownership assignment lifecycle.
++
++**Contains**
++
++- claim,
++- assign,
++- transfer request,
++- archive,
++- orphan marking,
++- backup activation,
++- active-owner uniqueness enforcement at domain level.
++
++**Must not contain**
++
++Routing score calculation. That is `routing.py`.
++
++**Public surface**
++
++```python
++class OwnershipService:
++    def claim_scope(...): ...
++    def assign_owner(...): ...
++    def request_transfer(...): ...
++    def mark_orphaned(...): ...
++```
++
++**Tests**
++
++Ownership lifecycle tests.
++
++## `lib/cnb/org/routing.py`
++
++**Purpose**
++
++Resolve signals to explainable route decisions.
++
++**Contains**
++
++- `Signal` model,
++- fact extraction,
++- candidate collection,
++- evidence scoring,
++- decision policy for fallback/conflict/routed,
++- route explanation construction.
++
++**Must not contain**
++
++Notification delivery, task creation, database SQL.
++
++**Public surface**
++
++```python
++class OwnershipResolver:
++    def resolve(self, signal: Signal) -> RouteDecision: ...
++```
++
++**Tests**
++
++Golden route cases for issue/PR/CI/path/user request.
++
++## `lib/cnb/org/obligations.py`
++
++**Purpose**
++
++Obligation lifecycle and state transitions.
++
++**Contains**
++
++- open obligation from route decision,
++- accept,
++- reject,
++- delegate,
++- escalate,
++- satisfy,
++- expiration rules.
++
++**Must not contain**
++
++Task execution or verification execution.
++
++**Public surface**
++
++```python
++class ObligationService:
++    def open_from_route(...): ...
++    def accept(...): ...
++    def reject(...): ...
++    def delegate(...): ...
++    def escalate(...): ...
++    def satisfy(...): ...
++```
++
++**Tests**
++
++Obligation state machine and authorization tests.
++
++## `lib/cnb/org/tasks.py`
++
++**Purpose**
++
++Task lifecycle and relationship to obligations/scopes.
++
++**Contains**
++
++- create task,
++- assign,
++- accept,
++- block,
++- request completion,
++- move to verification/review/done based on events.
++
++**Must not contain**
++
++Running verification commands. It schedules jobs.
++
++**Public surface**
++
++```python
++class TaskService:
++    def create_task(...): ...
++    def request_completion(...): ...
++    def apply_verification_result(...): ...
++```
++
++**Tests**
++
++Task state transition tests.
++
++## `lib/cnb/org/handoff.py`
++
++**Purpose**
++
++Ownership transfer continuity.
++
++**Contains**
++
++- handoff checklist generation,
++- handoff preparation,
++- acceptance,
++- completion,
++- handoff note validation.
++
++**Must not contain**
++
++Direct git operations. It can request data from adapter/services via interfaces.
++
++**Public surface**
++
++```python
++class HandoffService:
++    def prepare_checklist(...): ...
++    def accept(...): ...
++    def complete(...): ...
++```
++
++**Tests**
++
++Transfer requires handoff tests.
++
++## `lib/cnb/org/policies.py`
++
++**Purpose**
++
++Domain policy decisions.
++
++**Contains**
++
++- command authorization,
++- ownership policy,
++- routing policy,
++- task policy,
++- runtime protection policy,
++- handoff policy,
++- approval policy.
++
++**Must not contain**
++
++Persistence code or CLI rendering.
++
++**Public surface**
++
++```python
++class PolicyEngine:
++    def authorize_command(...): ...
++    def evaluate_task_completion(...): ...
++    def evaluate_runtime_stop(...): ...
++```
++
++**Tests**
++
++Policy matrix tests.
++
++## `lib/cnb/org/health.py`
++
++**Purpose**
++
++Compute organization health and ownership health from projections.
++
++**Contains**
++
++- unowned critical scope detection,
++- orphaned owner detection,
++- overloaded owner detection,
++- route quality summary,
++- stale contract detection,
++- handoff debt detection.
++
++**Must not contain**
++
++State mutation.
++
++**Public surface**
++
++```python
++class HealthService:
++    def org_health(...): ...
++    def ownership_health(...): ...
++```
++
++**Tests**
++
++Health scenario tests.
++
++## `lib/cnb/org/memory.py`
++
++**Purpose**
++
++Generate briefs from durable memory.
++
++**Contains**
++
++- owner brief,
++- task brief,
++- project brief,
++- handoff brief,
++- memory query helpers.
++
++**Must not contain**
++
++Prompt templates that invent policy. Briefs summarize existing facts and contracts.
++
++**Public surface**
++
++```python
++class BriefService:
++    def owner_brief(actor_id) -> Brief: ...
++    def task_brief(task_id) -> Brief: ...
++    def project_brief() -> Brief: ...
++```
++
++**Tests**
++
++Golden brief tests.
++
++## `lib/cnb/org/approvals.py`
++
++**Purpose**
++
++High-risk action approval lifecycle.
++
++**Contains**
++
++- approval request creation,
++- approval grant/deny,
++- approval expiration,
++- policy integration for red flags.
++
++**Must not contain**
++
++External messaging delivery. Notification service sends approval requests.
++
++**Public surface**
++
++```python
++class ApprovalService:
++    def request_approval(...): ...
++    def grant(...): ...
++    def deny(...): ...
++```
++
++**Tests**
++
++Approval-required and approval-expired tests.
++
++---
++
++# `lib/cnb/store/`
++
++Store files persist commands, events, projections, and migrations. They do not decide domain policy.
++
++## `lib/cnb/store/unit_of_work.py`
++
++**Purpose**
++
++Transaction boundary for command handling.
++
++**Contains**
++
++- SQLite connection management,
++- begin/commit/rollback,
++- accessors for event store, command store, projection writer, job store.
++
++**Must not contain**
++
++Domain rules.
++
++**Public surface**
++
++```python
++class UnitOfWork:
++    def __enter__(self): ...
++    def commit(self): ...
++    def rollback(self): ...
++```
++
++**Tests**
++
++Rollback and commit behavior tests.
++
++## `lib/cnb/store/event_store.py`
++
++**Purpose**
++
++Append and read durable events.
++
++**Contains**
++
++- append events,
++- read by id range,
++- read by correlation,
++- idempotent append under command transaction,
++- payload hashing.
++
++**Must not contain**
++
++Projection logic or domain rules.
++
++**Public surface**
++
++```python
++class EventStore:
++    def append(self, events: list[Event]) -> list[int]: ...
++    def read_after(self, event_id: int, limit: int = 1000) -> list[Event]: ...
++```
++
++**Tests**
++
++Append/read/hash tests.
++
++## `lib/cnb/store/command_store.py`
++
++**Purpose**
++
++Persist command envelopes and idempotency results.
++
++**Contains**
++
++- record command received,
++- check idempotency key,
++- record command completion/failure,
++- command result caching.
++
++**Must not contain**
++
++Policy decisions.
++
++**Public surface**
++
++```python
++class CommandStore:
++    def begin_command(...): ...
++    def complete_command(...): ...
++```
++
++**Tests**
++
++Idempotency tests.
++
++## `lib/cnb/store/projections.py`
++
++**Purpose**
++
++Apply events to current-state projection tables.
++
++**Contains**
++
++- projection handlers by event type,
++- rebuild projections from event store,
++- projection version metadata.
++
++**Must not contain**
++
++Command validation. Projection applies already-authorized events.
++
++**Public surface**
++
++```python
++class ProjectionUpdater:
++    def apply(self, events: list[Event]) -> None: ...
++    def rebuild(self) -> None: ...
++```
++
++**Tests**
++
++Projection rebuild equals incremental update.
++
++## `lib/cnb/store/queries.py`
++
++**Purpose**
++
++Read-only projection queries for CLI, daemon, and services.
++
++**Contains**
++
++- typed query methods,
++- projection reads,
++- no mutation.
++
++**Must not contain**
++
++Policy logic. Query may filter by actor if caller already authorized.
++
++**Public surface**
++
++```python
++class QueryStore:
++    def get_task(...): ...
++    def list_obligations(...): ...
++```
++
++**Tests**
++
++Projection query tests.
++
++## `lib/cnb/store/migrations.py`
++
++**Purpose**
++
++Schema migration runner.
++
++**Contains**
++
++- migration discovery,
++- applied migration tracking,
++- upgrade path,
++- legacy schema migration helpers.
++
++**Must not contain**
++
++Business logic beyond data migration.
++
++**Public surface**
++
++```python
++class MigrationRunner:
++    def upgrade(self) -> None: ...
++```
++
++**Tests**
++
++Fresh DB and legacy DB migration tests.
++
++---
++
++# `lib/cnb/scheduler/`
++
++## `lib/cnb/scheduler/jobs.py`
++
++**Purpose**
++
++Job model, job types, and job payload validation.
++
++**Contains**
++
++- job dataclasses,
++- job type constants,
++- payload schema validation.
++
++**Must not contain**
++
++Job execution logic.
++
++**Public surface**
++
++```python
++@dataclass(frozen=True)
++class Job: ...
++```
++
++**Tests**
++
++Payload validation tests.
++
++## `lib/cnb/scheduler/worker.py`
++
++**Purpose**
++
++Claim, execute, and finalize durable jobs.
++
++**Contains**
++
++- claim due jobs,
++- execute by job type,
++- append resulting events,
++- retry/failure behavior.
++
++**Must not contain**
++
++Domain state mutation outside command/event path.
++
++**Public surface**
++
++```python
++class SchedulerWorker:
++    def run_once(self) -> int: ...
++```
++
++**Tests**
++
++Job execution and failure recovery tests.
++
++## `lib/cnb/scheduler/leases.py`
++
++**Purpose**
++
++Lease acquisition and expiration logic.
++
++**Contains**
++
++- atomic job lease claim,
++- lease expiry,
++- worker identity.
++
++**Must not contain**
++
++Job-specific behavior.
++
++**Public surface**
++
++```python
++class LeaseManager:
++    def claim_due_jobs(...): ...
++```
++
++**Tests**
++
++Lease expiry/reclaim tests.
++
++---
++
++# `lib/cnb/runtime/`
++
++Runtime files manage processes and observations only. They do not decide organization facts.
++
++## `lib/cnb/runtime/backend.py`
++
++**Purpose**
++
++Abstract runtime backend interface.
++
++**Contains**
++
++```python
++class RuntimeBackend:
++    def start(self, spec) -> RuntimeRef: ...
++    def stop(self, runtime_ref) -> StopResult: ...
++    def send_input(self, runtime_ref, text: str) -> SendResult: ...
++    def capture(self, runtime_ref) -> Snapshot: ...
++```
++
++**Must not contain**
++
++Concrete tmux commands or domain policy.
++
++**Tests**
++
++Interface contract tests with fake backend.
++
++## `lib/cnb/runtime/tmux_backend.py`
++
++**Purpose**
++
++Concrete tmux runtime backend.
++
++**Contains**
++
++- tmux session creation,
++- stop,
++- send input,
++- capture pane,
++- runtime ref parsing.
++
++**Must not contain**
++
++- owner protection decisions,
++- task mutation,
++- routing.
++
++**Public surface**
++
++```python
++class TmuxBackend(RuntimeBackend): ...
++```
++
++**Tests**
++
++Unit tests with mocked subprocess; optional integration tests behind flag.
++
++## `lib/cnb/runtime/monitor.py`
++
++**Purpose**
++
++Convert runtime backend observations into observation events.
++
++**Contains**
++
++- heartbeat capture,
++- snapshot capture,
++- idle/busy observation heuristics,
++- crash observation.
++
++**Must not contain**
++
++Final state decisions. It emits observations.
++
++**Public surface**
++
++```python
++class RuntimeMonitor:
++    def observe_session(session_id) -> list[Event]: ...
++```
++
++**Tests**
++
++Observation generation tests.
++
++## `lib/cnb/runtime/protection.py`
++
++**Purpose**
++
++Runtime stop/restart protection integration.
++
++**Contains**
++
++- calls to policy engine,
++- conversion of runtime stop requests into commands/events,
++- force-stop audit support.
++
++**Must not contain**
++
++tmux stop implementation.
++
++**Public surface**
++
++```python
++class RuntimeProtectionService:
++    def evaluate_stop(actor_id, reason) -> StopDecision: ...
++```
++
++**Tests**
++
++Protected owner stop denial tests.
++
++---
++
++# `lib/cnb/adapters/`
++
++Adapters translate external systems into signals and notifications. They do not mutate organization state directly.
++
++## `lib/cnb/adapters/github.py`
++
++**Purpose**
++
++GitHub issue/PR/CI adapter.
++
++**Contains**
++
++- fetch/receive GitHub events,
++- normalize into `Signal`,
++- submit signal command,
++- post comments/replies when requested by notification job.
++
++**Must not contain**
++
++Ownership resolver logic or direct SQLite updates.
++
++**Public surface**
++
++```python
++class GitHubAdapter:
++    def ingest_issue(...): ...
++    def ingest_pr(...): ...
++    def ingest_ci_failure(...): ...
++```
++
++**Tests**
++
++GitHub payload normalization tests.
++
++## `lib/cnb/adapters/feishu.py`
++
++**Purpose**
++
++Feishu/Lark message adapter.
++
++**Contains**
++
++- inbound message normalization,
++- submit external signal,
++- outbound reply sending when notification job requests it.
++
++**Must not contain**
++
++Direct tmux send, direct supervisor launch, task mutation.
++
++**Public surface**
++
++```python
++class FeishuAdapter:
++    def ingest_message(...): ...
++    def send_reply(...): ...
++```
++
++**Tests**
++
++Feishu payload normalization and outbound formatting tests.
++
++## `lib/cnb/adapters/sync_gateway.py`
++
++**Purpose**
++
++Expose events/projections to clients.
++
++**Contains**
++
++- `GET /events?after=` behavior,
++- read-only projection endpoints,
++- command submission endpoint if gateway supports writes.
++
++**Must not contain**
++
++Separate event truth. It must publish the main event store, not its own parallel event log.
++
++**Public surface**
++
++```python
++class SyncGateway: ...
++```
++
++**Tests**
++
++Event stream and projection endpoint tests.
++
++## `lib/cnb/adapters/web.py`
++
++**Purpose**
++
++Web UI adapter if needed.
++
++**Contains**
++
++- read projections,
++- submit commands,
++- render minimal server endpoints.
++
++**Must not contain**
++
++Domain policy logic.
++
++**Tests**
++
++Endpoint authorization and command submission tests.
++
++---
++
++# `lib/cnb/legacy/`
++
++Legacy files preserve old behavior while migration proceeds.
++
++## `lib/cnb/legacy/board_compat.py`
++
++**Purpose**
++
++Translate old board commands to new commands.
++
++**Contains**
++
++- old argument parsing,
++- legacy output formatting,
++- compatibility warnings,
++- mapping to `OrgKernel` commands.
++
++**Must not contain**
++
++New domain behavior.
++
++**Public surface**
++
++```python
++def board_main(argv: list[str] | None = None) -> int
++```
++
++**Tests**
++
++Old command compatibility tests.
++
++## `lib/cnb/legacy/migrations.py`
++
++**Purpose**
++
++Migrate old board data into new events/projections.
++
++**Contains**
++
++- old `ownership(session, path_pattern)` migration,
++- old `tasks` migration,
++- old `messages/inbox` migration,
++- old session migration,
++- migration audit events.
++
++**Must not contain**
++
++Runtime logic.
++
++**Public surface**
++
++```python
++class LegacyMigrator:
++    def migrate(self) -> MigrationReport: ...
++```
++
++**Tests**
++
++Legacy DB fixture migration tests.
++
++---
++
++# File ownership of concepts
++
++Use this table when deciding where code belongs.
++
++| Concept | Owner file | Notes |
++|---|---|---|
++| Actor identity | `org/actors.py` | durable identity only |
++| Session runtime state | `org/sessions.py` | domain state, not tmux calls |
++| Role defaults | `org/roles.py` | no ownership assignment |
++| Capability checks | `org/capabilities.py` + `org/policies.py` | token auth stays in daemon |
++| Scope definitions | `org/scopes.py` | patterns and hierarchy |
++| Contract rules | `org/contracts.py` | plan verification/review; do not run commands |
++| Ownership lifecycle | `org/ownership.py` | assign/claim/transfer/archive |
++| Routing decision | `org/routing.py` | explainable candidates/evidence |
++| Obligation lifecycle | `org/obligations.py` | accept/reject/delegate/escalate/satisfy |
++| Task lifecycle | `org/tasks.py` | execution unit state machine |
++| Handoff | `org/handoff.py` | transfer continuity |
++| Policy | `org/policies.py` | allow/deny/requires review/approval/fallback |
++| Health | `org/health.py` | read-only analysis |
++| Briefs | `org/memory.py` | summarize facts for AI actors |
++| Events | `org/events.py` + `store/event_store.py` | event definition vs persistence |
++| Projections | `store/projections.py` | current state views |
++| Runtime backend | `runtime/*` | process control only |
++| Job scheduling | `scheduler/*` | durable execution |
++| External systems | `adapters/*` | signal/notification boundary only |
++
++## File-level red flags
++
++If a file begins to do any of the following, split or move code immediately:
++
++- CLI file imports sqlite directly.
++- Adapter writes projection tables.
++- Runtime backend checks ownership state.
++- Store layer decides policy.
++- Routing sends notifications directly.
++- Task service runs shell verification directly.
++- Ownership service calculates issue keyword scores.
++- Handoff service mutates tmux sessions.
++- Health service appends events.
++- Brief service invents facts not present in memory.
+
+diff --git a/docs/architecture/org-runtime/03-command-event-policy.md b/docs/architecture/org-runtime/03-command-event-policy.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/03-command-event-policy.md
++# 03 — Command, Policy, Event, Projection Flow
++
++This document defines how state changes happen.
++
++## The rule
++
++No organization state may change without this flow:
++
++```text
++Command -> Authentication -> Authorization -> Policy -> Event -> Projection -> Jobs/Notifications
++```
++
++If code changes a projection table directly without an event, it is wrong.
++
++## Command envelope
++
++Every write operation is represented as a command envelope.
++
++```json
++{
++  "id": "cmd_01J...",
++  "project_id": "proj_cnb",
++  "actor_id": "lisa-su",
++  "type": "AcceptObligation",
++  "payload": {
++    "obligation_id": "obl_123"
++  },
++  "idempotency_key": "accept-obl_123-lisa-su",
++  "created_at": "2026-05-11T10:00:00Z"
++}
++```
++
++Fields:
++
++- `id`: unique command id.
++- `project_id`: project/org namespace.
++- `actor_id`: durable actor identity.
++- `type`: command name.
++- `payload`: command-specific data.
++- `idempotency_key`: optional key to prevent duplicate effects.
++- `created_at`: client creation time.
++
++## Command result
++
++Command handlers return structured results.
++
++```json
++{
++  "ok": true,
++  "events": [123, 124],
++  "projection_version": 123,
++  "message": "Obligation accepted",
++  "data": {
++    "obligation_id": "obl_123"
++  }
++}
++```
++
++Failure result:
++
++```json
++{
++  "ok": false,
++  "error_code": "not_authorized",
++  "message": "actor bob cannot accept obligation owned by lisa-su",
++  "policy": "ObligationPolicy.accept"
++}
++```
++
++## Authentication
++
++Authentication answers:
++
++```text
++Who submitted this command?
++```
++
++In daemon mode, actor identity comes from capability token, not `--as`.
++
++CLI legacy mode may pass actor explicitly only when `CNB_LEGACY_IMPERSONATION=1`.
++
++## Authorization
++
++Authorization answers:
++
++```text
++Does this actor have the capability needed by this command?
++```
++
++Examples:
++
++| Command | Required capability |
++|---|---|
++| `AcceptObligation` | `accept_own_obligation` or manager override |
++| `RejectObligation` | `reject_own_obligation` or manager override |
++| `AssignTask` | `assign_task` |
++| `CompleteTask` | `complete_assigned_task` or owner review capability |
++| `TransferOwnership` | `transfer_ownership` |
++| `RuntimeStopActor` | `manage_runtime` plus protection policy |
++| `SubmitExternalSignal` | `submit_external_signal` |
++
++## Policy
++
++Policy answers:
++
++```text
++Even if this actor has a general capability, is this command valid in this exact state?
++```
++
++Examples:
++
++- Can this actor accept this obligation?
++- Is this obligation still open?
++- Does task completion require verification?
++- Does this scope require owner review?
++- Does stopping this actor require handoff?
++- Does this command require user approval?
++
++Policy result:
++
++```text
++allow
++deny
++requires_approval
++requires_review
++requires_handoff
++requires_fallback
++```
++
++Policy decisions must include reasons.
++
++## Events
++
++If command passes policy, it appends events.
++
++Example:
++
++```json
++{
++  "id": 12345,
++  "project_id": "proj_cnb",
++  "actor_id": "lisa-su",
++  "type": "ObligationAccepted",
++  "payload_json": {
++    "obligation_id": "obl_123"
++  },
++  "causation_id": "cmd_01J...",
++  "correlation_id": "issue_123_flow",
++  "created_at": "2026-05-11T10:00:01Z",
++  "payload_sha256": "..."
++}
++```
++
++Event naming convention:
++
++```text
++NounPastTense
++```
++
++Examples:
++
++```text
++ActorRegistered
++ScopeImported
++OwnershipAssigned
++OwnershipTransferRequested
++RouteDecisionRecorded
++ObligationOpened
++ObligationAccepted
++ObligationRejected
++TaskCreated
++TaskCompletionRequested
++VerificationJobQueued
++VerificationPassed
++TaskMovedToReview
++TaskDone
++SessionStarted
++SessionIdleObserved
++RuntimeStopDenied
++HandoffPrepared
++HandoffCompleted
++```
++
++## Projection
++
++Projection tables are current-state views.
++
++Event handlers update projections synchronously after appending events.
++
++Projection rules:
++
++- Projection code must be deterministic.
++- Projection code must not call external systems.
++- Projection code must not run policy checks.
++- Projection rebuild from event store must produce the same state as incremental updates.
++
++## Jobs
++
++Some events schedule jobs.
++
++Examples:
++
++| Event | Job |
++|---|---|
++| `TaskCompletionRequested` | `RunVerification` |
++| `ObligationOpened` | `SendNotification` |
++| `OwnershipTransferRequested` | `PrepareHandoffChecklist` |
++| `SessionStarted` | `CheckSessionHealth` |
++| `ScopeImported` | `ValidateScopePatterns` |
++| `RouteDecisionRecorded` | `OpenObligation` if route requires action |
++
++Jobs themselves must also append events for durable effects.
++
++## Query flow
++
++Reads do not append events.
++
++```text
++CLI query -> daemon/query client -> projection query -> result
++```
++
++Queries may enforce visibility rules, but must not change state.
++
++## Idempotency
++
++Commands that may be retried should include idempotency keys.
++
++Examples:
++
++```text
++submit external issue signal: github-issue-87-updated-at-...
++accept obligation: accept-obl_123-lisa-su
++send notification: delivery-del_123-attempt-1
++```
++
++Command store checks whether a command with the same project and idempotency key already completed. If so, it returns previous result.
++
++## Error classes
++
++Use stable error codes:
++
++```text
++invalid_command
++authentication_required
++not_authorized
++policy_denied
++requires_approval
++requires_review
++requires_handoff
++not_found
++invalid_state
++conflict
++idempotency_conflict
++storage_error
++runtime_error
++external_adapter_error
++```
++
++## Command examples
++
++### Accept obligation
++
++```text
++Command: AcceptObligation
++Policy:
++  - obligation exists
++  - state is open or delegated to this actor
++  - actor is owner or delegated actor or manager
++Events:
++  - ObligationAccepted
++Jobs:
++  - maybe SendNotification to source thread
++```
++
++### Reject obligation
++
++```text
++Command: RejectObligation
++Policy:
++  - obligation exists
++  - actor can reject own obligation
++  - reason is non-empty
++Events:
++  - ObligationRejected
++  - RouteDecisionRejected
++  - FallbackObligationOpened if fallback configured
++Jobs:
++  - SendNotification to project-manager
++  - maybe RoutingPatternSuggestion
++```
++
++### Complete task
++
++```text
++Command: CompleteTask
++Policy:
++  - task exists
++  - actor is assignee or has manager/owner authority
++  - task state is in_progress or reviewable
++  - if scoped, load scope contract
++Events:
++  - TaskCompletionRequested
++  - VerificationJobQueued
++Jobs:
++  - RunVerification
++```
++
++Task is not marked done until verification/review/approval events pass.
++
++### Stop runtime actor
++
++```text
++Command: RuntimeStopActor
++Policy:
++  - actor has manage_runtime
++  - runtime protection policy checks ownership/open obligations
++  - if protected, deny or require handoff/force
++Events:
++  - RuntimeStopRequested
++  - RuntimeStopAllowed or RuntimeStopDenied
++Jobs:
++  - StopRuntimeSession if allowed
++```
++
++## Implementation requirement
++
++Each command handler should be small and structured:
++
++```python
++def handle_accept_obligation(ctx, command):
++    payload = parse_payload(command)
++    obligation = ctx.queries.get_obligation(payload.obligation_id)
++
++    decision = ctx.policies.can_accept_obligation(command.actor_id, obligation)
++    if not decision.allowed:
++        return CommandResult.denied(decision)
++
++    event = events.ObligationAccepted(...)
++    ctx.events.append([event])
++    ctx.projections.apply([event])
++    ctx.jobs.enqueue_from_events([event])
++    return CommandResult.ok(events=[event])
++```
++
++No handler should directly edit projection tables except through `ProjectionUpdater`.
+
+diff --git a/docs/architecture/org-runtime/04-data-model.md b/docs/architecture/org-runtime/04-data-model.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/04-data-model.md
++# 04 — Data Model
++
++This document defines the SQLite layout for the organization runtime.
++
++The database has three categories:
++
++1. append-only facts: `events`, `commands`,
++2. current-state projections: `*_current`,
++3. durable execution state: `jobs_current`.
++
++## Design rules
++
++- Events are the durable fact source.
++- Projection tables are rebuildable.
++- Jobs are durable and recoverable.
++- Migrations must support legacy board data.
++- External adapters must not own a separate truth database for organization facts.
++
++## Event store
++
++```sql
++CREATE TABLE events (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    project_id TEXT NOT NULL,
++    actor_id TEXT NOT NULL,
++    type TEXT NOT NULL,
++    payload_json TEXT NOT NULL,
++    causation_id TEXT,
++    correlation_id TEXT,
++    created_at TEXT NOT NULL,
++    payload_sha256 TEXT NOT NULL
++);
++
++CREATE INDEX idx_events_project_id ON events(project_id, id);
++CREATE INDEX idx_events_type ON events(type);
++CREATE INDEX idx_events_correlation ON events(correlation_id);
++```
++
++Notes:
++
++- `causation_id` usually points to command id or job id.
++- `correlation_id` groups a flow such as issue routing or handoff.
++- `payload_sha256` helps detect corruption and debugging mistakes.
++
++## Command log
++
++```sql
++CREATE TABLE commands (
++    id TEXT PRIMARY KEY,
++    project_id TEXT NOT NULL,
++    actor_id TEXT NOT NULL,
++    type TEXT NOT NULL,
++    payload_json TEXT NOT NULL,
++    idempotency_key TEXT,
++    state TEXT NOT NULL,
++    result_json TEXT,
++    created_at TEXT NOT NULL,
++    completed_at TEXT
++);
++
++CREATE UNIQUE INDEX idx_commands_idempotency
++ON commands(project_id, idempotency_key)
++WHERE idempotency_key IS NOT NULL;
++```
++
++Command states:
++
++```text
++received
++running
++succeeded
++failed
++```
++
++## Actors
++
++```sql
++CREATE TABLE actors_current (
++    id TEXT PRIMARY KEY,
++    kind TEXT NOT NULL,
++    display_name TEXT NOT NULL,
++    status TEXT NOT NULL,
++    created_at TEXT NOT NULL,
++    updated_at TEXT NOT NULL
++);
++
++CREATE TABLE actor_roles_current (
++    actor_id TEXT NOT NULL,
++    role TEXT NOT NULL,
++    PRIMARY KEY(actor_id, role)
++);
++
++CREATE TABLE actor_capabilities_current (
++    actor_id TEXT NOT NULL,
++    capability TEXT NOT NULL,
++    scope_id TEXT,
++    expires_at TEXT,
++    PRIMARY KEY(actor_id, capability, scope_id)
++);
++```
++
++## Sessions
++
++```sql
++CREATE TABLE sessions_current (
++    id TEXT PRIMARY KEY,
++    actor_id TEXT NOT NULL,
++    engine TEXT NOT NULL,
++    backend TEXT NOT NULL,
++    runtime_ref TEXT NOT NULL,
++    state TEXT NOT NULL,
++    started_at TEXT NOT NULL,
++    last_heartbeat TEXT,
++    stopped_at TEXT
++);
++
++CREATE INDEX idx_sessions_actor_state
++ON sessions_current(actor_id, state);
++```
++
++Session states:
++
++```text
++starting
++ready
++busy
++idle
++stopped
++crashed
++```
++
++## Scopes
++
++```sql
++CREATE TABLE scopes_current (
++    id TEXT PRIMARY KEY,
++    kind TEXT NOT NULL,
++    title TEXT NOT NULL,
++    description TEXT DEFAULT '',
++    parent_scope_id TEXT,
++    risk_level TEXT NOT NULL,
++    active INTEGER NOT NULL DEFAULT 1,
++    created_at TEXT NOT NULL,
++    updated_at TEXT NOT NULL
++);
++
++CREATE TABLE scope_patterns_current (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    scope_id TEXT NOT NULL,
++    pattern_type TEXT NOT NULL,
++    pattern TEXT NOT NULL,
++    weight REAL NOT NULL DEFAULT 1.0,
++    UNIQUE(scope_id, pattern_type, pattern)
++);
++
++CREATE INDEX idx_scope_patterns_type_pattern
++ON scope_patterns_current(pattern_type, pattern);
++```
++
++Pattern types:
++
++```text
++path
++label
++keyword
++test_file
++ci_job
++symbol
++doc_section
++external_system
++```
++
++## Contracts
++
++```sql
++CREATE TABLE contracts_current (
++    scope_id TEXT PRIMARY KEY,
++    contract_json TEXT NOT NULL,
++    imported_from TEXT,
++    version TEXT,
++    updated_at TEXT NOT NULL
++);
++```
++
++Contract details stay JSON because policies will evolve faster than basic projections.
++
++## Ownership
++
++```sql
++CREATE TABLE ownership_current (
++    id TEXT PRIMARY KEY,
++    scope_id TEXT NOT NULL,
++    owner_actor_id TEXT NOT NULL,
++    backup_actor_id TEXT DEFAULT '',
++    state TEXT NOT NULL,
++    source TEXT NOT NULL,
++    confidence REAL NOT NULL DEFAULT 1.0,
++    assigned_by TEXT NOT NULL,
++    assigned_at TEXT NOT NULL,
++    accepted_at TEXT,
++    archived_at TEXT
++);
++
++CREATE UNIQUE INDEX idx_one_active_owner_per_scope
++ON ownership_current(scope_id)
++WHERE state IN ('active', 'probation', 'transferring');
++
++CREATE INDEX idx_ownership_owner
++ON ownership_current(owner_actor_id, state);
++```
++
++Ownership states:
++
++```text
++proposed
++active
++probation
++transferring
++orphaned
++suspended
++archived
++```
++
++## Route decisions
++
++```sql
++CREATE TABLE route_decisions_current (
++    id TEXT PRIMARY KEY,
++    source_type TEXT NOT NULL,
++    source_id TEXT NOT NULL,
++    decision TEXT NOT NULL,
++    chosen_scope_id TEXT,
++    chosen_owner_actor_id TEXT,
++    fallback_actor_id TEXT DEFAULT '',
++    confidence REAL NOT NULL,
++    candidates_json TEXT NOT NULL,
++    evidence_json TEXT NOT NULL,
++    reason TEXT DEFAULT '',
++    created_at TEXT NOT NULL
++);
++
++CREATE INDEX idx_route_source
++ON route_decisions_current(source_type, source_id);
++
++CREATE INDEX idx_route_owner
++ON route_decisions_current(chosen_owner_actor_id, created_at);
++```
++
++Decisions:
++
++```text
++routed
++routed_cc
++fallback
++conflict
++ignored
++```
++
++## Obligations
++
++```sql
++CREATE TABLE obligations_current (
++    id TEXT PRIMARY KEY,
++    route_decision_id TEXT,
++    scope_id TEXT NOT NULL,
++    owner_actor_id TEXT NOT NULL,
++    kind TEXT NOT NULL,
++    source_type TEXT NOT NULL,
++    source_id TEXT NOT NULL,
++    state TEXT NOT NULL,
++    delegated_to TEXT DEFAULT '',
++    due_at TEXT,
++    created_at TEXT NOT NULL,
++    updated_at TEXT NOT NULL
++);
++
++CREATE INDEX idx_obligations_owner_state
++ON obligations_current(owner_actor_id, state);
++
++CREATE INDEX idx_obligations_scope_state
++ON obligations_current(scope_id, state);
++
++CREATE INDEX idx_obligations_source
++ON obligations_current(source_type, source_id);
++```
++
++Obligation states:
++
++```text
++open
++accepted
++rejected
++delegated
++escalated
++satisfied
++expired
++cancelled
++```
++
++## Tasks
++
++```sql
++CREATE TABLE tasks_current (
++    id TEXT PRIMARY KEY,
++    title TEXT NOT NULL,
++    description TEXT DEFAULT '',
++    source_type TEXT,
++    source_id TEXT,
++    obligation_id TEXT,
++    scope_id TEXT,
++    creator_actor_id TEXT NOT NULL,
++    assignee_actor_id TEXT,
++    state TEXT NOT NULL,
++    priority TEXT NOT NULL DEFAULT 'normal',
++    risk_level TEXT NOT NULL DEFAULT 'green',
++    created_at TEXT NOT NULL,
++    updated_at TEXT NOT NULL
++);
++
++CREATE INDEX idx_tasks_assignee_state
++ON tasks_current(assignee_actor_id, state);
++
++CREATE INDEX idx_tasks_scope_state
++ON tasks_current(scope_id, state);
++
++CREATE INDEX idx_tasks_obligation
++ON tasks_current(obligation_id);
++```
++
++Task states:
++
++```text
++draft
++assigned
++accepted
++in_progress
++blocked
++awaiting_user
++verifying
++review
++done
++failed
++cancelled
++```
++
++## Verification
++
++```sql
++CREATE TABLE verification_runs_current (
++    id TEXT PRIMARY KEY,
++    task_id TEXT,
++    scope_id TEXT,
++    state TEXT NOT NULL,
++    command_json TEXT NOT NULL,
++    result_json TEXT,
++    started_at TEXT,
++    completed_at TEXT,
++    created_at TEXT NOT NULL
++);
++
++CREATE INDEX idx_verification_task
++ON verification_runs_current(task_id);
++```
++
++States:
++
++```text
++queued
++running
++passed
++failed
++cancelled
++```
++
++## Handoffs
++
++```sql
++CREATE TABLE handoffs_current (
++    id TEXT PRIMARY KEY,
++    scope_id TEXT NOT NULL,
++    from_actor_id TEXT NOT NULL,
++    to_actor_id TEXT NOT NULL,
++    state TEXT NOT NULL,
++    checklist_json TEXT NOT NULL DEFAULT '{}',
++    handoff_note TEXT DEFAULT '',
++    created_at TEXT NOT NULL,
++    completed_at TEXT
++);
++
++CREATE INDEX idx_handoffs_scope_state
++ON handoffs_current(scope_id, state);
++```
++
++States:
++
++```text
++requested
++checklist_generated
++prepared
++accepted
++completed
++cancelled
++```
++
++## Jobs
++
++```sql
++CREATE TABLE jobs_current (
++    id TEXT PRIMARY KEY,
++    type TEXT NOT NULL,
++    state TEXT NOT NULL,
++    run_after TEXT NOT NULL,
++    lease_owner TEXT,
++    lease_until TEXT,
++    attempts INTEGER NOT NULL DEFAULT 0,
++    payload_json TEXT NOT NULL,
++    created_at TEXT NOT NULL,
++    updated_at TEXT NOT NULL
++);
++
++CREATE INDEX idx_jobs_due
++ON jobs_current(state, run_after);
++
++CREATE INDEX idx_jobs_lease
++ON jobs_current(lease_until);
++```
++
++Job states:
++
++```text
++queued
++running
++succeeded
++failed
++cancelled
++```
++
++## Deliveries and notifications
++
++```sql
++CREATE TABLE deliveries_current (
++    id TEXT PRIMARY KEY,
++    channel TEXT NOT NULL,
++    recipient_actor_id TEXT,
++    external_recipient TEXT,
++    subject TEXT DEFAULT '',
++    body TEXT NOT NULL,
++    related_type TEXT,
++    related_id TEXT,
++    state TEXT NOT NULL,
++    attempts INTEGER NOT NULL DEFAULT 0,
++    created_at TEXT NOT NULL,
++    updated_at TEXT NOT NULL
++);
++
++CREATE INDEX idx_deliveries_related
++ON deliveries_current(related_type, related_id);
++```
++
++Important: deliveries reference obligations, route decisions, tasks, approvals, or handoffs. Message body is not the source of truth.
++
++## Approvals
++
++```sql
++CREATE TABLE approvals_current (
++    id TEXT PRIMARY KEY,
++    requested_by TEXT NOT NULL,
++    requested_from TEXT NOT NULL,
++    related_type TEXT NOT NULL,
++    related_id TEXT NOT NULL,
++    reason TEXT NOT NULL,
++    state TEXT NOT NULL,
++    created_at TEXT NOT NULL,
++    resolved_at TEXT
++);
++```
++
++States:
++
++```text
++requested
++granted
++denied
++expired
++cancelled
++```
++
++## Health projections
++
++Health can be computed on demand or cached.
++
++If cached:
++
++```sql
++CREATE TABLE org_health_current (
++    key TEXT PRIMARY KEY,
++    value_json TEXT NOT NULL,
++    computed_at TEXT NOT NULL
++);
++```
++
++## Legacy migration mapping
++
++Old table to new model:
++
++| Old concept | New concept |
++|---|---|
++| `sessions.name` | `actors_current.id` plus `sessions_current` |
++| `ownership.session` | `ownership_current.owner_actor_id` |
++| `ownership.path_pattern` | legacy `scope` with `path` pattern |
++| `tasks.session` | `tasks_current.assignee_actor_id` |
++| `messages/inbox` | `deliveries_current` and possibly conversation projection |
++| `pending_actions` | obligation/task/approval depending on semantics |
++
++Migration should append migration events, not silently seed only projections.
++
++Example migration event:
++
++```text
++LegacyOwnershipMigrated
++payload:
++  old_session: alice
++  old_path_pattern: lib/
++  new_scope_id: legacy-path-lib
++  new_owner_actor_id: alice
++```
++
++## Projection rebuild procedure
++
++1. Start transaction.
++2. Clear all `*_current` tables.
++3. Replay events in order.
++4. Apply projection handlers.
++5. Record projection version equal to last event id.
++6. Commit.
++
++Do not replay commands. Events are the fact source.
+
+diff --git a/docs/architecture/org-runtime/05-ownership-design.md b/docs/architecture/org-runtime/05-ownership-design.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/05-ownership-design.md
++# 05 — Ownership Design
++
++Ownership is the central organization concept in cnb.
++
++It must not degrade into `session owns path_pattern`.
++
++## Definition
++
++Ownership is an accountability contract:
++
++```text
++Actor owns Scope under Contract.
++```
++
++It means the actor is accountable for scope health, triage, review, verification, escalation, and handoff.
++
++It does not mean the owner personally executes every task.
++
++## Why ownership exists
++
++AI actors are not stable human teammates. They restart, lose context, get killed, change models, forget previous work, and may misinterpret signals.
++
++Ownership exists to maintain responsibility continuity despite those discontinuities.
++
++It answers:
++
++1. Which scope does this signal belong to?
++2. Who is accountable for that scope?
++3. Why did we decide that?
++4. Is the owner available and capable?
++5. What standard defines completion?
++6. What happens if the owner goes away?
++
++## Main concepts
++
++```text
++Scope             responsibility boundary
++Contract          rules and completion standards for the scope
++Assignment        current owner/backup for the scope
++RouteDecision     explainable decision from signal to scope/owner/fallback
++Obligation        activated responsibility item
++Task              execution work that may satisfy obligation
++Handoff           continuity process for ownership transfer
++Protection        runtime safety rule for active owners
++Brief             memory summary for owner restart
++```
++
++## Scope
++
++A scope is a responsibility boundary.
++
++Examples:
++
++```text
++feishu-bridge
++ownership-routing
++dispatcher-runtime
++package-publishing
++security-secret-scan
++docs-readme-sync
++```
++
++A scope can be described by:
++
++```text
++paths
++labels
++keywords
++tests
++CI jobs
++external systems
++doc sections
++symbols
++```
++
++Example TOML:
++
++```toml
++[[scope]]
++id = "feishu-bridge"
++kind = "integration"
++title = "Feishu bridge"
++risk_level = "yellow"
++paths = [
++  "lib/feishu_bridge.py",
++  "tests/test_feishu_bridge.py",
++  "docs/feishu-bridge.md"
++]
++labels = ["feishu", "lark", "bridge", "integration"]
++keywords = ["webhook", "Feishu", "device supervisor", "resource handoff"]
++```
++
++## Contract
++
++A contract defines what responsible operation means for a scope.
++
++Example:
++
++```toml
++[scope.feishu-bridge.contract]
++verify = [
++  "python -m pytest tests/test_feishu_bridge.py -q",
++  "ruff check lib/feishu_bridge.py tests/test_feishu_bridge.py"
++]
++review_required = true
++handoff_required = true
++stop_protection = "protected"
++low_confidence_fallback = "project-manager"
++conflict_fallback = "project-manager"
++requires_user_approval_if = [
++  "auth token handling",
++  "public webhook behavior",
++  "allowed chat id policy"
++]
++```
++
++Contract responsibilities:
++
++- choose verification plan,
++- decide if owner review is required,
++- identify red-flag changes,
++- define handoff requirements,
++- define runtime protection,
++- define fallback actor for routing ambiguity.
++
++## Assignment
++
++Assignment binds owner to scope.
++
++States:
++
++```text
++proposed
++active
++probation
++transferring
++orphaned
++suspended
++archived
++```
++
++Lifecycle:
++
++```text
++unowned -> proposed -> active -> transferring -> archived
++active -> orphaned -> backup_active or transfer_requested
++```
++
++Rules:
++
++- Critical scopes must have owner and backup.
++- A scope can have only one accountable active owner.
++- Backup does not automatically become accountable until backup activation or transfer.
++- Assignment state changes must be events.
++
++## Routing
++
++Routing converts a signal into a route decision.
++
++Input examples:
++
++```text
++issue
++PR
++CI failure
++user request
++runtime alert
++file path
++```
++
++Output:
++
++```text
++RouteDecision
++```
++
++Never output only a string owner.
++
++### Evidence sources
++
++Strong evidence:
++
++```text
++explicit task/issue link
++GitHub assignee
++changed file exact scope path
++```
++
++Medium evidence:
++
++```text
++changed file parent path
++issue/PR label
++path mentioned in text
++CI job/test file
++```
++
++Weak evidence:
++
++```text
++keyword
++historical accepted route
++owner health
++```
++
++### Routing decisions
++
++```text
++routed       confident route to owner
++routed_cc    medium confidence; owner + project-manager copied
++fallback     route to project-manager/fallback
++conflict     multiple close candidates; fallback
++ignored      no action needed
++```
++
++### Decision thresholds
++
++```text
++score >= 0.80:
++  routed
++
++0.55 <= score < 0.80:
++  routed_cc, requires ack
++
++score < 0.55:
++  fallback
++
++top1 - top2 < 0.15:
++  conflict
++
++owner orphaned:
++  backup or fallback
++
++owner overloaded:
++  owner + backup cc or fallback depending policy
++```
++
++### Route explanation
++
++Every route decision must record candidates and evidence.
++
++Example:
++
++```json
++{
++  "decision": "routed",
++  "scope": "feishu-bridge",
++  "owner": "lisa-su",
++  "confidence": 0.88,
++  "evidence": [
++    {"kind": "label", "value": "feishu", "weight": 0.25},
++    {"kind": "path", "value": "lib/feishu_bridge.py", "weight": 0.45},
++    {"kind": "keyword", "value": "webhook", "weight": 0.10},
++    {"kind": "owner_health", "value": "heartbeat 8m ago", "weight": 0.08}
++  ]
++}
++```
++
++## Obligation
++
++A route decision that requires action opens an obligation.
++
++Obligation states:
++
++```text
++open
++accepted
++rejected
++delegated
++escalated
++satisfied
++expired
++cancelled
++```
++
++Owner actions:
++
++```bash
++cnb obligation accept obl_123
++cnb obligation reject obl_123 "wrong scope"
++cnb obligation delegate obl_123 bob
++cnb obligation escalate obl_123 "needs user approval"
++cnb obligation satisfy obl_123
++```
++
++Important distinction:
++
++```text
++notification sent != obligation accepted
++```
++
++## Rejection as first-class signal
++
++If owner rejects an obligation, record it and fallback.
++
++Flow:
++
++```text
++ObligationRejected
++RouteDecisionRejected
++FallbackObligationOpened
++RoutingPatternSuggestionCreated
++```
++
++Rejections are not errors. They are routing feedback.
++
++Metrics:
++
++```text
++accepted route count
++rejected route count
++fallback count
++conflict count
++owner average ack time
++```
++
++## Delegation vs transfer
++
++Delegation:
++
++```text
++owner gives execution task to another actor
++owner remains accountable
++```
++
++Transfer:
++
++```text
++ownership accountability moves to another actor after handoff
++```
++
++Never use one `assign` operation for both.
++
++## Handoff
++
++Handoff keeps ownership continuity.
++
++States:
++
++```text
++requested
++checklist_generated
++prepared
++accepted
++completed
++cancelled
++```
++
++Checklist includes:
++
++```text
++scope contract
++open obligations
++active tasks
++dirty files
++unmerged PRs
++pending approvals
++known risks
++recent route decisions
++recent rejected routes
++verification history
++handoff note
++```
++
++Transfer flow:
++
++```text
++TransferRequested
++HandoffChecklistGenerated
++HandoffPrepared
++HandoffAccepted
++OldAssignmentArchived
++NewAssignmentActivated
++```
++
++Until completed, old owner remains protected.
++
++## Owner protection
++
++Active ownership affects runtime.
++
++Stop rules:
++
++```text
++no ownership:
++  allow stop
++
++ownership but no open obligation:
++  drain first
++
++open obligation:
++  deny normal stop
++
++critical scope:
++  require backup active or handoff complete
++
++manual force:
++  allow only with audit event and reason
++```
++
++Owner protection must be checked by:
++
++```text
++runtime stop
++idle killer
++scale down
++restart
++session cleanup
++```
++
++## Owner brief
++
++Owner brief is the memory interface for AI actors.
++
++It should include:
++
++```text
++actor identity
++roles and capabilities
++owned scopes
++scope contracts
++open obligations
++delegated tasks
++pending reviews
++known risks
++recent accepted/rejected routes
++recent verification results
++handoff notes
++runtime protection status
++```
++
++Generated by:
++
++```bash
++cnb owner brief lisa-su
++```
++
++Used when starting or waking owner sessions.
++
++## Ownership health
++
++Health is more important than owner map.
++
++`cnb owner health` should report:
++
++```text
++coverage:
++  critical/yellow scopes with active owners
++
++orphans:
++  active owners with stale/no sessions and open obligations
++
++conflicts:
++  overlapping scopes causing ambiguous routing
++
++overload:
++  owners with too many active obligations/scopes
++
++routing quality:
++  accepted/rejected/fallback/conflict counts
++
++stale contracts:
++  scopes whose verification has not run recently
++
++handoff debt:
++  handoffs stuck in requested/prepared states
++```
++
++## Implementation stages
++
++### Stage 1 — Scope and assignment
++
++- Add scopes, patterns, contracts, ownership assignments.
++- Migrate legacy `path_pattern` ownership into legacy scopes.
++
++### Stage 2 — Resolver and route decisions
++
++- Implement `OwnershipResolver`.
++- Make `find_owner(path)` use resolver internally for compatibility.
++- Add `cnb owner route` and `cnb owner explain`.
++
++### Stage 3 — Obligations
++
++- Route decisions open obligations.
++- Owner can accept/reject/delegate/escalate/satisfy.
++
++### Stage 4 — Task integration
++
++- Tasks reference scope and obligation.
++- Completion uses scope contract verification.
++
++### Stage 5 — Handoff and protection
++
++- Implement handoff lifecycle.
++- Runtime stop checks owner protection.
++
++### Stage 6 — Brief and health
++
++- Generate owner brief.
++- Compute ownership health.
++
++## Acceptance tests
++
++Minimum tests:
++
++```text
++exact path routes to child scope over parent
++label + keyword route works
++low confidence fallback
++close candidates conflict fallback
++orphan owner routes to backup
++owner reject creates fallback obligation
++delegation does not transfer accountability
++transfer requires handoff accepted
++protected owner cannot be idle-killed
++scoped task completion runs contract verification
++owner brief includes open obligations and known risks
++```
+
+diff --git a/docs/architecture/org-runtime/06-runtime-scheduler-adapters.md b/docs/architecture/org-runtime/06-runtime-scheduler-adapters.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/06-runtime-scheduler-adapters.md
++# 06 — Runtime, Scheduler, and Adapters
++
++This document defines how execution, timers, external systems, and process control relate to the organization kernel.
++
++## Rule
++
++Runtime, scheduler, and adapters are servants of the organization kernel. They are not sources of organization truth.
++
++```text
++runtime observes and executes process operations
++scheduler runs durable jobs
++adapters translate external systems to signals/notifications
++org kernel decides organization state
++```
++
++## cnbd
++
++`cnbd` is the local daemon and single-writer coordinator.
++
++Responsibilities:
++
++- accept local commands and queries,
++- authenticate capability tokens,
++- call `OrgKernel`,
++- serialize writes,
++- own scheduler worker lifecycle,
++- expose event/projection stream to clients,
++- coordinate runtime backend calls.
++
++Non-responsibilities:
++
++- implementing domain policies,
++- owning GitHub/Feishu semantics,
++- embedding CLI output formatting.
++
++## Runtime backend
++
++The runtime backend controls processes.
++
++Interface:
++
++```python
++class RuntimeBackend:
++    def start(self, spec) -> RuntimeRef: ...
++    def stop(self, runtime_ref) -> StopResult: ...
++    def send_input(self, runtime_ref, text: str) -> SendResult: ...
++    def capture(self, runtime_ref) -> Snapshot: ...
++```
++
++`tmux` is one backend. The design must allow future backends.
++
++## Runtime observations
++
++Runtime monitor converts backend state into observation events.
++
++Examples:
++
++```text
++SessionSnapshotCaptured
++SessionHeartbeatObserved
++SessionIdleObserved
++SessionBusyObserved
++SessionCrashedObserved
++```
++
++Observation events are facts about what was observed, not final organization conclusions.
++
++Example:
++
++```text
++Observed: pane has prompt-like marker
++Not allowed: mark task done
++```
++
++## Session state
++
++Session state is projection built from events.
++
++States:
++
++```text
++starting
++ready
++busy
++idle
++stopped
++crashed
++```
++
++Runtime events:
++
++```text
++SessionStartRequested
++SessionStarted
++SessionReadyObserved
++SessionHeartbeatObserved
++SessionIdleObserved
++SessionBusyObserved
++SessionStopRequested
++SessionStopped
++SessionCrashedObserved
++```
++
++## Runtime protection
++
++Before stopping or restarting a session, runtime must ask policy.
++
++Policy inputs:
++
++```text
++actor_id
++reason
++active ownership assignments
++open obligations
++scope risk levels
++handoff state
++backup availability
++force flag
++```
++
++Outcomes:
++
++```text
++allow
++deny
++requires_handoff
++requires_force_audit
++requires_backup_activation
++```
++
++Example:
++
++```text
++actor lisa-su owns feishu-bridge
++open obligation issue#123 exists
++runtime stop requested by idle killer
++=> deny, reason protected_owner_has_open_obligation
++```
++
++## Scheduler
++
++The scheduler replaces ad-hoc dispatcher concern loops.
++
++It runs durable jobs.
++
++Job table fields:
++
++```text
++id
++type
++state
++run_after
++lease_owner
++lease_until
++attempts
++payload_json
++created_at
++updated_at
++```
++
++Job flow:
++
++```text
++claim due job
++  -> acquire lease
++  -> execute
++  -> append events
++  -> update projections
++  -> enqueue follow-up jobs
++  -> mark succeeded/failed
++```
++
++Lease expiry allows crash recovery.
++
++## Job types
++
++### `RunVerification`
++
++Input:
++
++```text
++task_id
++scope_id
++verification_plan
++```
++
++Output events:
++
++```text
++VerificationStarted
++VerificationPassed or VerificationFailed
++TaskMovedToReview or TaskDone or TaskReturnedToInProgress
++```
++
++### `SendNotification`
++
++Input:
++
++```text
++recipient
++channel
++related_type
++related_id
++body
++```
++
++Output events:
++
++```text
++NotificationAttempted
++NotificationDelivered or NotificationFailed
++```
++
++### `RouteGitHubIssue`
++
++Input:
++
++```text
++issue payload or issue id
++```
++
++Output events:
++
++```text
++ExternalSignalReceived
++RouteDecisionRecorded
++ObligationOpened
++```
++
++### `RouteCIFailure`
++
++Input:
++
++```text
++run id
++job name
++failed files
++logs summary
++```
++
++Output events:
++
++```text
++RouteDecisionRecorded
++ObligationOpened or FallbackObligationOpened
++```
++
++### `GenerateOwnerBrief`
++
++Input:
++
++```text
++actor_id
++```
++
++Output:
++
++```text
++OwnerBriefGenerated
++```
++
++### `DetectOrphanOwner`
++
++Input:
++
++```text
++actor_id or project_id
++```
++
++Output:
++
++```text
++OwnershipMarkedOrphaned
++BackupActivationRequested
++OrphanObligationOpened
++```
++
++### `PrepareHandoffChecklist`
++
++Input:
++
++```text
++handoff_id
++```
++
++Output:
++
++```text
++HandoffChecklistGenerated
++```
++
++### `CaptureSessionSnapshot`
++
++Input:
++
++```text
++session_id
++```
++
++Output:
++
++```text
++SessionSnapshotCaptured
++```
++
++### `CheckSessionHealth`
++
++Input:
++
++```text
++session_id
++```
++
++Output:
++
++```text
++SessionHeartbeatObserved
++SessionCrashedObserved
++SessionIdleObserved
++```
++
++## Adapter rule
++
++Adapters translate. They do not decide organization state.
++
++Allowed:
++
++```text
++external event -> Signal -> SubmitExternalSignal command
++notification request -> external reply/send
++```
++
++Forbidden:
++
++```text
++adapter -> update task table
++adapter -> assign owner directly
++adapter -> mark obligation accepted
++adapter -> tmux send organization command to bypass policy
++```
++
++## GitHub adapter
++
++Inputs:
++
++```text
++issue
++PR
++CI failure
++comment
++review
++```
++
++Outputs to org kernel:
++
++```text
++ExternalSignalReceived
++```
++
++For PRs, adapter should normalize:
++
++```text
++changed files
++labels
++assignees
++review requests
++CI job names
++```
++
++For CI failures, adapter should normalize:
++
++```text
++run id
++job name
++failed tests
++failed files if known
++summary
++```
++
++GitHub adapter may send comments only when scheduler/job requests a notification or reply.
++
++## Feishu adapter
++
++Inputs:
++
++```text
++user message
++button action
++approval response
++```
++
++Outputs to org kernel:
++
++```text
++ExternalUserMessageReceived
++ApprovalResponseReceived
++```
++
++Forbidden:
++
++```text
++start supervisor tmux session directly
++inject raw command into tmux pane
++mutate task/ownership tables
++```
++
++Flow:
++
++```text
++Feishu message
++  -> Signal
++  -> device-supervisor/project-manager route
++  -> command/obligation/task as needed
++  -> FeishuReplyRequested
++  -> adapter sends reply
++```
++
++## Sync gateway
++
++The sync gateway must publish the main event store and projections.
++
++It must not maintain a separate client-visible event truth.
++
++Endpoints:
++
++```text
++GET /events?after=<event_id>
++GET /projections/ownership
++GET /projections/tasks
++GET /projections/org-health
++POST /commands
++```
++
++Write endpoint submits command envelopes and uses the same policy path.
++
++## Web or Mac companion
++
++These clients read projections and submit commands.
++
++They are not privileged by being local UI.
++
++All writes must pass capability and policy.
++
++## Failure recovery
++
++### Runtime backend failure
++
++- record `RuntimeOperationFailed`,
++- do not mutate organization state beyond failure event,
++- schedule retry or escalation if policy says so.
++
++### Scheduler crash
++
++- job lease expires,
++- another worker reclaims,
++- idempotency prevents duplicate side effects.
++
++### Adapter failure
++
++- record notification/sync failure,
++- retry with backoff,
++- do not mark obligation/task completed.
++
++### Projection corruption
++
++- rebuild projections from events,
++- compare projection version to latest event id.
++
++## Metrics
++
++Runtime/scheduler/adapter health should expose:
++
++```text
++running sessions by actor
++stale sessions
++protected stop denials
++job backlog by type
++failed jobs by type
++notification failure rate
++adapter sync lag
++projection lag
++```
+
+diff --git a/docs/architecture/org-runtime/07-migration-plan.md b/docs/architecture/org-runtime/07-migration-plan.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/07-migration-plan.md
++# 07 — Migration Plan
++
++This plan migrates cnb gradually without breaking all existing commands at once.
++
++## Migration strategy
++
++Do not rewrite the whole system in one pass.
++
++Use this sequence:
++
++```text
++1. Add architecture docs and invariants.
++2. Add org kernel library behind old commands.
++3. Add event store and projections.
++4. Migrate ownership first.
++5. Migrate scan to route decision + obligation.
++6. Migrate task completion to contract verification.
++7. Add handoff and runtime protection.
++8. Add daemon and capabilities.
++9. Move adapters to signal/command model.
++10. Remove legacy mutation paths.
++```
++
++## Phase 0 — Docs, invariants, characterization tests
++
++Deliverables:
++
++```text
++docs/architecture/org-runtime/*
++legacy behavior tests
++architecture review checklist
++```
++
++Actions:
++
++- Document current-to-new concept mapping.
++- Add tests for existing `board own`, `board task`, `scan`, `inbox`, `status` behaviors.
++- Add rule: new code should not add direct DB mutations outside existing legacy code.
++
++Exit criteria:
++
++```text
++team can explain Actor vs Session, Ownership vs Task, Message vs Obligation
++legacy tests capture current behavior
++```
++
++## Phase 1 — OrgKernel library
++
++Deliverables:
++
++```text
++lib/cnb/org/kernel.py
++lib/cnb/org/commands.py
++lib/cnb/org/events.py
++lib/cnb/store/event_store.py
++lib/cnb/store/projections.py
++lib/cnb/store/unit_of_work.py
++```
++
++Actions:
++
++- Implement command envelope.
++- Implement event append.
++- Implement projection updater for a small subset.
++- Allow CLI/legacy command to call kernel in-process.
++
++Exit criteria:
++
++```text
++command -> event -> projection works
++projection rebuild works
++idempotency works
++```
++
++## Phase 2 — Ownership v2 base
++
++Deliverables:
++
++```text
++lib/cnb/org/scopes.py
++lib/cnb/org/contracts.py
++lib/cnb/org/ownership.py
++scope/ownership projections
++cnb.org.toml or cnb.ownership.toml import
++```
++
++Actions:
++
++- Add scope, patterns, contracts, assignments.
++- Migrate legacy ownership table into legacy path scopes.
++- Keep old `own claim/list/map` behavior through facade.
++
++Legacy mapping:
++
++```text
++old ownership.session -> owner_actor_id
++old ownership.path_pattern -> scope pattern path
++legacy scope id -> legacy-path-<normalized>
++```
++
++Exit criteria:
++
++```text
++old ownership map still works
++new scope list works
++one active owner per scope enforced
++```
++
++## Phase 3 — Routing and route decisions
++
++Deliverables:
++
++```text
++lib/cnb/org/routing.py
++route_decisions_current
++cnb owner route
++cnb owner explain
++```
++
++Actions:
++
++- Implement resolver with evidence and confidence.
++- Make old `find_owner(path)` call resolver internally.
++- Add golden tests for routes.
++
++Exit criteria:
++
++```text
++path route explains candidates/evidence
++low confidence fallback works
++conflict fallback works
++```
++
++## Phase 4 — Obligations
++
++Deliverables:
++
++```text
++lib/cnb/org/obligations.py
++obligations_current
++cnb obligation accept/reject/delegate/escalate/satisfy
++```
++
++Actions:
++
++- Route decisions open obligations.
++- Notifications reference obligations.
++- Owner rejection creates fallback obligation.
++
++Exit criteria:
++
++```text
++scan issue creates route decision and obligation
++owner can accept/reject
++a rejected obligation no longer looks unhandled
++fallback obligation is created when appropriate
++```
++
++## Phase 5 — Task v2 and contract verification
++
++Deliverables:
++
++```text
++lib/cnb/org/tasks.py
++verification_runs_current
++RunVerification job
++scoped task CLI
++```
++
++Actions:
++
++- Add task source, scope, obligation references.
++- Change task completion into `TaskCompletionRequested`.
++- Run scope contract verification before done.
++- Add review/approval transitions.
++
++Exit criteria:
++
++```text
++task complete does not directly mark done
++verification failure blocks done
++scoped task uses scope contract
++non-owner assignee requires owner review when configured
++```
++
++## Phase 6 — Handoff and runtime protection
++
++Deliverables:
++
++```text
++lib/cnb/org/handoff.py
++lib/cnb/runtime/protection.py
++handoffs_current
++owner protection policy
++```
++
++Actions:
++
++- Implement transfer/handoff lifecycle.
++- Generate handoff checklist.
++- Stop/restart checks owner protection.
++- Orphan detection schedules backup/fallback.
++
++Exit criteria:
++
++```text
++transfer requires handoff accept
++protected owner cannot be normal-stopped while open obligations exist
++force stop emits audit event
++orphan owner produces health warning and backup action
++```
++
++## Phase 7 — cnbd and capabilities
++
++Deliverables:
++
++```text
++lib/cnb/daemon/*
++capability token creation/verification
++CLI CommandClient
++legacy impersonation gate
++```
++
++Actions:
++
++- Start daemon as single writer.
++- CLI submits commands over IPC.
++- Actor identity comes from token.
++- `--as` allowed only in legacy/dev mode.
++
++Exit criteria:
++
++```text
++actor cannot accept another actor's obligation
++adapter cannot complete task
++legacy --as disabled by default
++```
++
++## Phase 8 — Adapter convergence
++
++Deliverables:
++
++```text
++GitHub signal ingestion
++Feishu signal ingestion
++sync gateway reads main event store
++```
++
++Actions:
++
++- GitHub issue/PR/CI -> Signal -> route -> obligation.
++- Feishu message -> Signal, not tmux injection.
++- Web/Mac clients read projections and submit commands.
++
++Exit criteria:
++
++```text
++adapters do not write organization tables directly
++all adapter writes go through command API
++sync gateway exposes main event stream
++```
++
++## Phase 9 — Legacy cleanup
++
++Actions:
++
++- Convert old board handlers to thin wrappers.
++- Remove direct mutation paths.
++- Remove message-body dedup logic.
++- Deprecate old path-only ownership commands or translate them.
++- Update docs and README.
++
++Exit criteria:
++
++```text
++all write paths emit events
++all current projections rebuild from events
++legacy behavior either mapped or explicitly deprecated
++```
++
++## Rollback approach
++
++Each phase must be reversible or at least non-destructive.
++
++Rules:
++
++- Do not delete old tables until migration has passed for at least one release.
++- Keep migration audit events.
++- Keep old command wrappers until replacement CLI is stable.
++- Add feature flags for new routing/obligation behavior.
++
++Suggested flags:
++
++```text
++CNB_ORG_KERNEL=1
++CNB_OWNERSHIP_V2=1
++CNB_OBLIGATIONS=1
++CNB_DAEMON=1
++CNB_LEGACY_IMPERSONATION=1
++```
++
++## Suggested first PRs
++
++PR 1:
++
++```text
++architecture docs
++module manifest
++no behavior change
++```
++
++PR 2:
++
++```text
++event store + command envelope + projection skeleton
++```
++
++PR 3:
++
++```text
++scope/contract/ownership projections + legacy migration
++```
++
++PR 4:
++
++```text
++OwnershipResolver + cnb owner route/explain
++```
++
++PR 5:
++
++```text
++obligations lifecycle + scan route decision integration
++```
++
++PR 6:
++
++```text
++scoped task completion + verification job
++```
+
+diff --git a/docs/architecture/org-runtime/08-testing-and-quality.md b/docs/architecture/org-runtime/08-testing-and-quality.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/08-testing-and-quality.md
++# 08 — Testing and Quality Gates
++
++This document defines how to test the organization runtime rewrite.
++
++The rewrite is high-risk because it changes the meaning of state, responsibility, and execution. Tests must focus on invariants and recoverability, not only CLI output.
++
++## Test layers
++
++```text
++unit tests          pure domain logic
++projection tests    event -> current state
++integration tests   command -> event -> projection -> jobs
++legacy tests        old commands still mapped correctly
++security tests      capability and authorization boundaries
++runtime tests       backend observations and protection policy
++adapter tests       external payload normalization
++crash tests         recovery after interrupted jobs/projections
++```
++
++## Domain unit tests
++
++### Actor/session tests
++
++Cases:
++
++```text
++actor can have many session runs
++session crash does not remove actor
++actor status can update without changing ownership
++session observation does not directly mutate task state
++```
++
++### Role/capability tests
++
++Cases:
++
++```text
++role grants default capabilities
++scoped capability only applies to matching scope
++expired capability denied
++adapter capability cannot complete task
++```
++
++### Scope/contract tests
++
++Cases:
++
++```text
++scope import from cnb.org.toml
++parent-child scope accepted
++invalid duplicate scope rejected
++pattern conflicts detected
++contract verification plan selected
++red flag requires approval
++```
++
++### Ownership lifecycle tests
++
++Cases:
++
++```text
++green scope claim can activate immediately
++yellow scope claim requires approval
++critical scope requires owner and backup
++only one active owner per scope
++transfer requires handoff acceptance
++archive keeps route history
++orphan owner can activate backup
++```
++
++### Routing tests
++
++Use golden fixtures.
++
++Cases:
++
++```text
++exact file path routes to child scope over parent
++changed file plus label routes confidently
++keyword-only route falls below threshold and fallback
++close top candidates become conflict
++orphan owner chooses backup
++owner overloaded routes with cc or fallback
++red scope route allowed but completion approval required
++```
++
++Route tests must assert:
++
++```text
++decision
++chosen scope
++chosen owner/fallback
++confidence range
++evidence list
++candidate list
++reason text
++```
++
++### Obligation tests
++
++Cases:
++
++```text
++route decision opens obligation
++owner can accept own obligation
++non-owner cannot accept
++owner can reject with reason
++reject creates fallback obligation
++owner can delegate execution without transferring accountability
++satisfy requires required verification/review when linked to task
++expired obligation appears in health
++```
++
++### Task tests
++
++Cases:
++
++```text
++task can reference scope and obligation
++task complete emits completion requested, not done
++contract verification pass moves to review or done
++verification fail returns to in_progress or failed state
++non-owner assignee requires owner review
++approval-required task waits for approval
++```
++
++### Handoff tests
++
++Cases:
++
++```text
++transfer request creates handoff
++handoff checklist includes open obligations and tasks
++new owner must accept
++old owner remains protected until handoff completed
++completed handoff activates new assignment
++cancelled handoff leaves old owner active
++```
++
++### Policy tests
++
++Cases:
++
++```text
++actor without capability denied
++owner can reject own obligation
++project-manager can resolve fallback obligation
++adapter cannot mutate ownership
++protected owner stop denied
++force stop requires reason and audit
++high-risk change requires approval
++```
++
++## Projection tests
++
++Projection tests must compare incremental and rebuilt states.
++
++Pattern:
++
++```text
++append events one by one -> apply projections
++clear projections -> rebuild from event store
++compare all current tables
++```
++
++Required projection scenarios:
++
++```text
++actor lifecycle
++scope import
++ownership assign/transfer/archive
++route decision and obligation
++obligation accept/reject/delegate
++scoped task complete + verification
++handoff lifecycle
++runtime session observations
++```
++
++## Command integration tests
++
++Test the full path:
++
++```text
++CommandEnvelope -> OrgKernel -> events -> projections -> jobs
++```
++
++Scenarios:
++
++```text
++issue route flow:
++  SubmitExternalSignal -> RouteDecisionRecorded -> ObligationOpened -> SendNotification job
++
++owner accept flow:
++  AcceptObligation -> ObligationAccepted -> projection updated
++
++owner reject flow:
++  RejectObligation -> ObligationRejected -> fallback obligation
++
++task completion flow:
++  CompleteTask -> TaskCompletionRequested -> VerificationJobQueued
++
++handoff flow:
++  TransferOwnership -> HandoffChecklistGenerated -> HandoffAccepted -> assignment switch
++```
++
++## Runtime tests
++
++### Backend tests
++
++Use mocked subprocess for tmux backend.
++
++Cases:
++
++```text
++start constructs expected tmux commands
++stop constructs expected tmux commands
++send input escapes safely
++capture returns snapshot
++backend failure returns structured error
++```
++
++### Monitor tests
++
++Cases:
++
++```text
++snapshot creates observation event
++idle-like output creates SessionIdleObserved
++crash-like backend result creates SessionCrashedObserved
++observation does not directly mark actor offline
++```
++
++### Protection tests
++
++Cases:
++
++```text
++actor with no ownership can stop
++owner with no open obligations requires drain
++owner with open obligation denied normal stop
++critical owner requires backup or handoff
++force stop emits audit event
++```
++
++## Scheduler tests
++
++Cases:
++
++```text
++due job claimed with lease
++leased job not double-claimed
++expired lease can be reclaimed
++failed job retries with attempts incremented
++verification job appends result event
++notification job records delivery result
++worker crash before projection can recover
++```
++
++## Adapter tests
++
++Adapters should be tested for normalization, not domain decisions.
++
++### GitHub
++
++Cases:
++
++```text
++issue payload -> Signal with title/body/labels/assignees
++PR payload -> Signal with changed files/labels/assignees
++CI payload -> Signal with run id/job name/failure summary
++adapter does not directly update task/ownership tables
++```
++
++### Feishu
++
++Cases:
++
++```text
++message payload -> ExternalUserMessage signal
++approval button -> ApprovalResponse signal
++outbound notification formats reply
++adapter does not tmux send
++```
++
++### Sync gateway
++
++Cases:
++
++```text
++GET /events returns main event store events
++projection endpoint reads projection table
++POST /commands uses command path
++no separate gateway event truth
++```
++
++## Security tests
++
++Required cases:
++
++```text
++missing token denied
++expired token denied
++wrong actor cannot accept obligation
++adapter token cannot complete task
++legacy --as disabled unless flag enabled
++actor cannot use capability outside scope
++high-risk approval cannot be self-granted unless policy allows
++```
++
++## Crash and recovery tests
++
++Cases:
++
++```text
++event appended but projection interrupted -> rebuild fixes projection
++job running and daemon dies -> lease expires -> job reclaimed
++notification sent but completion event missing -> idempotency prevents duplicate or records retry safely
++verification process fails -> task not marked done
++projection rebuild after migration matches expected state
++```
++
++## Legacy compatibility tests
++
++While migration is active, old commands must either work or emit explicit deprecation errors.
++
++Cases:
++
++```text
++board --as alice own claim lib/
++board --as alice own list
++board --as alice task add "..."
++board --as alice task done <id>
++board --as alice inbox
++board --as alice status "..."
++```
++
++Expected behavior:
++
++- old command maps to new command when possible,
++- output remains acceptable,
++- state changes emit events,
++- legacy impersonation requires explicit mode once daemon/capability phase begins.
++
++## Golden files
++
++Keep golden output fixtures for:
++
++```text
++cnb owner route issue
++cnb owner explain
++cnb owner health
++cnb org health
++cnb owner brief
++cnb task show
++```
++
++Golden tests make explanations stable and readable.
++
++## Quality gates
++
++A PR that changes stateful behavior must pass:
++
++```text
++unit tests
++projection rebuild tests
++command integration tests
++security tests if command/auth touched
++legacy tests if board compatibility touched
++migration tests if schema touched
++```
++
++Code review questions:
++
++```text
++Does this write path submit a command?
++Does it authenticate actor identity?
++Does it check capability?
++Does policy explain allow/deny?
++Does it append event?
++Can projection rebuild reproduce state?
++Can crash/retry duplicate side effects?
++Does this create or close an obligation?
++Does this affect ownership, authority, or runtime protection?
++```
++
++## Forbidden patterns in tests
++
++Do not write tests that assume:
++
++```text
++message body is dedup key
++pane text means agent ready
++--as is trustworthy identity
++path prefix alone is enough ownership
++verification pass means task can skip owner review
++notification sent means obligation accepted
++```
++
++Those assumptions are exactly what the rewrite is trying to remove.
+
+diff --git a/docs/architecture/org-runtime/README.md b/docs/architecture/org-runtime/README.md
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/README.md
++# cnb Org Runtime Architecture
++
++This directory is the authoritative architecture guide for the cnb rewrite.
++
++The rewrite is not a cosmetic package split. The goal is to turn cnb from a collection of tmux/SQLite/CLI scripts into a local-first AI organization runtime.
++
++Core promise:
++
++> Any signal entering cnb must be explainably routed to a scope, become an accountable obligation, be acted on by an authorized actor, and leave durable organizational memory.
++
++## Reading order
++
++1. `00-principles.md` — goals, non-goals, invariants, and forbidden shortcuts.
++2. `01-domain-model.md` — vocabulary and concept relationships.
++3. `02-file-contracts.md` — exact responsibility of every proposed source file.
++4. `03-command-event-policy.md` — command handling, policy checks, events, projections.
++5. `04-data-model.md` — SQLite schema and projection strategy.
++6. `05-ownership-design.md` — ownership, scope, contract, routing, obligation, handoff.
++7. `06-runtime-scheduler-adapters.md` — daemon, runtime backend, scheduler, external adapters.
++8. `07-migration-plan.md` — incremental migration from current board scripts.
++9. `08-testing-and-quality.md` — test matrix, quality gates, and review checklist.
++10. `module-manifest.yaml` — machine-readable file map for implementation planning.
++
++## Architectural center
++
++The architectural center is `lib/cnb/org/`, not `bin/`, not `tmux`, and not a database table.
++
++The central flow is:
++
++```text
++Command -> Authentication -> Policy -> Event -> Projection -> Job/Notification
++```
++
++The central organization loop is:
++
++```text
++Signal -> RouteDecision -> Obligation -> Task/Review/Escalation -> Verification -> Memory
++```
++
++## What this document set should prevent
++
++It should prevent these failure modes:
++
++- A file becomes a grab bag of helpers.
++- A command handler directly mutates SQLite.
++- An adapter bypasses policy and updates organization state directly.
++- Runtime observation is treated as truth.
++- Ownership degenerates back to `session owns path_pattern`.
++- A message is mistaken for responsibility acceptance.
++- An AI agent restart loses responsibility context.
+
+diff --git a/docs/architecture/org-runtime/module-manifest.yaml b/docs/architecture/org-runtime/module-manifest.yaml
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/docs/architecture/org-runtime/module-manifest.yaml
++version: 1
++architecture: cnb-org-runtime
++summary: >
++  Local-first AI organization runtime. All organization facts change through
++  command -> policy -> event -> projection. Runtime, adapters, and CLI are
++  boundaries around the organization kernel.
++
++layers:
++  bin:
++    rule: Process shims only.
++    files:
++      bin/cnb:
++        purpose: Main executable shim.
++        contains:
++          - exec python module or installed console entry
++        forbidden:
++          - business logic
++          - sqlite access
++          - tmux control
++      bin/board:
++        purpose: Legacy compatibility shim.
++        contains:
++          - old argument translation
++          - compatibility warnings
++        forbidden:
++          - new domain behavior
++
++  cli:
++    path: lib/cnb/cli
++    rule: Parse args, submit commands, render output. No policy or persistence.
++    files:
++      main.py:
++        purpose: Top-level CLI entrypoint.
++        public:
++          - main(argv=None) -> int
++      client.py:
++        purpose: Submit commands/queries to daemon or local kernel.
++        public:
++          - CommandClient.submit(command)
++          - CommandClient.query(query)
++      org.py:
++        purpose: Organization health, brief, actor/scope listing commands.
++      owner.py:
++        purpose: Ownership, route, explain, transfer, health, brief commands.
++      obligation.py:
++        purpose: Obligation lifecycle commands.
++      task.py:
++        purpose: Task lifecycle commands.
++      runtime.py:
++        purpose: Runtime start/stop/list/capture commands.
++
++  daemon:
++    path: lib/cnb/daemon
++    rule: Local API, single writer, capability auth, request routing.
++    files:
++      main.py:
++        purpose: cnbd entrypoint and lifecycle.
++      ipc.py:
++        purpose: Unix socket/local HTTP protocol.
++      auth.py:
++        purpose: Capability token authentication.
++      server.py:
++        purpose: Connect IPC requests to OrgKernel.
++
++  org:
++    path: lib/cnb/org
++    rule: Domain model and policies. Pure Python where possible.
++    files:
++      kernel.py:
++        purpose: Single entrypoint for commands and queries.
++      commands.py:
++        purpose: Command envelope and typed payloads.
++      events.py:
++        purpose: Event definitions and serialization.
++      actors.py:
++        purpose: Durable actor identity lifecycle.
++      roles.py:
++        purpose: Role constants and default capabilities.
++      capabilities.py:
++        purpose: Scoped capability evaluation.
++      sessions.py:
++        purpose: SessionRun domain state from observations.
++      scopes.py:
++        purpose: Scope definitions, patterns, hierarchy, validation.
++      contracts.py:
++        purpose: Scope completion, verification, review, approval rules.
++      ownership.py:
++        purpose: Ownership assignment lifecycle.
++      routing.py:
++        purpose: Signal to explainable RouteDecision.
++      obligations.py:
++        purpose: Obligation lifecycle.
++      tasks.py:
++        purpose: Task lifecycle and scoped completion.
++      handoff.py:
++        purpose: Ownership transfer continuity.
++      policies.py:
++        purpose: Authorization and domain policy decisions.
++      health.py:
++        purpose: Organization and ownership health analysis.
++      memory.py:
++        purpose: Owner/task/project/handoff brief generation.
++      approvals.py:
++        purpose: High-risk approval lifecycle.
++
++  store:
++    path: lib/cnb/store
++    rule: Persistence only. No domain policy.
++    files:
++      unit_of_work.py:
++        purpose: Transaction boundary.
++      event_store.py:
++        purpose: Append/read durable events.
++      command_store.py:
++        purpose: Command log and idempotency.
++      projections.py:
++        purpose: Apply/rebuild current-state projections.
++      queries.py:
++        purpose: Read-only projection queries.
++      migrations.py:
++        purpose: Schema and legacy data migration.
++
++  scheduler:
++    path: lib/cnb/scheduler
++    rule: Durable jobs and leases.
++    files:
++      jobs.py:
++        purpose: Job model and payload validation.
++      worker.py:
++        purpose: Claim and execute jobs.
++      leases.py:
++        purpose: Lease claim and expiry.
++
++  runtime:
++    path: lib/cnb/runtime
++    rule: Process control and observation only.
++    files:
++      backend.py:
++        purpose: Abstract runtime backend interface.
++      tmux_backend.py:
++        purpose: Concrete tmux implementation.
++      monitor.py:
++        purpose: Convert backend snapshots to observation events.
++      protection.py:
++        purpose: Runtime stop/restart protection integration.
++
++  adapters:
++    path: lib/cnb/adapters
++    rule: External systems as signal/notification translators only.
++    files:
++      github.py:
++        purpose: GitHub issue/PR/CI signal adapter.
++      feishu.py:
++        purpose: Feishu/Lark message and approval adapter.
++      sync_gateway.py:
++        purpose: Publish main event store and projections.
++      web.py:
++        purpose: Web/Mac companion API boundary.
++
++  legacy:
++    path: lib/cnb/legacy
++    rule: Compatibility only. Must shrink over time.
++    files:
++      board_compat.py:
++        purpose: Translate old board commands to new command API.
++      migrations.py:
++        purpose: Migrate old board data into new events/projections.
++
++concept_owners:
++  actor_identity: lib/cnb/org/actors.py
++  session_state: lib/cnb/org/sessions.py
++  runtime_process_control: lib/cnb/runtime/backend.py
++  tmux_implementation: lib/cnb/runtime/tmux_backend.py
++  role_defaults: lib/cnb/org/roles.py
++  capability_checks: lib/cnb/org/capabilities.py
++  command_authorization: lib/cnb/org/policies.py
++  scope_definitions: lib/cnb/org/scopes.py
++  contracts: lib/cnb/org/contracts.py
++  ownership_lifecycle: lib/cnb/org/ownership.py
++  routing_decisions: lib/cnb/org/routing.py
++  obligations: lib/cnb/org/obligations.py
++  tasks: lib/cnb/org/tasks.py
++  handoff: lib/cnb/org/handoff.py
++  health: lib/cnb/org/health.py
++  briefs: lib/cnb/org/memory.py
++  events: lib/cnb/org/events.py
++  event_persistence: lib/cnb/store/event_store.py
++  projections: lib/cnb/store/projections.py
++  jobs: lib/cnb/scheduler/jobs.py
++  job_execution: lib/cnb/scheduler/worker.py
++  external_github: lib/cnb/adapters/github.py
++  external_feishu: lib/cnb/adapters/feishu.py
++
++forbidden_patterns:
++  - cli imports sqlite directly
++  - adapter writes projection tables
++  - runtime backend checks ownership state
++  - store layer decides domain policy
++  - routing sends notifications directly
++  - task service runs shell verification directly
++  - ownership service calculates issue keyword route scores
++  - handoff service mutates tmux sessions
++  - health service appends events
++  - brief service invents facts not present in events/projections
+

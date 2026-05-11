@@ -8,7 +8,7 @@ from pathlib import Path
 from cryptography.exceptions import InvalidTag
 
 from lib.board_db import BoardDB, ts
-from lib.common import is_privileged
+from lib.common import validate_identity
 from lib.crypto import (
     generate_keypair,
     load_private_key,
@@ -19,9 +19,8 @@ from lib.crypto import (
     unseal_b64,
 )
 
-REGISTRY_DIR = Path(__file__).resolve().parent.parent / "registry"
-PUBKEYS_FILE = REGISTRY_DIR / "pubkeys.json"
-_DEFAULT_PUBKEYS_FILE = PUBKEYS_FILE
+REGISTRY_DIR = Path(os.environ.get("CNB_REGISTRY_DIR", Path(__file__).resolve().parent.parent / "registry"))
+PUBKEYS_FILE = Path(os.environ.get("CNB_PUBKEYS_FILE", REGISTRY_DIR / "pubkeys.json"))
 
 
 def _keys_dir(db: BoardDB) -> Path:
@@ -29,66 +28,33 @@ def _keys_dir(db: BoardDB) -> Path:
     return db.env.claudes_dir / "keys"
 
 
-def _pubkeys_file(db: BoardDB | None = None, *, claudes_dir: Path | None = None) -> Path:
-    override = os.environ.get("CNB_PUBKEYS_FILE")
-    if override:
-        return Path(override).expanduser()
-    if PUBKEYS_FILE != _DEFAULT_PUBKEYS_FILE:
-        return PUBKEYS_FILE
-    if claudes_dir is not None:
-        return claudes_dir / "pubkeys.json"
-    if db is not None and db.env is not None:
-        return db.env.claudes_dir / "pubkeys.json"
-    return PUBKEYS_FILE
-
-
-def _read_pubkeys(path: Path) -> dict[str, str]:
-    if path.exists():
-        data: dict[str, str] = json.loads(path.read_text())
+def _load_pubkeys() -> dict[str, str]:
+    if PUBKEYS_FILE.exists():
+        data: dict[str, str] = json.loads(PUBKEYS_FILE.read_text())
         return data
     return {}
 
 
-def _load_pubkeys(db: BoardDB | None = None, *, claudes_dir: Path | None = None) -> dict[str, str]:
-    return _read_pubkeys(_pubkeys_file(db, claudes_dir=claudes_dir))
+def _save_pubkeys(data: dict[str, str]) -> None:
+    PUBKEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PUBKEYS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
-def _save_pubkeys(data: dict[str, str], db: BoardDB | None = None, *, claudes_dir: Path | None = None) -> None:
-    path = _pubkeys_file(db, claudes_dir=claudes_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+def _pubkeys_display_path() -> Path:
+    try:
+        return PUBKEYS_FILE.relative_to(REGISTRY_DIR.parent)
+    except ValueError:
+        return PUBKEYS_FILE
 
 
-def _find_pubkey(name: str, db: BoardDB | None = None) -> str | None:
+def _find_pubkey(name: str) -> str | None:
     """Look up public_key from pubkeys.json (separate from immutable chain blocks)."""
-    target = _pubkeys_file(db)
-    pubkey = _read_pubkeys(target).get(name)
-    if pubkey:
-        return pubkey
-    if target != PUBKEYS_FILE:
-        return _read_pubkeys(PUBKEYS_FILE).get(name)
-    return None
-
-
-def _registered_sessions(db: BoardDB) -> list[str]:
-    return [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all' ORDER BY name")]
-
-
-def _validate_mailbox_identity(db: BoardDB, identity: str) -> str:
-    name = identity.lower()
-    if is_privileged(name):
-        return name
-    if db.scalar("SELECT COUNT(*) FROM sessions WHERE name=?", (name,)):
-        return name
-    sessions = ", ".join(_registered_sessions(db)) or "(none)"
-    print(f"ERROR: '{name}' is not a registered session")
-    print(f"  已注册 session: {sessions}")
-    print(f"  如需使用加密邮箱，先初始化/注册该 session，然后运行: board --as {name} keygen")
-    raise SystemExit(1)
+    return _load_pubkeys().get(name)
 
 
 def cmd_keygen(db: BoardDB, identity: str) -> None:
-    name = _validate_mailbox_identity(db, identity)
+    validate_identity(db, identity)
+    name = identity.lower()
     kd = _keys_dir(db)
 
     if (kd / f"{name}.pem").exists():
@@ -99,15 +65,14 @@ def cmd_keygen(db: BoardDB, identity: str) -> None:
     save_keypair(kd, name, private, public)
     pubkey_hex = public_key_to_hex(public)
 
-    pubkeys = _load_pubkeys(db)
+    pubkeys = _load_pubkeys()
     pubkeys[name] = pubkey_hex
-    _save_pubkeys(pubkeys, db)
-    pubkeys_file = _pubkeys_file(db)
+    _save_pubkeys(pubkeys)
 
     print("OK 密钥已生成")
     print(f"  私钥: {kd / f'{name}.pem'} (勿泄露)")
     print(f"  公钥: {pubkey_hex[:16]}...")
-    print(f"  已写入 {pubkeys_file}")
+    print(f"  已写入 {_pubkeys_display_path()}")
 
 
 def cmd_keygen_all(db: BoardDB) -> None:
@@ -118,7 +83,7 @@ def cmd_keygen_all(db: BoardDB) -> None:
         print("ERROR: 无注册会话")
         raise SystemExit(1)
 
-    pubkeys = _load_pubkeys(db)
+    pubkeys = _load_pubkeys()
     generated = 0
     skipped = 0
 
@@ -132,16 +97,17 @@ def cmd_keygen_all(db: BoardDB) -> None:
         generated += 1
 
     if generated:
-        _save_pubkeys(pubkeys, db)
+        _save_pubkeys(pubkeys)
 
     print(f"OK keygen-all: {generated} 生成, {skipped} 跳过 (已有密钥)")
     if generated:
         print(f"  密钥目录: {kd}")
-        print(f"  公钥注册: {_pubkeys_file(db)}")
+        print(f"  公钥注册: {_pubkeys_display_path()}")
 
 
 def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
-    name = _validate_mailbox_identity(db, identity)
+    validate_identity(db, identity)
+    name = identity.lower()
     if len(args) < 2:
         print("Usage: ./board --as <name> seal <recipient> <message>")
         raise SystemExit(1)
@@ -153,7 +119,7 @@ def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
         print("ERROR: 消息不能为空")
         raise SystemExit(1)
 
-    recipient_pubkey_hex = _find_pubkey(recipient, db)
+    recipient_pubkey_hex = _find_pubkey(recipient)
     if not recipient_pubkey_hex:
         print(f"ERROR: {recipient} 未注册公钥 (需先运行 keygen)")
         raise SystemExit(1)
@@ -170,7 +136,8 @@ def cmd_seal(db: BoardDB, identity: str, args: list[str]) -> None:
 
 
 def cmd_unseal(db: BoardDB, identity: str) -> None:
-    name = _validate_mailbox_identity(db, identity)
+    validate_identity(db, identity)
+    name = identity.lower()
     kd = _keys_dir(db)
 
     try:
@@ -206,7 +173,8 @@ def cmd_unseal(db: BoardDB, identity: str) -> None:
 
 
 def cmd_mailbox_log(db: BoardDB, identity: str) -> None:
-    name = _validate_mailbox_identity(db, identity)
+    validate_identity(db, identity)
+    name = identity.lower()
     kd = _keys_dir(db)
 
     try:

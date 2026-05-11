@@ -31,6 +31,10 @@ def _env_without_active_venv(**overrides):
     return env
 
 
+def _file_snapshot(path: Path) -> str | None:
+    return path.read_text() if path.exists() else None
+
+
 @pytest.fixture
 def fake_project(tmp_path):
     """A temp dir with fake agent binaries that dump their args."""
@@ -417,18 +421,28 @@ class TestSubcommands:
 @pytest.fixture
 def board_project(tmp_path):
     project_dir = tmp_path / "proj"
+    home_dir = tmp_path / "home"
+    pubkeys_file = tmp_path / "registry" / "pubkeys.json"
+    real_projects_file = Path.home() / ".cnb" / "projects.json"
+    real_pubkeys_file = CLAUDES_HOME / "registry" / "pubkeys.json"
+    real_projects_before = _file_snapshot(real_projects_file)
+    real_pubkeys_before = _file_snapshot(real_pubkeys_file)
+
     project_dir.mkdir()
     home_dir = project_dir / "home"
     home_dir.mkdir()
+    pubkeys_file.parent.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
     result = subprocess.run(
         [str(CLAUDES_HOME / "bin" / "init"), "lead", "alpha", "bravo"],
         cwd=project_dir,
         capture_output=True,
         text=True,
-        env={**os.environ, "HOME": str(home_dir)},
+        env={**os.environ, "HOME": str(home_dir), "CNB_PUBKEYS_FILE": str(pubkeys_file)},
     )
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert _file_snapshot(real_projects_file) == real_projects_before
+    assert _file_snapshot(real_pubkeys_file) == real_pubkeys_before
     return project_dir
 
 
@@ -444,6 +458,9 @@ def _board(project_dir, *args):
 
 
 class TestSendValidation:
+    def test_board_project_fixture_initializes_isolated_board(self, board_project):
+        assert (board_project / ".cnb" / "board.db").exists()
+
     def test_send_to_unknown_recipient_rejected(self, board_project):
         r = _board(board_project, "--as", "lead", "send", "nobody", "hello")
         assert r.returncode == 1
