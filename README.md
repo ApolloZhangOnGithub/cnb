@@ -8,7 +8,7 @@
 [![npm](https://img.shields.io/npm/v/claude-nb?label=npm)](https://www.npmjs.com/package/claude-nb)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)](pyproject.toml)
 [![Docs](https://img.shields.io/badge/docs-c--n--b.space-14865d)](https://c-n-b.space)
-[![License](https://img.shields.io/badge/license-OpenAll--1.0-444)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-444)](LICENSE)
 
 **Project ownership for LLM teams.** cnb gives Claude Code and Codex sessions a shared board, durable module ownership, and handoff records — so a restarted session picks up where the last one left off, not as a new hire with no memory.
 
@@ -93,4 +93,4 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Key rules: every change starts wi
 <!-- section:license -->
 ## License
 
-[OpenAll-1.0](LICENSE)
+[MIT](LICENSE)

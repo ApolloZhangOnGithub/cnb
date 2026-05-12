@@ -7,7 +7,7 @@ name = "claude-nb"
 version = "0.5.52.dev0"
 description = "Multi-agent coordination framework for Claude Code sessions"
 requires-python = ">=3.11"
-license = "LicenseRef-OpenAll-1.0"
+license = "MIT"
 dependencies = [
     "cryptography>=41.0",
 ]

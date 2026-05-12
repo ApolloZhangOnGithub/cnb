@@ -1,4 +1,4 @@
-OpenAll License v1.0
+MIT License
 
 Copyright (c) 2026 claudes-code contributors
 
@@ -9,25 +9,8 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-1. The above copyright notice and this permission notice shall be included in
-   all copies or substantial portions of the Software.
-
-2. Any distribution of the Software, or derivative works thereof, must also
-   include the complete creative process used to produce the work. This
-   includes, but is not limited to:
-
-   a. AI conversation logs and prompts used in development;
-   b. Agent personas, roles, and system prompts;
-   c. Design decisions and their rationale;
-   d. Development logs and coordination records.
-
-   These materials must be made available under this same license, in a
-   publicly accessible location, at the time of distribution.
-
-3. The requirement in Section 2 applies to the creative process of the
-   Software itself. It does not apply to projects that merely use the
-   Software as a tool, unless those projects redistribute modified versions
-   of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
