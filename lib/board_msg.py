@@ -5,6 +5,7 @@ import re
 import shutil
 from pathlib import Path
 
+from lib import fmt
 from lib.board_db import BoardDB, ts
 from lib.board_display import print_task_queue, print_unread_inbox
 from lib.common import escape_like, parse_flags, validate_identity
@@ -71,7 +72,7 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     msg = " ".join(send_args[1:]) if len(send_args) > 1 else ""
 
     if not msg and not attach_file:
-        print("ERROR: 消息不能为空")
+        print(fmt.err("消息不能为空"))
         raise SystemExit(1)
 
     attach_ref = ""
@@ -80,7 +81,7 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     if attach_file:
         path = Path(str(attach_file))
         if not path.is_file():
-            print(f"ERROR: file not found: {attach_file}")
+            print(fmt.err(f"file not found: {attach_file}"))
             raise SystemExit(1)
         data = path.read_bytes()
         h = hashlib.sha256(data).hexdigest()[:12]
@@ -115,9 +116,9 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
         )
         db.deliver_to_inbox(name, to, msg_id, c=c)
 
-    print("OK sent")
+    print(fmt.ok("sent"))
     if attach_ref:
-        print(f"  附件已存储: {stored_path}")
+        print(f"  附件已存储: {fmt.dim(stored_path)}")
 
     _nudge_session(db, to)
 
@@ -135,7 +136,7 @@ def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
         "UPDATE sessions SET status=?, updated_at=? WHERE name=?",
         (full_status, now, name),
     )
-    print("OK status updated")
+    print(fmt.ok("status updated"))
 
 
 def cmd_inbox(db: BoardDB, identity: str) -> None:
@@ -165,7 +166,7 @@ def cmd_ack(db: BoardDB, identity: str) -> None:
         count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (name,))
 
     if count == 0:
-        print("收件箱已经是空的")
+        print(fmt.dim("收件箱已经是空的"))
         marker.unlink(missing_ok=True)
         return
 
@@ -177,7 +178,7 @@ def cmd_ack(db: BoardDB, identity: str) -> None:
     else:
         db.execute("UPDATE inbox SET read=1 WHERE session=? AND read=0", (name,))
 
-    print(f"OK {count} 条已清空（完整记录在 messages.log）")
+    print(fmt.ok(f"{count} 条已清空（完整记录在 messages.log）"))
     marker.unlink(missing_ok=True)
 
 
@@ -195,19 +196,18 @@ def cmd_log(db: BoardDB, identity: str, args: list[str]) -> None:
 
     if filter_name:
         rows = db.query(
-            "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || body "
+            "SELECT ts, sender, recipient, body "
             "FROM messages WHERE sender=? OR recipient=? OR recipient='all' "
             "ORDER BY id DESC LIMIT ?",
             (filter_name, filter_name, n),
         )
     else:
         rows = db.query(
-            "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || body "
-            "FROM messages ORDER BY id DESC LIMIT ?",
+            "SELECT ts, sender, recipient, body FROM messages ORDER BY id DESC LIMIT ?",
             (n,),
         )
-    for (line,) in reversed(rows):
-        print(line)
+    for ts_val, sender_val, recipient_val, body_val in reversed(rows):
+        print(f"{fmt.dim(f'[{ts_val}]')} {fmt.sender_name(sender_val)} → {recipient_val}: {body_val}")
 
 
 def cmd_history(db: BoardDB, args: list[str]) -> None:
@@ -218,20 +218,20 @@ def cmd_history(db: BoardDB, args: list[str]) -> None:
     try:
         limit = int(args[1]) if len(args) > 1 else 20
     except ValueError:
-        print(f"ERROR: 无效的数字: {args[1]}")
+        print(fmt.err(f"无效的数字: {args[1]}"))
         raise SystemExit(1)
 
-    print(f"=== History: {args[0]} ===\n")
-    print(f"Messages involving {args[0]} (last {limit}):")
+    print(fmt.header(f"=== History: {args[0]} ===") + "\n")
+    print(fmt.subheader(f"Messages involving {args[0]} (last {limit}):"))
     rows = db.query(
-        "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 100) "
+        "SELECT ts, sender, recipient, substr(body, 1, 100) "
         "FROM messages WHERE sender=? OR recipient=? OR (recipient='all' AND sender=?) "
         "OR body LIKE '%' || ? || '%' ESCAPE '\\' ORDER BY id DESC LIMIT ?",
         (subject, subject, subject, escape_like(subject), limit),
     )
-    for (line,) in reversed(rows):
-        print(f"  {line}")
+    for ts_val, sender_val, recipient_val, body_val in reversed(rows):
+        print(f"  {fmt.dim(f'[{ts_val}]')} {fmt.sender_name(sender_val)} → {recipient_val}: {body_val}")
     print()
-    print("Status changes:")
+    print(fmt.subheader("Status changes:"))
     for updated_at, status in db.query("SELECT updated_at, status FROM sessions WHERE name=?", (subject,)):
-        print(f"  [{updated_at}] {status}")
+        print(f"  {fmt.dim(f'[{updated_at}]')} {status}")

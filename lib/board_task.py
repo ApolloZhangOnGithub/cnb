@@ -1,5 +1,6 @@
 """board_task — task queue: add / done / list / next."""
 
+from lib import fmt
 from lib.board_db import BoardDB, ts
 from lib.board_display import print_task_queue
 from lib.board_own import auto_pr, verify_task
@@ -64,11 +65,11 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
             (target, desc, status, priority),
             c=c,
         )
-        print(f"OK task #{task_id} added to {target} ({status})")
+        print(fmt.ok(f"task #{task_id} added to {fmt.bold(target)} ({status})"))
 
         if target != name:
             db.post_message(name, target, f"[TASK #{task_id}] {desc}", deliver=True, c=c)
-            print(f"OK notified {target}")
+            print(fmt.ok(f"notified {fmt.bold(target)}"))
     print_task_queue(db, target)
 
 
@@ -93,16 +94,16 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
     try:
         task_id = int(raw_id)
     except (ValueError, TypeError):
-        print(f"ERROR: 无效的任务 ID: {raw_id}")
+        print(fmt.err(f"无效的任务 ID: {raw_id}"))
         raise SystemExit(1)
     row = db.query_one("SELECT session, status, description FROM tasks WHERE id=?", (task_id,))
     if not row:
-        print(f"ERROR: task #{task_id} not found")
+        print(fmt.err(f"task #{task_id} not found"))
         raise SystemExit(1)
 
     assignee, status, desc = row
     if assignee != name and not is_privileged(name):
-        print(f"ERROR: task #{task_id} belongs to {assignee}; only owner, Orca, or Coral can mark it done")
+        print(fmt.err(f"task #{task_id} belongs to {assignee}; only owner, Orca, or Coral can mark it done"))
         raise SystemExit(1)
 
     if is_terminal_task_status(status):
@@ -113,25 +114,25 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
     # --- Verify: run tests before marking done ---
     env = db.env
     if env and not skip_verify:
-        print("验证中: 运行测试...", flush=True)
+        print(fmt.yellow("验证中: 运行测试..."), flush=True)
         passed, summary = verify_task(env.project_root)
         if not passed:
-            print(f"ERROR: 测试未通过，task #{task_id} 未标记完成")
+            print(fmt.err(f"测试未通过，task #{task_id} 未标记完成"))
             print(f"  {summary}")
-            print("  使用 --skip-verify 强制跳过")
+            print(f"  使用 {fmt.bold('--skip-verify')} 强制跳过")
             return
 
-        print(f"  测试通过: {summary}")
+        print(f"  {fmt.green('测试通过:')} {summary}")
 
     now = ts()
     db.execute("UPDATE tasks SET status='done', done_at=? WHERE id=?", (now, task_id))
-    print(f"OK task #{task_id} done: {desc}")
+    print(fmt.ok(f"task #{task_id} done: {desc}"))
 
     # --- Auto-PR: create PR if on a feature branch ---
     if env:
         pr_url = auto_pr(env.project_root, desc, name)
         if pr_url:
-            print(f"OK PR created: {pr_url}")
+            print(fmt.ok(f"PR created: {pr_url}"))
 
     _promote_next(db, assignee)
     nxt = db.query_one(
@@ -139,9 +140,9 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
         (assignee,),
     )
     if nxt:
-        print(f"Next: #{nxt[0]} {nxt[1]}")
+        print(f"{fmt.subheader('Next:')} #{nxt[0]} {nxt[1]}")
     else:
-        print(f"No remaining active/pending tasks for {assignee}.")
+        print(fmt.dim(f"No remaining active/pending tasks for {assignee}."))
     print_task_queue(db, assignee)
 
 
@@ -162,7 +163,7 @@ def _task_list(db: BoardDB, identity: str, args: list[str]) -> None:
             raise SystemExit(1)
 
     if all_sessions:
-        print("=== Task Queue ===")
+        print(fmt.header("=== Task Queue ==="))
         if include_done:
             rows = db.query(
                 "SELECT session, id, status, priority, description FROM tasks "
@@ -176,10 +177,17 @@ def _task_list(db: BoardDB, identity: str, args: list[str]) -> None:
                 "priority DESC, id ASC"
             )
         if not rows:
-            print("  (no tasks)")
+            print(f"  {fmt.dim('(no tasks)')}")
             return
         for session, tid, status, priority, desc in rows:
-            print(f"  {session:<8s} #{tid} [{status} p{priority}] {desc}")
+            tag = f"#{tid} [{status} p{priority}]"
+            if status == "active":
+                tag = fmt.task_active(tag)
+            elif status == "done":
+                tag = fmt.task_done(tag)
+            else:
+                tag = fmt.task_pending(tag)
+            print(f"  {fmt.bold(session.ljust(8))} {tag} {desc}")
         return
 
     if not target:

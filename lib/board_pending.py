@@ -3,6 +3,7 @@
 import shlex
 import subprocess
 
+from lib import fmt
 from lib.board_db import BoardDB, ts
 from lib.common import parse_flags, validate_identity
 
@@ -56,7 +57,8 @@ def _pending_add(db: BoardDB, identity: str, args: list[str]) -> None:
         raise SystemExit(1)
 
     if action_type not in VALID_TYPES:
-        print(f"ERROR: 类型必须是 {', '.join(VALID_TYPES)} 之一")
+        valid = ", ".join(VALID_TYPES)
+        print(fmt.err(f"类型必须是 {valid} 之一"))
         raise SystemExit(1)
 
     now = ts()
@@ -65,8 +67,8 @@ def _pending_add(db: BoardDB, identity: str, args: list[str]) -> None:
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
         (action_type, command, reason, verify_cmd, retry_cmd, name, now),
     )
-    print(f"OK pending #{action_id} added ({action_type})")
-    print(f"  用户需执行: {command}")
+    print(fmt.ok(f"pending #{action_id} added ({action_type})"))
+    print(f"  用户需执行: {fmt.bold(command)}")
     print(f"  原因: {reason}")
 
 
@@ -86,23 +88,31 @@ def _pending_list(db: BoardDB, identity: str, args: list[str]) -> None:
         )
 
     if not rows:
-        print("无待处理操作" if not show_all else "无操作记录")
+        print(fmt.dim("无待处理操作" if not show_all else "无操作记录"))
         return
 
-    print("=== 待处理操作 ===" if not show_all else "=== 所有操作 ===")
+    title = "=== 待处理操作 ===" if not show_all else "=== 所有操作 ==="
+    print(fmt.header(title))
     print()
     for row in rows:
         aid, atype, cmd, reason, verify, retry, status, creator, _created, resolved = row
         status_icon = {"pending": "⏳", "reminded": "🔔", "done": "✓", "retried": "✓✓", "failed": "✗"}.get(status, "?")
-        print(f"  #{aid} [{status_icon} {status}] ({atype}) by {creator}")
-        print(f"    用户需执行: ! {cmd}")
+        color_fn = {
+            "pending": fmt.yellow,
+            "reminded": fmt.yellow,
+            "done": fmt.green,
+            "retried": fmt.green,
+            "failed": fmt.red,
+        }.get(status, fmt.dim)
+        print(f"  {fmt.bold(f'#{aid}')} [{status_icon} {color_fn(status)}] ({atype}) by {fmt.sender_name(creator)}")
+        print(f"    用户需执行: {fmt.bold(f'! {cmd}')}")
         print(f"    原因: {reason}")
         if verify:
-            print(f"    验证命令: {verify}")
+            print(f"    验证命令: {fmt.dim(verify)}")
         if retry:
-            print(f"    重试命令: {retry}")
+            print(f"    重试命令: {fmt.dim(retry)}")
         if resolved:
-            print(f"    完成于: {resolved}")
+            print(f"    完成于: {fmt.dim(resolved)}")
         print()
 
 
@@ -126,17 +136,17 @@ def _run_command(command: str, timeout: int) -> tuple[bool, str | None]:
 
 
 def _run_retry_command(db: BoardDB, action_id: int, retry_cmd: str) -> bool:
-    ok, detail = _run_command(retry_cmd, timeout=60)
-    if ok:
+    succeeded, detail = _run_command(retry_cmd, timeout=60)
+    if succeeded:
         db.execute("UPDATE pending_actions SET status='retried' WHERE id=?", (action_id,))
-        print(f"  #{action_id}: 重试成功 ✓")
+        print(f"  #{action_id}: {fmt.green('重试成功 ✓')}")
         return True
 
     db.execute("UPDATE pending_actions SET status='failed' WHERE id=?", (action_id,))
     if detail == "超时":
-        print(f"  #{action_id}: 重试超时")
+        print(f"  #{action_id}: {fmt.red('重试超时')}")
     else:
-        print(f"  #{action_id}: 重试失败 — {detail}")
+        print(f"  #{action_id}: {fmt.red('重试失败')} — {detail}")
     return False
 
 
@@ -168,7 +178,7 @@ def _pending_verify(db: BoardDB, identity: str, args: list[str]) -> None:
         )
 
     if not rows:
-        print("无可验证的操作")
+        print(fmt.dim("无可验证的操作"))
         return
 
     verified = 0
@@ -178,18 +188,18 @@ def _pending_verify(db: BoardDB, identity: str, args: list[str]) -> None:
     retry_skipped = 0
     for aid, verify_cmd, cmd, retry_cmd in rows:
         if not verify_cmd:
-            print(f"  #{aid}: 无验证命令")
+            print(f"  #{aid}: {fmt.dim('无验证命令')}")
             failed += 1
             continue
 
-        ok, detail = _run_command(verify_cmd, timeout=30)
-        if ok:
+        succeeded, detail = _run_command(verify_cmd, timeout=30)
+        if succeeded:
             now = ts()
             db.execute(
                 "UPDATE pending_actions SET status='done', resolved_at=? WHERE id=?",
                 (now, aid),
             )
-            print(f"  #{aid}: 验证通过 ✓")
+            print(f"  #{aid}: {fmt.green('验证通过 ✓')}")
             verified += 1
 
             if auto_retry:
@@ -199,19 +209,21 @@ def _pending_verify(db: BoardDB, identity: str, args: list[str]) -> None:
                     else:
                         retry_failed += 1
                 else:
-                    print(f"  #{aid}: 无重试命令，跳过 retry")
+                    print(f"  #{aid}: {fmt.dim('无重试命令，跳过 retry')}")
                     retry_skipped += 1
         else:
             db.execute("UPDATE pending_actions SET status='reminded' WHERE id=?", (aid,))
             if detail == "超时":
-                print(f"  #{aid}: 验证超时")
+                print(f"  #{aid}: {fmt.yellow('验证超时')}")
             else:
-                print(f"  #{aid}: 验证失败 — {detail}; 用户仍需执行: ! {cmd}")
+                print(f"  #{aid}: {fmt.red('验证失败')} — {detail}; 用户仍需执行: {fmt.bold(f'! {cmd}')}")
             failed += 1
 
-    print(f"\n验证结果: {verified} 通过, {failed} 未通过")
+    print(f"\n验证结果: {fmt.green(str(verified))} 通过, {fmt.red(str(failed))} 未通过")
     if auto_retry:
-        print(f"重试结果: {retried} 成功, {retry_failed} 失败, {retry_skipped} 跳过")
+        print(
+            f"重试结果: {fmt.green(str(retried))} 成功, {fmt.red(str(retry_failed))} 失败, {fmt.dim(str(retry_skipped))} 跳过"
+        )
 
 
 def _pending_retry(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -235,14 +247,14 @@ def _pending_retry(db: BoardDB, identity: str, args: list[str]) -> None:
         )
 
     if not rows:
-        print("无可重试的操作（需先通过验证）")
+        print(fmt.dim("无可重试的操作（需先通过验证）"))
         return
 
     retried = 0
     failed = 0
     for aid, retry_cmd in rows:
         if not retry_cmd:
-            print(f"  #{aid}: 无重试命令")
+            print(f"  #{aid}: {fmt.dim('无重试命令')}")
             continue
 
         if _run_retry_command(db, aid, retry_cmd):
@@ -250,7 +262,7 @@ def _pending_retry(db: BoardDB, identity: str, args: list[str]) -> None:
         else:
             failed += 1
 
-    print(f"\n重试结果: {retried} 成功, {failed} 失败")
+    print(f"\n重试结果: {fmt.green(str(retried))} 成功, {fmt.red(str(failed))} 失败")
 
 
 def _pending_resolve(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -266,7 +278,7 @@ def _pending_resolve(db: BoardDB, identity: str, args: list[str]) -> None:
 
     row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (action_id,))
     if not row:
-        print(f"ERROR: pending #{action_id} 不存在")
+        print(fmt.err(f"pending #{action_id} 不存在"))
         raise SystemExit(1)
 
     if row[0] not in PENDING_STATUSES:
@@ -278,4 +290,4 @@ def _pending_resolve(db: BoardDB, identity: str, args: list[str]) -> None:
         "UPDATE pending_actions SET status='done', resolved_at=? WHERE id=?",
         (now, action_id),
     )
-    print(f"OK pending #{action_id} 已手动标记为完成")
+    print(fmt.ok(f"pending #{action_id} 已手动标记为完成"))
