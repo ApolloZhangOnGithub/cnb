@@ -180,6 +180,7 @@ if [ $# -gt 0 ]; then
         resources|resource) shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.resources "$@" ;;
         checkpoint) shift; exec "$CLAUDES_HOME/bin/checkpoint" "$@" ;;
         feishu)     shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.feishu_bridge "$@" ;;
+        roles)      shift; PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.roles "$@" ;;
         feishu-chief)
             shift
             PYTHONPATH="$CLAUDES_HOME${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m lib.feishu_bridge --config "$HOME/.cnb/device-chief/config.toml" "$@" ;;

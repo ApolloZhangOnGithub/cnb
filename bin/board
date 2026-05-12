@@ -335,6 +335,17 @@ for c in COMMANDS:
 
 def _dispatch(cmd: Command, db: BoardDB, identity: str, rest: list[str]) -> None:
     """Lazy-import the handler module and call the registered function."""
+    if identity:
+        from lib.roles import load_manifest, resolve_role_for_identity
+
+        role_name = resolve_role_for_identity(identity)
+        manifest = load_manifest(role_name)
+        if manifest.role:
+            full_cmd = f"board --as X {cmd.name}"
+            warning = manifest.boundary_warning(full_cmd)
+            if warning:
+                print(warning, file=sys.stderr)
+
     module = import_module(cmd.module)
     handler = getattr(module, cmd.function)
 
@@ -356,14 +367,37 @@ def _fmt_command(cmd: Command, width: int) -> str:
     return f"  {name:<{width}}  {cmd.help}"
 
 
-def print_help() -> None:
+def print_help(identity: str = "") -> None:
+    from lib.roles import load_manifest, resolve_role_for_identity
+
     visible = [c for c in COMMANDS if not c.hidden]
-    max_name = max(len(c.name) + (2 + len(", ".join(c.aliases)) if c.aliases else 0) for c in visible) + 2
-    print("board — 同学协作工具\n")
-    print("Usage: board --as <name> <command> [args...]\n")
-    print("Commands:")
-    for c in visible:
-        print(_fmt_command(c, max_name))
+    manifest = None
+    if identity:
+        role_name = resolve_role_for_identity(identity)
+        manifest = load_manifest(role_name)
+
+    if manifest and manifest.role:
+        cmd_names = manifest.command_base_names()
+        primary = [c for c in visible if any(c.name in base or f"board --as X {c.name}" in base for base in cmd_names)]
+        other = [c for c in visible if c not in primary]
+        max_name = max((len(c.name) + (2 + len(", ".join(c.aliases)) if c.aliases else 0) for c in visible), default=10) + 2
+        print(f"board — {manifest.label}命令\n")
+        print(f"Usage: board --as {identity} <command> [args...]\n")
+        if primary:
+            print("主要命令:")
+            for c in primary:
+                print(_fmt_command(c, max_name))
+        if other:
+            print("\n其他命令:")
+            for c in other:
+                print(_fmt_command(c, max_name))
+    else:
+        max_name = max((len(c.name) + (2 + len(", ".join(c.aliases)) if c.aliases else 0) for c in visible), default=10) + 2
+        print("board — 同学协作工具\n")
+        print("Usage: board --as <name> <command> [args...]\n")
+        print("Commands:")
+        for c in visible:
+            print(_fmt_command(c, max_name))
     print()
 
 
@@ -383,7 +417,7 @@ def main() -> None:
     rest = filtered[1:]
 
     if cmd_name in ("help", "-h", "--help"):
-        print_help()
+        print_help(identity)
         return
 
     cmd = _CMD_MAP.get(cmd_name)

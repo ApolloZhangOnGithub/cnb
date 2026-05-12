@@ -846,6 +846,16 @@ def referenced_message_owned_by_this_bridge(event: FeishuInboundEvent, cfg: Feis
     return isinstance(item, dict) and bool(item.get("routed_to_self") or item.get("outgoing_from_self"))
 
 
+def _pilot_role_section(cfg: FeishuBridgeConfig) -> str:
+    from lib.roles import load_manifest, resolve_role_for_pilot
+
+    role_name = resolve_role_for_pilot(cfg.pilot_role)
+    manifest = load_manifest(role_name)
+    if manifest.role:
+        return "\n\n[角色边界]\n" + manifest.generate_prompt_section()
+    return ""
+
+
 def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
     projects = _project_lines(cfg)
     project_block = "\n".join(projects) if projects else "(~/.cnb/projects.json 里还没有注册项目)"
@@ -879,7 +889,7 @@ def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
             "如果 [Feishu resources handed to Claude Code] 给出了本机文件路径或文档链接，"
             "这些就是用户在飞书里发来的图片、文件或链接上下文；需要时直接读取这些路径或链接，不要让用户重发。"
             "总管状态写入 ~/.cnb/device-chief/；单机状态写入对应机器的 device-supervisor；项目状态写入项目 .cnb/。"
-        )
+        ) + _pilot_role_section(cfg)
     return (
         f"你是这台 Mac 的{DEVICE_SUPERVISOR_LABEL}，身份名是 {cfg.pilot_name}。\n"
         "你自己就是一个正在值班的 cnb 同学/负责人实例，不是 bridge、tunnel 或旁路服务。"
@@ -908,7 +918,7 @@ def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
         "这些就是用户在飞书里发来的图片、文件或链接上下文；需要时直接读取这些路径或链接，不要让用户重发。"
         "短请求只用于继续工作所需的最小用户输入，不要拿它刷进度；"
         "真正的进展、结论、风险和下一步仍然必须由你主动用 `cnb feishu reply` 汇报。"
-    )
+    ) + _pilot_role_section(cfg)
 
 
 def get_current_prompt_hash(cfg: FeishuBridgeConfig) -> str:

@@ -59,20 +59,31 @@ class SwarmManager:
         return str(self.cfg.install_home / "bin" / "board")
 
     def build_system_prompt(self, name: str) -> str:
+        from lib.roles import load_manifest, resolve_role_for_identity
+
         board = self._board_path()
         profile = _lookup_profile(name)
         identity = f"你是 {name}"
         if profile:
             identity += f"（{profile['full_name']} — {profile['info']}）"
         identity += "，cnb 团队的一员。你在后台工作，通过消息板与组长和同学协作。\n"
+
+        role_name = resolve_role_for_identity(name)
+        manifest = load_manifest(role_name)
+        if manifest.role:
+            role_section = manifest.generate_prompt_section()
+        else:
+            role_section = (
+                f"协作命令：\n"
+                f"  {board} --as {name} inbox          # 查看收件箱\n"
+                f"  {board} --as {name} ack            # 清空收件箱\n"
+                f'  {board} --as {name} send <to> "msg" # 发消息\n'
+                f'  {board} --as {name} status "desc"  # 更新状态\n'
+                f"  {board} --as {name} task done      # 完成当前任务\n"
+            )
         return (
             f"{identity}"
-            f"协作命令：\n"
-            f"  {board} --as {name} inbox          # 查看收件箱\n"
-            f"  {board} --as {name} ack            # 清空收件箱\n"
-            f'  {board} --as {name} send <to> "msg" # 发消息\n'
-            f'  {board} --as {name} status "desc"  # 更新状态\n'
-            f"  {board} --as {name} task done      # 完成当前任务\n"
+            f"{role_section}\n"
             f"规则：启动时先 inbox，完成任务后再 inbox，有进展随时汇报给发任务的人。\n"
             f"你可以直接 send 给任何同学协作，不用什么都通过一个人转。"
         )
