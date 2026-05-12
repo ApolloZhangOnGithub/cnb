@@ -245,6 +245,7 @@ class FeishuBridgeConfig:
     webhook_port: int = DEFAULT_WEBHOOK_PORT
     webhook_public_url: str = ""
     allowed_chat_ids: frozenset[str] = frozenset()
+    notification_chat_id: str = ""
     auto_bind_chat: bool = False
     allowed_sender_ids: frozenset[str] = frozenset()
     ignored_sender_ids: frozenset[str] = frozenset()
@@ -352,6 +353,9 @@ class FeishuBridgeConfig:
             webhook_public_url=str(section.get("webhook_public_url") or ""),
             allowed_chat_ids=frozenset(
                 _strings(section, "allowed_chat_ids", "allowed-chat-ids", "chat_ids", "chat_id")
+            ),
+            notification_chat_id=str(
+                _first_value(section, "notification_chat_id", "notification-chat-id", "system_chat_id") or ""
             ),
             auto_bind_chat=_bool(section.get("auto_bind_chat"), _bool(section.get("discover_chat"), False)),
             allowed_sender_ids=frozenset(
@@ -1006,7 +1010,7 @@ def start_pilot_if_needed(cfg: FeishuBridgeConfig) -> BridgeResult:
 
 
 def send_pilot_startup_notification(cfg: FeishuBridgeConfig) -> BridgeResult:
-    chat_id = next(iter(cfg.allowed_chat_ids), "") or ""
+    chat_id = notification_chat_id(cfg)
     if not chat_id:
         return BridgeResult(False, "no chat_id for startup notification")
     role = _resolve_role(cfg.pilot_role)
@@ -1127,7 +1131,7 @@ def failover_to_standby(cfg: FeishuBridgeConfig) -> BridgeResult:
 
 
 def send_feishu_notification(cfg: FeishuBridgeConfig, text: str) -> BridgeResult:
-    chat_id = next(iter(cfg.allowed_chat_ids), "") or ""
+    chat_id = notification_chat_id(cfg)
     if not chat_id:
         return BridgeResult(False, "no chat_id")
     token = tenant_access_token(cfg)
@@ -1143,6 +1147,12 @@ def send_feishu_notification(cfg: FeishuBridgeConfig, text: str) -> BridgeResult
         payload,
         headers={"Authorization": f"Bearer {token.detail}"},
     )
+
+
+def notification_chat_id(cfg: FeishuBridgeConfig) -> str:
+    if cfg.notification_chat_id:
+        return cfg.notification_chat_id
+    return sorted(cfg.allowed_chat_ids)[0] if cfg.allowed_chat_ids else ""
 
 
 _heartbeat_consecutive_failures = 0

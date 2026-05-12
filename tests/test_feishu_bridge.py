@@ -38,6 +38,7 @@ bridge_tmux = "cnb-feishu"
 agent = "codex"
 ack = false
 notification_policy = "live"
+notification_chat_id = "oc_notify"
 auto_bind_chat = true
 activity_updates = true
 activity_update_seconds = [1, 2]
@@ -57,6 +58,7 @@ caffeine_enabled = false
         assert cfg.agent == "codex"
         assert cfg.ack is False
         assert cfg.notification_policy == "live"
+        assert cfg.notification_chat_id == "oc_notify"
         assert cfg.auto_bind_chat is True
         assert cfg.activity_updates is True
         assert cfg.activity_update_seconds == (1, 2)
@@ -527,7 +529,12 @@ class TestRouting:
         assert "--append-system-prompt" in command
 
     def test_startup_notification_sends_to_chat(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, agent="claude", allowed_chat_ids=frozenset({"oc_notify"}))
+        cfg = _cfg(
+            tmp_path,
+            agent="claude",
+            allowed_chat_ids=frozenset({"oc_allowed", "oc_imac"}),
+            notification_chat_id="oc_notify",
+        )
         posts = []
 
         def fake_token(c):
