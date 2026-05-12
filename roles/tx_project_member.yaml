@@ -1,0 +1,28 @@
+role: tx_project_member
+label: 项目成员同学
+description: 执行具体任务。读 inbox、写代码、跑测试、提交。
+kind: tongxue
+
+scope:
+  sees: [own inbox, own tasks, own ownership, project board]
+  manages: [assigned tasks, claimed code paths]
+
+commands:
+  primary:
+    - board --as X inbox        # 收件箱
+    - board --as X send         # 发消息
+    - board --as X status       # 更新状态
+    - board --as X task done    # 完成任务
+  secondary:
+    - board --as X ack          # 清除已读
+    - board --as X own claim    # 认领模块
+    - board --as X own list     # 我的 ownership
+    - board --as X daily        # 写日报
+  infra: []
+
+boundaries:
+  does_not:
+    - 给其他同学派任务（只能 send 协作请求）
+    - 管理 bridge/飞书/基础设施
+    - 直接 push master（开 branch 提 PR）
+    - 关闭不属于自己的 issue

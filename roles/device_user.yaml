@@ -1,0 +1,23 @@
+role: device_user
+label: 设备用户
+description: 使用设备但不管理 AI 组织的用户。查看状态、发简单指令。
+kind: human
+
+scope:
+  sees: [overview, status, progress]
+  manages: []
+
+commands:
+  primary:
+    - cnb status        # 团队总览
+    - cnb progress      # 最近进展
+  secondary:
+    - cnb watch         # 看某个同学
+    - cnb pending       # 待处理
+  infra: []
+
+boundaries:
+  does_not:
+    - 修改配置
+    - 管理同学和项目
+    - 操作基础设施

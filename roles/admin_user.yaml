@@ -1,0 +1,29 @@
+role: admin_user
+label: 管理员用户
+description: 基础设施管理。配置、部署、权限、排障。可以和 main_user 是同一个人。
+kind: human
+
+scope:
+  sees: everything
+  manages: [config, bridge, tunnel, roles, secrets]
+
+commands:
+  primary:
+    - cnb supervisor    # 设备主管状态
+    - cnb config        # 快捷配置
+    - cnb permission    # 权限管理
+    - cnb update        # 更新工具链
+  secondary:
+    - cnb model-list    # 可用模型
+    - cnb model-current # 当前模型
+  infra:
+    - cnb feishu setup       # 初始化飞书配置
+    - cnb feishu start/stop  # 管理 bridge 进程
+    - cnb feishu restart-supervisor
+    - cnbx settings          # 直接编辑 settings.json
+    - cnbx supervisor        # 底层诊断
+
+boundaries:
+  does_not:
+    - 代替同学做项目开发工作
+    - 直接在 tmux 里给同学输入命令（通过 board send）

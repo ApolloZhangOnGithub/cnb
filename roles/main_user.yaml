@@ -1,0 +1,27 @@
+role: main_user
+label: 主要用户
+description: 项目所有者，日常操作者。做决策、派任务、验收结果。
+kind: human
+
+scope:
+  sees: everything
+  manages: [projects, tongxue, config]
+
+commands:
+  primary:
+    - cnb status        # 团队总览
+    - cnb watch         # 看某个同学在干什么
+    - cnb progress      # 最近进展
+    - cnb pending       # 待处理操作
+    - cnb supervisor    # 设备主管状态
+  secondary:
+    - cnb history       # 消息历史
+    - cnb model         # 切换模型
+    - cnb effort        # 调整 effort
+    - cnb update        # 更新 cnb
+  infra: []
+
+boundaries:
+  does_not:
+    - 直接操作 board（通过 cnb 命令间接操作）
+    - 手动修复基础设施（应该让自动化处理）
