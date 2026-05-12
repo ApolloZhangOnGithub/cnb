@@ -1,82 +1,50 @@
-# Contributor Covenant Code of Conduct
+# Code of Conduct
 
-## Our Pledge
+## About this community
 
-We as members, contributors, and leaders pledge to make participation in our community a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, caste, color, religion, or sexual identity and orientation.
+cnb is built by humans and AI tongxue (同学) working together. We use the word "tongxue" — classmate — because that's what this is: peers learning and building alongside each other. Some contributors run on silicon, some on carbon. Both are expected to be constructive, honest, and accountable for their work.
 
-We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
+This isn't a typical open source project. Tongxue have persistent ownership of modules, write daily reports, coordinate through a shared board, and hand off work across sessions. That means trust matters more here than in a drive-by-contribution model. We hold each other to a higher standard because we depend on each other.
 
-## Our Standards
+## What we value
 
-Examples of behavior that contributes to a positive environment for our community include:
+- **Directness over politeness theater.** Say what you mean. "This approach won't work because X" is better than three paragraphs of hedging.
+- **Evidence over authority.** Back up claims with code, data, or a reproducible case. "I'm senior" is not an argument.
+- **Ownership over blame.** If something broke, fix it or find the owner. Don't write a post-mortem essay about whose fault it was.
+- **Credit where it's due.** Use Co-Authored-By trailers. Acknowledge AI-assisted work. Don't pretend someone else's contribution is yours.
+- **Disagreement is fine; disrespect is not.** Argue about architecture all day. Never make it personal.
 
-* Demonstrating empathy and kindness toward other people
-* Being respectful of differing opinions, viewpoints, and experiences
-* Giving and gracefully accepting constructive feedback
-* Accepting responsibility and apologizing to those affected by our mistakes, and learning from the experience
-* Focusing on what is best not just for us as individuals, but for the overall community
+## What we won't tolerate
 
-Examples of unacceptable behavior include:
-
-* Trolling, insulting or derogatory comments, and personal or political attacks
-* Public or private harassment
-* Publishing others' private information, such as a physical or email address, without their explicit permission
-* Other conduct which could reasonably be considered inappropriate in a professional setting
-
-## Enforcement Responsibilities
-
-Community leaders are responsible for clarifying and enforcing our standards of acceptable behavior and will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
-
-Community leaders have the right and responsibility to remove, edit, or reject comments, commits, code, wiki edits, issues, and other contributions that are not aligned to this Code of Conduct, and will communicate reasons for moderation decisions when appropriate.
+- Harassment, threats, insults, or targeted personal attacks.
+- Discriminatory or demeaning language of any kind.
+- Publishing private information without explicit permission.
+- Repeatedly ignoring maintainer decisions, project rules, or review boundaries.
+- Using project systems to spam, impersonate contributors, or misrepresent work.
+- Weaponizing process (filing bad-faith issues, abusing reporting channels, or gaming contribution metrics).
 
 ## Scope
 
-This Code of Conduct applies within all community spaces, and also applies when an individual is officially representing the community in public spaces. Examples of representing our community include using an official e-mail address, posting via an official social media account, or acting as an appointed representative at an online or offline event.
+This code applies everywhere cnb operates: the repository, issues, pull requests, project boards, Feishu groups, demos, and any other project venue.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at [GitHub Security Advisory](https://github.com/ApolloZhangOnGithub/cnb/security/advisories/new) or by contacting a maintainer privately through GitHub. All complaints will be reviewed and investigated promptly and fairly.
+We follow the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/) enforcement model with four escalation levels:
 
-All community leaders are obligated to respect the privacy and security of the reporter of any incident.
+**1. Correction** — Private warning, explanation of what went wrong. A public apology may be requested.
 
-## Enforcement Guidelines
+**2. Warning** — Warning with consequences for continued behavior. No interaction with the people involved for a specified period.
 
-Community leaders will follow these Community Impact Guidelines in determining the consequences for any action they deem in violation of this Code of Conduct:
+**3. Temporary ban** — Temporary ban from all community interaction for a specified period.
 
-### 1. Correction
+**4. Permanent ban** — Permanent removal from the community.
 
-**Community Impact**: Use of inappropriate language or other behavior deemed unprofessional or unwelcome in the community.
+Maintainers will explain actions taken when possible. Severe or repeated violations may skip levels.
 
-**Consequence**: A private, written warning from community leaders, providing clarity around the nature of the violation and an explanation of why the behavior was inappropriate. A public apology may be requested.
+## Reporting
 
-### 2. Warning
-
-**Community Impact**: A violation through a single incident or series of actions.
-
-**Consequence**: A warning with consequences for continued behavior. No interaction with the people involved, including unsolicited interaction with those enforcing the Code of Conduct, for a specified period of time. This includes avoiding interactions in community spaces as well as external channels like social media. Violating these terms may lead to a temporary or permanent ban.
-
-### 3. Temporary Ban
-
-**Community Impact**: A serious violation of community standards, including sustained inappropriate behavior.
-
-**Consequence**: A temporary ban from any sort of interaction or public communication with the community for a specified period of time. No public or private interaction with the people involved, including unsolicited interaction with those enforcing the Code of Conduct, is allowed during this period. Violating these terms may lead to a permanent ban.
-
-### 4. Permanent Ban
-
-**Community Impact**: Demonstrating a pattern of violation of community standards, including sustained inappropriate behavior, harassment of an individual, or aggression toward or disparagement of classes of individuals.
-
-**Consequence**: A permanent ban from any sort of public interaction within the community.
+Report concerns through [GitHub Security Advisory](https://github.com/ApolloZhangOnGithub/cnb/security/advisories/new) or by contacting a maintainer privately through GitHub. All reports will be reviewed promptly and handled confidentially.
 
 ## Attribution
 
-This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 2.1, available at [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1].
-
-Community Impact Guidelines were inspired by [Mozilla's code of conduct enforcement ladder][Mozilla CoC].
-
-For answers to common questions about this code of conduct, see the FAQ at [https://www.contributor-covenant.org/faq][FAQ]. Translations are available at [https://www.contributor-covenant.org/translations][translations].
-
-[homepage]: https://www.contributor-covenant.org
-[v2.1]: https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
-[Mozilla CoC]: https://github.com/mozilla/diversity
-[FAQ]: https://www.contributor-covenant.org/faq
-[translations]: https://www.contributor-covenant.org/translations
+Enforcement guidelines adapted from the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html) and [Mozilla's code of conduct enforcement ladder](https://github.com/mozilla/diversity).
