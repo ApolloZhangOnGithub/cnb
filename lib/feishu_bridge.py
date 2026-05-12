@@ -135,7 +135,10 @@ DEFAULT_WEBHOOK_HOST = "127.0.0.1"
 DEFAULT_WEBHOOK_PORT = 8787
 DEFAULT_TRANSPORT = "local_openapi"
 DEFAULT_CAFFEINE_ENABLED = True
-SUPPORTED_PILOT_AGENTS = frozenset({"codex"})
+SUPPORTED_PILOT_AGENTS = frozenset({"claude", "codex"})
+DEFAULT_STANDBY_AGENT = ""
+DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 60
+HEARTBEAT_UNHEALTHY_THRESHOLD = 3
 SUPPORTED_PILOT_ROLES = frozenset({DEFAULT_PILOT_ROLE, DEVICE_CHIEF_ROLE})
 SUPPORTED_TRANSPORTS = frozenset({"local_openapi", "hermes_lark_cli"})
 SUPPORTED_ACTIVITY_RENDER_STYLES = frozenset({"auto", "codex", "claude"})
@@ -253,7 +256,7 @@ class FeishuBridgeConfig:
     pilot_name: str = SUPERVISOR_ROLE.default_name
     pilot_tmux: str = SUPERVISOR_ROLE.default_tmux
     bridge_tmux: str = SUPERVISOR_ROLE.default_bridge_tmux
-    agent: str = "codex"
+    agent: str = "claude"
     auto_start: bool = True
     startup_wait_seconds: float = 2.0
     notification_policy: str = DEFAULT_NOTIFICATION_POLICY
@@ -279,6 +282,10 @@ class FeishuBridgeConfig:
     resource_handoff_enabled: bool = True
     resource_handoff_max_bytes: int = DEFAULT_RESOURCE_HANDOFF_MAX_BYTES
     caffeine_enabled: bool = True
+    standby_enabled: bool = False
+    standby_agent: str = DEFAULT_STANDBY_AGENT
+    standby_pilot_tmux: str = ""
+    heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
 
     @classmethod
     def load(cls, config_path: Path | None = None, project_root: Path | None = None) -> FeishuBridgeConfig:
@@ -290,9 +297,9 @@ class FeishuBridgeConfig:
         root = Path(root_raw).expanduser() if isinstance(root_raw, str) and root_raw else (project_root or Path.cwd())
         root = root.resolve()
 
-        agent = str(section.get("agent") or os.environ.get("CNB_AGENT") or "codex")
+        agent = str(section.get("agent") or os.environ.get("CNB_AGENT") or "claude")
         if agent not in SUPPORTED_PILOT_AGENTS:
-            agent = "codex"
+            agent = "claude"
         role = _resolve_role(_first_value(section, "role", "pilot_role", "cnb_role", "supervisor_role"))
         if role is SUPERVISOR_ROLE and _first_value(section, "device_chief_name", "device-chief-name"):
             role = CHIEF_ROLE
@@ -430,6 +437,10 @@ class FeishuBridgeConfig:
             ),
             resource_handoff_max_bytes=resource_handoff_max_bytes,
             caffeine_enabled=_bool(_first_value(section, "caffeine_enabled", "keep_awake_enabled", "keep_awake"), True),
+            standby_enabled=_bool(section.get("standby_enabled"), False),
+            standby_agent=_standby_agent(section.get("standby_agent"), agent),
+            standby_pilot_tmux=str(section.get("standby_pilot_tmux") or ""),
+            heartbeat_interval_seconds=max(10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)),
         )
 
 
@@ -452,6 +463,12 @@ def _feishu_section(data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(nested, dict):
             return nested
     return {}
+
+
+def _standby_agent(value: Any, primary_agent: str) -> str:
+    if isinstance(value, str) and value in SUPPORTED_PILOT_AGENTS:
+        return value
+    return "codex" if primary_agent == "claude" else "claude"
 
 
 def _bool(value: Any, default: bool) -> bool:
@@ -845,7 +862,7 @@ def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
             "明确转给对应 device-supervisor 或进入对应项目后按该项目 board 规则执行。\n\n"
             f"总管启动目录: {cfg.project_root}\n"
             f"本机已注册项目:\n{project_block}\n\n"
-            "飞书消息进入后会以 [Feishu inbound] 开头，并带有 message_id。Codex 的实时 TUI "
+            "飞书消息进入后会以 [Feishu inbound] 开头，并带有 message_id。终端的实时 TUI "
             "渲染不会同步到飞书；不要把终端画面当成飞书回复。接手后先判断这是跨机器协调、lease/handoff，"
             "还是单机/单项目请求。需要用户补充信息、确认选择或授权动作时，"
             f'可以执行 `{feishu} ask <message_id> "短问题"` 发一条不结束任务的短回复。'
@@ -873,7 +890,7 @@ def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
         "再用 cnb/board/swarm 命令协调项目里的负责同学。\n\n"
         f"当前启动目录: {cfg.project_root}\n"
         f"本机已注册项目:\n{project_block}\n\n"
-        "飞书消息进入后会以 [Feishu inbound] 开头，并带有 message_id。Codex 的实时 TUI "
+        "飞书消息进入后会以 [Feishu inbound] 开头，并带有 message_id。终端的实时 TUI "
         "渲染不会同步到飞书；不要把终端画面当成飞书回复。接手后先处理任务；需要用户补充信息、确认选择或授权动作时，"
         '可以执行 `cnb feishu ask <message_id> "短问题"` 发一条不结束任务的短回复。处理完成、卡住或需要给出结论时，'
         '必须在 shell 中执行 `cnb feishu reply <message_id> "回复内容"` 把结果回到飞书。'
@@ -941,6 +958,8 @@ def _project_lines(cfg: FeishuBridgeConfig, limit: int = 20) -> list[str]:
 
 def build_pilot_command(cfg: FeishuBridgeConfig) -> list[str]:
     prompt = build_pilot_system_prompt(cfg)
+    if cfg.agent == "claude":
+        return ["claude", "--dangerously-skip-permissions", "--append-system-prompt", prompt]
     return ["codex", *CODEX_PERMISSION_FLAGS, "--cd", str(cfg.project_root), prompt]
 
 
@@ -968,7 +987,270 @@ def start_pilot_if_needed(cfg: FeishuBridgeConfig) -> BridgeResult:
     if cfg.startup_wait_seconds > 0:
         time.sleep(cfg.startup_wait_seconds)
     _save_prompt_hash(cfg, get_current_prompt_hash(cfg))
+    send_pilot_startup_notification(cfg)
+    if cfg.standby_enabled:
+        standby_result = start_standby_if_needed(cfg)
+        if standby_result.handled:
+            print(f"[bridge] standby started: {resolve_standby_tmux(cfg)}")
     return BridgeResult(True, f"started {cfg.pilot_tmux}")
+
+
+def send_pilot_startup_notification(cfg: FeishuBridgeConfig) -> BridgeResult:
+    chat_id = next(iter(cfg.allowed_chat_ids), "") or ""
+    if not chat_id:
+        return BridgeResult(False, "no chat_id for startup notification")
+    role = _resolve_role(cfg.pilot_role)
+    engine_label = "Claude Code" if cfg.agent == "claude" else cfg.agent.capitalize()
+    projects = discover_project_activity(cfg, limit=20)
+    project_count = len(projects)
+    now = time.strftime("%H:%M")
+    text = f"[{role.label}上线] {cfg.pilot_name}\n引擎: {engine_label} | 项目: {project_count} 个 | {now}"
+    token = tenant_access_token(cfg)
+    if not token.handled:
+        return token
+    payload = {
+        "receive_id": chat_id,
+        "msg_type": "text",
+        "content": json.dumps({"text": text}, ensure_ascii=False),
+    }
+    result = openapi_post(
+        "/open-apis/im/v1/messages?receive_id_type=chat_id",
+        payload,
+        headers={"Authorization": f"Bearer {token.detail}"},
+    )
+    if not result.handled:
+        print(f"[bridge] startup notification failed: {result.detail}")
+    return result
+
+
+def resolve_standby_tmux(cfg: FeishuBridgeConfig) -> str:
+    if cfg.standby_pilot_tmux:
+        return cfg.standby_pilot_tmux
+    return f"{cfg.pilot_tmux}-standby"
+
+
+def build_standby_command(cfg: FeishuBridgeConfig) -> list[str]:
+    prompt = build_pilot_system_prompt(cfg)
+    if cfg.standby_agent == "claude":
+        return ["claude", "--dangerously-skip-permissions", "--append-system-prompt", prompt]
+    return ["codex", *CODEX_PERMISSION_FLAGS, "--cd", str(cfg.project_root), prompt]
+
+
+def start_standby_if_needed(cfg: FeishuBridgeConfig) -> BridgeResult:
+    if not cfg.standby_enabled:
+        return BridgeResult(False, "standby disabled")
+    standby_tmux = resolve_standby_tmux(cfg)
+    if has_session(standby_tmux):
+        return BridgeResult(True, f"{standby_tmux} already running")
+    if not cfg.project_root.exists():
+        return BridgeResult(False, f"project root does not exist: {cfg.project_root}")
+    command = shlex.join(build_standby_command(cfg))
+    try:
+        result = subprocess.run(
+            ["tmux", "new-session", "-d", "-s", standby_tmux, "-c", str(cfg.project_root), command],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return BridgeResult(False, f"failed to start standby {standby_tmux}: {exc}")
+    if result.returncode != 0:
+        detail = _snippet(result.stderr) or _snippet(result.stdout) or f"exit {result.returncode}"
+        return BridgeResult(False, f"failed to start standby {standby_tmux}: {detail}")
+    if cfg.startup_wait_seconds > 0:
+        time.sleep(cfg.startup_wait_seconds)
+    return BridgeResult(True, f"started standby {standby_tmux}")
+
+
+def check_pilot_health(cfg: FeishuBridgeConfig, tmux_session: str | None = None) -> BridgeResult:
+    session = tmux_session or cfg.pilot_tmux
+    if not has_session(session):
+        return BridgeResult(False, "session not running")
+    try:
+        result = subprocess.run(
+            ["tmux", "capture-pane", "-t", session, "-p", "-J", "-S", "-20"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return BridgeResult(False, f"cannot read pane: {exc}")
+    if result.returncode != 0:
+        return BridgeResult(False, f"capture-pane failed: exit {result.returncode}")
+    tail = result.stdout.strip()
+    last_lines = tail.splitlines()[-8:] if tail else []
+    joined = "\n".join(last_lines)
+    if "Do you trust" in joined or "Press enter to continue" in joined:
+        return BridgeResult(False, "stuck at trust prompt")
+    if "error" in joined.lower() and ("FATAL" in joined or "panic" in joined or "Traceback" in joined):
+        return BridgeResult(False, "crash detected in pane output")
+    return BridgeResult(True, "healthy")
+
+
+def failover_to_standby(cfg: FeishuBridgeConfig) -> BridgeResult:
+    standby_tmux = resolve_standby_tmux(cfg)
+    if not has_session(standby_tmux):
+        return BridgeResult(False, f"standby {standby_tmux} not running, cannot failover")
+    primary_was_running = has_session(cfg.pilot_tmux)
+    if primary_was_running:
+        try:
+            subprocess.run(["tmux", "kill-session", "-t", cfg.pilot_tmux], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    try:
+        subprocess.run(
+            ["tmux", "rename-session", "-t", standby_tmux, cfg.pilot_tmux],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return BridgeResult(False, f"failed to promote standby: {exc}")
+    old_agent = cfg.agent
+    send_feishu_notification(
+        cfg,
+        f"[设备主管切换] 主机长异常，副机长已接管\n"
+        f"原引擎: {'Claude Code' if old_agent == 'claude' else old_agent.capitalize()} → "
+        f"当前引擎: {'Claude Code' if cfg.standby_agent == 'claude' else cfg.standby_agent.capitalize()}",
+    )
+    return BridgeResult(True, f"failover complete: {standby_tmux} promoted to {cfg.pilot_tmux}")
+
+
+def send_feishu_notification(cfg: FeishuBridgeConfig, text: str) -> BridgeResult:
+    chat_id = next(iter(cfg.allowed_chat_ids), "") or ""
+    if not chat_id:
+        return BridgeResult(False, "no chat_id")
+    token = tenant_access_token(cfg)
+    if not token.handled:
+        return token
+    payload = {
+        "receive_id": chat_id,
+        "msg_type": "text",
+        "content": json.dumps({"text": text}, ensure_ascii=False),
+    }
+    return openapi_post(
+        "/open-apis/im/v1/messages?receive_id_type=chat_id",
+        payload,
+        headers={"Authorization": f"Bearer {token.detail}"},
+    )
+
+
+_heartbeat_consecutive_failures = 0
+
+
+def build_diagnosis_request(cfg: FeishuBridgeConfig, issue: str) -> str:
+    return (
+        f"[bridge 心跳告警] 主机长 ({cfg.pilot_tmux}) 健康检查异常: {issue}\n"
+        f"你是副机长，请立即诊断并处理：\n"
+        f"1. 运行 tmux capture-pane -t {cfg.pilot_tmux} -p -S -30 查看主机长终端状态\n"
+        f"2. 判断问题原因（卡在交互提示？crash？网络？引擎故障？）\n"
+        f"3. 如果可以修复：kill 掉卡住的 session 并重启\n"
+        f"4. 如果无法修复：说明原因\n"
+        f"5. 无论结果如何，用 cnb feishu reply 向飞书报告诊断结论\n"
+        f"主机长引擎: {'Claude Code' if cfg.agent == 'claude' else cfg.agent}\n"
+        f"重启命令参考: tmux kill-session -t {cfg.pilot_tmux} && "
+        f"{shlex.join(build_pilot_command(cfg))}"
+    )
+
+
+def dispatch_diagnosis_to_standby(cfg: FeishuBridgeConfig, issue: str) -> BridgeResult:
+    standby_tmux = resolve_standby_tmux(cfg)
+    if not has_session(standby_tmux):
+        started = start_standby_if_needed(cfg)
+        if not started.handled:
+            return BridgeResult(False, f"standby not available: {started.detail}")
+        time.sleep(max(cfg.startup_wait_seconds, 3.0))
+    message = build_diagnosis_request(cfg, issue)
+    if not tmux_send(standby_tmux, message):
+        return BridgeResult(False, f"failed to send diagnosis request to {standby_tmux}")
+    return BridgeResult(True, f"diagnosis dispatched to {standby_tmux}")
+
+
+def run_heartbeat_check(cfg: FeishuBridgeConfig) -> BridgeResult:
+    global _heartbeat_consecutive_failures
+    if not cfg.standby_enabled:
+        return BridgeResult(False, "standby disabled")
+    standby_tmux = resolve_standby_tmux(cfg)
+    if not has_session(standby_tmux):
+        start_standby_if_needed(cfg)
+    primary_health = check_pilot_health(cfg)
+    if primary_health.handled:
+        if _heartbeat_consecutive_failures > 0:
+            print(f"[heartbeat] primary recovered after {_heartbeat_consecutive_failures} failures")
+        _heartbeat_consecutive_failures = 0
+        return BridgeResult(True, "primary healthy")
+    _heartbeat_consecutive_failures += 1
+    issue = primary_health.detail
+    print(f"[heartbeat] primary unhealthy ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD}): {issue}")
+    if _heartbeat_consecutive_failures == 1:
+        send_feishu_notification(cfg, f"[设备主管异常] 主机长状态异常: {issue}\n已派副机长诊断...")
+        result = dispatch_diagnosis_to_standby(cfg, issue)
+        if not result.handled:
+            print(f"[heartbeat] diagnosis dispatch failed: {result.detail}")
+        return BridgeResult(True, "diagnosis dispatched to standby")
+    if _heartbeat_consecutive_failures >= HEARTBEAT_UNHEALTHY_THRESHOLD:
+        print(f"[heartbeat] {HEARTBEAT_UNHEALTHY_THRESHOLD} consecutive failures, initiating failover")
+        _heartbeat_consecutive_failures = 0
+        result = failover_to_standby(cfg)
+        if result.handled:
+            start_standby_if_needed(cfg)
+        return result
+    return BridgeResult(True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})")
+
+
+def check_tunnel_health(cfg: FeishuBridgeConfig) -> BridgeResult:
+    if not cfg.webhook_public_url:
+        return BridgeResult(True, "no public URL configured")
+    if "ngrok" not in cfg.webhook_public_url:
+        return BridgeResult(True, "non-ngrok URL, skipping tunnel check")
+    current_url = ngrok_public_url_for(cfg.webhook_host, cfg.webhook_port)
+    if current_url:
+        if current_url != cfg.webhook_public_url:
+            _update_config_url(cfg, current_url)
+            print(f"[heartbeat] tunnel URL changed: {cfg.webhook_public_url} → {current_url}")
+        return BridgeResult(True, f"tunnel healthy: {current_url}")
+    print("[heartbeat] tunnel down, restarting ngrok...")
+    result = ensure_tunnel(cfg.webhook_host, cfg.webhook_port)
+    if not result.handled:
+        send_feishu_notification(cfg, f"[隧道异常] ngrok 隧道断开且无法自动恢复: {result.detail}")
+        return BridgeResult(False, f"tunnel restart failed: {result.detail}")
+    new_url = result.detail
+    if new_url != cfg.webhook_public_url:
+        _update_config_url(cfg, new_url)
+    send_feishu_notification(cfg, f"[隧道恢复] ngrok 已自动重启\n新地址: {new_url}")
+    return BridgeResult(True, f"tunnel restarted: {new_url}")
+
+
+def _update_config_url(cfg: FeishuBridgeConfig, new_url: str) -> None:
+    try:
+        data = _read_toml(cfg.config_path)
+        section = dict(_feishu_section(data))
+        section["webhook_public_url"] = new_url
+        old_watch_url = section.get("watch_public_url", "")
+        if old_watch_url and cfg.webhook_public_url and cfg.webhook_public_url in old_watch_url:
+            section["watch_public_url"] = old_watch_url.replace(cfg.webhook_public_url, new_url)
+        current = cfg.config_path.read_text() if cfg.config_path.exists() else ""
+        cfg.config_path.write_text(_replace_toml_section(current, "feishu", _render_feishu_section(section)))
+    except OSError as exc:
+        print(f"[heartbeat] failed to update config URL: {exc}")
+
+
+def start_heartbeat_daemon(cfg: FeishuBridgeConfig) -> threading.Thread | None:
+    interval = cfg.heartbeat_interval_seconds if cfg.standby_enabled else DEFAULT_HEARTBEAT_INTERVAL_SECONDS
+
+    def loop() -> None:
+        while True:
+            try:
+                check_tunnel_health(cfg)
+                if cfg.standby_enabled:
+                    run_heartbeat_check(cfg)
+            except Exception as exc:
+                print(f"[heartbeat] error: {exc}")
+            time.sleep(interval)
+
+    t = threading.Thread(target=loop, daemon=True, name="heartbeat")
+    t.start()
+    return t
 
 
 def format_for_pilot(
@@ -1032,8 +1314,17 @@ def route_event(event: FeishuInboundEvent, cfg: FeishuBridgeConfig, *, dry_run: 
 
     started = start_pilot_if_needed(cfg)
     if not started.handled:
-        return started
+        if cfg.standby_enabled:
+            fo = failover_to_standby(cfg)
+            if fo.handled:
+                started = BridgeResult(True, f"failover: {fo.detail}")
+        if not started.handled:
+            return started
     if not tmux_send(cfg.pilot_tmux, message):
+        if cfg.standby_enabled and has_session(resolve_standby_tmux(cfg)):
+            fo = failover_to_standby(cfg)
+            if fo.handled and tmux_send(cfg.pilot_tmux, message):
+                return BridgeResult(True, f"delivered to {cfg.pilot_tmux} after failover")
         return BridgeResult(False, f"failed to send message to {cfg.pilot_tmux}")
     return BridgeResult(True, f"delivered to {cfg.pilot_tmux}")
 
@@ -3386,7 +3677,7 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "group_message_routing": _group_message_routing(group_routing),
         "group_message_routing_chat_ids": sorted(set(group_routing_chat_ids)),
         "bridge_tmux": base.bridge_tmux if base_role is role else default_bridge_tmux,
-        "agent": "codex",
+        "agent": base.agent,
         "notification_policy": base.notification_policy,
         "ack": True,
         "activity_updates": True,
@@ -3760,6 +4051,12 @@ def serve_webhook(
         print(f"ERROR: failed to bind Feishu webhook server: {exc}", file=sys.stderr)
         return 1
     url = cfg.webhook_public_url or f"http://{cfg.webhook_host}:{cfg.webhook_port}/"
+    heartbeat_thread = start_heartbeat_daemon(cfg)
+    hb_interval = cfg.heartbeat_interval_seconds if cfg.standby_enabled else DEFAULT_HEARTBEAT_INTERVAL_SECONDS
+    features = ["tunnel"]
+    if cfg.standby_enabled:
+        features.append("dual-pilot")
+    print(f"[cnb-feishu-webhook] heartbeat started ({'+'.join(features)}, {hb_interval}s)", file=sys.stderr)
     print(f"[cnb-feishu-webhook] ready transport=local_openapi url={url}", file=sys.stderr)
     try:
         server.serve_forever()
@@ -4236,7 +4533,15 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
     print(f"角色: {_resolve_role(cfg.pilot_role).role_id}")
     print(f"{role_label(cfg)}: {cfg.pilot_name}")
     print(f"{role_label(cfg)} tmux: {cfg.pilot_tmux} ({'running' if has_session(cfg.pilot_tmux) else 'stopped'})")
+    print(f"引擎: {cfg.agent}")
     print(describe_prompt_freshness(cfg))
+    if cfg.standby_enabled:
+        sb_tmux = resolve_standby_tmux(cfg)
+        sb_status = "running" if has_session(sb_tmux) else "stopped"
+        print(f"副机长 tmux: {sb_tmux} ({sb_status}), 引擎: {cfg.standby_agent}")
+        print(f"心跳间隔: {cfg.heartbeat_interval_seconds}s")
+    else:
+        print("副机长: 未启用 (standby_enabled=false)")
     print(f"bridge tmux: {cfg.bridge_tmux} ({'running' if has_session(cfg.bridge_tmux) else 'stopped'})")
     print(f"watch tmux: {cfg.watch_tmux} ({'running' if has_session(cfg.watch_tmux) else 'stopped'})")
     print(f"Mac keep-awake: {caffeine_status(cfg)}")

@@ -3,7 +3,7 @@
 Multi-agent coordination framework for Claude Code sessions.
 Python 3.11+, SQLite (WAL mode), tmux-based session management.
 
-> **First time here?** Read [README.md](README.md) first for install, usage, and slash commands. It also links to [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the issue workflow and versioning rules.
+> **First time here?** Read [README.md](README.md) first for install, usage, and slash commands. It also links to [CONTRIBUTING.md](CONTRIBUTING.md) for the issue workflow and versioning rules.
 
 ## Organizational principles
 
@@ -14,6 +14,23 @@ cnb is an organization, not just a codebase. Managing this project means managin
 3. **Separate research from execution.** Issues tagged `experiment` are research hypotheses, not feature requests. They have different timelines, different success criteria, and should not compete with operational work for attention.
 4. **One issue per problem.** If two issues discuss the same problem, consolidate them. Cross-reference related issues but don't duplicate.
 5. **Operational issues get assigned, not discussed.** CI failing, tests breaking, security gaps — these need an owner and a fix, not a design document.
+6. **Fix the tool, never do the tool's job.** When infrastructure breaks (tunnel down, supervisor stuck, bridge stale), the fix is always in the automation — never a manual one-off. If you find yourself running a command to "just fix it real quick", stop and ask: why didn't the system fix this itself? Then make the system fix it. Manual interventions mask broken automation and guarantee the same failure will repeat.
+
+## Glossary
+
+| Term | Chinese | What it is |
+|------|---------|------------|
+| tongxue (同学) | 同学 | A Claude Code or Codex instance running in a tmux session. Never call them "agent". |
+| device supervisor (设备主管同学) | 机长 / 设备主管同学 | The always-on tongxue that manages the whole machine's cnb runtime. Receives Feishu messages. |
+| standby pilot (副机长) | 副机长 | Idle tongxue on a different engine, ready to diagnose or take over if the primary supervisor fails. |
+| project tongxue (项目同学) | 项目同学 | A tongxue working inside a specific project directory (bezos, musk, lisa-su, etc.). |
+| bridge | 飞书 bridge | Python process that receives Feishu webhook events and routes them to the supervisor via tmux. Also runs the heartbeat daemon. |
+| board | board | SQLite-backed message and task coordination panel, like a kanban board. |
+| swarm | swarm | Tool for batch-launching and managing multiple project tongxue sessions. |
+| heartbeat | 心跳 | Background thread in the bridge that checks supervisor health and tunnel status every 60s. |
+| inbox | 收件箱 | A tongxue's unread message queue in the board. |
+| tunnel | 隧道 | ngrok process that exposes the local webhook server to the internet for Feishu to reach. |
+| failover | 切换 | Promoting the standby pilot to primary when the primary is unrecoverable. |
 
 ## Language
 

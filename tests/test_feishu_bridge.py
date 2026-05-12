@@ -219,13 +219,21 @@ chat_ids = ["oc_a", "oc_b"]
 
         assert cfg.allowed_chat_ids == frozenset({"oc_a", "oc_b"})
 
-    def test_claude_agent_config_falls_back_to_codex(self, tmp_path):
+    def test_claude_agent_config_is_accepted(self, tmp_path):
         path = tmp_path / "config.toml"
         path.write_text('[feishu]\nagent = "claude"\n')
 
         cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
 
-        assert cfg.agent == "codex"
+        assert cfg.agent == "claude"
+
+    def test_unsupported_agent_falls_back_to_claude(self, tmp_path):
+        path = tmp_path / "config.toml"
+        path.write_text('[feishu]\nagent = "unknown_engine"\n')
+
+        cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
+
+        assert cfg.agent == "claude"
 
     def test_setup_config_writes_local_openapi_section(self, tmp_path):
         path = tmp_path / "config.toml"
@@ -266,7 +274,7 @@ chat_ids = ["oc_a", "oc_b"]
         assert "readback_enabled = false" in written
         assert "resource_handoff_enabled = true" in written
         assert "token=%3Credacted%3E" in result.detail
-        assert 'agent = "codex"' in written
+        assert 'agent = "claude"' in written
 
     def test_setup_config_accepts_explicit_watch_public_url_and_token(self, tmp_path):
         path = tmp_path / "config.toml"
@@ -508,6 +516,255 @@ class TestRouting:
 
         assert command[0] == "codex"
         assert "claude" not in command
+
+    def test_build_pilot_command_uses_claude(self, tmp_path):
+        cfg = _cfg(tmp_path, agent="claude")
+
+        command = feishu_bridge.build_pilot_command(cfg)
+
+        assert command[0] == "claude"
+        assert "--dangerously-skip-permissions" in command
+        assert "--append-system-prompt" in command
+
+    def test_startup_notification_sends_to_chat(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, agent="claude", allowed_chat_ids=frozenset({"oc_notify"}))
+        posts = []
+
+        def fake_token(c):
+            return feishu_bridge.BridgeResult(True, "fake_token")
+
+        def fake_post(path, payload, *, headers=None):
+            posts.append((path, payload))
+            return feishu_bridge.BridgeResult(True, '{"code":0}')
+
+        monkeypatch.setattr(feishu_bridge, "tenant_access_token", fake_token)
+        monkeypatch.setattr(feishu_bridge, "openapi_post", fake_post)
+        monkeypatch.setattr(feishu_bridge, "discover_project_activity", lambda cfg, limit=20: [])
+
+        result = feishu_bridge.send_pilot_startup_notification(cfg)
+
+        assert result.handled is True
+        assert len(posts) == 1
+        path, payload = posts[0]
+        assert "receive_id_type=chat_id" in path
+        assert payload["receive_id"] == "oc_notify"
+        content = json.loads(payload["content"])
+        assert "上线" in content["text"]
+        assert "Claude Code" in content["text"]
+
+    def test_startup_notification_skipped_without_chat_id(self, tmp_path):
+        cfg = _cfg(tmp_path, allowed_chat_ids=frozenset())
+
+        result = feishu_bridge.send_pilot_startup_notification(cfg)
+
+        assert result.handled is False
+
+    def test_start_pilot_sends_notification(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, pilot_tmux="cnb-notify-test", agent="claude", allowed_chat_ids=frozenset({"oc_test"}))
+        notifications = []
+
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+
+        def fake_notify(c):
+            notifications.append(c.pilot_name)
+            return feishu_bridge.BridgeResult(True, "sent")
+
+        monkeypatch.setattr(feishu_bridge, "send_pilot_startup_notification", fake_notify)
+
+        result = feishu_bridge.start_pilot_if_needed(cfg)
+
+        assert result.handled is True
+        assert len(notifications) == 1
+
+    def test_standby_agent_defaults_to_opposite_engine(self, tmp_path):
+        cfg_claude = _cfg(tmp_path, agent="claude")
+        cfg_codex = _cfg(tmp_path, agent="codex")
+
+        assert feishu_bridge._standby_agent(None, "claude") == "codex"
+        assert feishu_bridge._standby_agent(None, "codex") == "claude"
+        assert feishu_bridge._standby_agent("codex", "claude") == "codex"
+
+    def test_resolve_standby_tmux(self, tmp_path):
+        cfg_default = _cfg(tmp_path, standby_pilot_tmux="")
+        cfg_custom = _cfg(tmp_path, standby_pilot_tmux="my-standby")
+
+        assert feishu_bridge.resolve_standby_tmux(cfg_default) == f"{cfg_default.pilot_tmux}-standby"
+        assert feishu_bridge.resolve_standby_tmux(cfg_custom) == "my-standby"
+
+    def test_start_standby_disabled(self, tmp_path):
+        cfg = _cfg(tmp_path, standby_enabled=False)
+
+        result = feishu_bridge.start_standby_if_needed(cfg)
+
+        assert result.handled is False
+        assert "disabled" in result.detail
+
+    def test_start_standby_launches_tmux(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, standby_enabled=True, standby_agent="codex")
+        launched = []
+
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+
+        def fake_run(cmd, **kwargs):
+            launched.append(cmd)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+
+        result = feishu_bridge.start_standby_if_needed(cfg)
+
+        assert result.handled is True
+        assert any("new-session" in str(c) for c in launched)
+
+    def test_check_pilot_health_detects_trust_prompt(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(
+                returncode=0,
+                stdout="Do you trust the contents of this directory?\n› 1. Yes, continue\n  2. No, quit\n",
+                stderr="",
+            )
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+
+        result = feishu_bridge.check_pilot_health(_cfg(tmp_path), "cnb-test")
+
+        assert result.handled is False
+        assert "trust prompt" in result.detail
+
+    def test_check_pilot_health_healthy(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="❯ Working on task...\nbypass permissions on\n", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+
+        result = feishu_bridge.check_pilot_health(_cfg(tmp_path), "cnb-test")
+
+        assert result.handled is True
+
+    def test_failover_renames_standby_to_primary(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, standby_enabled=True, standby_agent="codex", allowed_chat_ids=frozenset({"oc_test"}))
+        renames = []
+        kills = []
+
+        def fake_has_session(name):
+            standby = feishu_bridge.resolve_standby_tmux(cfg)
+            return name == standby
+
+        monkeypatch.setattr(feishu_bridge, "has_session", fake_has_session)
+        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+
+        def fake_run(cmd, **kwargs):
+            if "rename-session" in cmd:
+                renames.append(cmd)
+            if "kill-session" in cmd:
+                kills.append(cmd)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+
+        result = feishu_bridge.failover_to_standby(cfg)
+
+        assert result.handled is True
+        assert len(renames) == 1
+        assert renames[0][-1] == cfg.pilot_tmux
+
+    def test_heartbeat_dispatches_diagnosis_to_standby(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, standby_enabled=True, standby_agent="codex", allowed_chat_ids=frozenset({"oc_test"}))
+        dispatched = []
+        feishu_bridge._heartbeat_consecutive_failures = 0
+
+        monkeypatch.setattr(
+            feishu_bridge,
+            "check_pilot_health",
+            lambda c, s=None: feishu_bridge.BridgeResult(False, "stuck at trust prompt"),
+        )
+        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge,
+            "dispatch_diagnosis_to_standby",
+            lambda c, issue: (dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched")),
+        )
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        result = feishu_bridge.run_heartbeat_check(cfg)
+
+        assert result.handled is True
+        assert "diagnosis dispatched" in result.detail
+        assert len(dispatched) == 1
+        assert "trust prompt" in dispatched[0]
+
+    def test_heartbeat_failover_after_threshold(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, standby_enabled=True, standby_agent="codex", allowed_chat_ids=frozenset({"oc_test"}))
+        feishu_bridge._heartbeat_consecutive_failures = feishu_bridge.HEARTBEAT_UNHEALTHY_THRESHOLD - 1
+
+        monkeypatch.setattr(
+            feishu_bridge,
+            "check_pilot_health",
+            lambda c, s=None: feishu_bridge.BridgeResult(False, "still stuck"),
+        )
+        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge,
+            "failover_to_standby",
+            lambda c: feishu_bridge.BridgeResult(True, "failover done"),
+        )
+        monkeypatch.setattr(
+            feishu_bridge,
+            "start_standby_if_needed",
+            lambda c: feishu_bridge.BridgeResult(True, "new standby"),
+        )
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        result = feishu_bridge.run_heartbeat_check(cfg)
+
+        assert result.handled is True
+        assert "failover" in result.detail
+
+    def test_build_diagnosis_request_includes_commands(self, tmp_path):
+        cfg = _cfg(tmp_path, agent="claude", pilot_tmux="cnb-test")
+
+        request = feishu_bridge.build_diagnosis_request(cfg, "stuck at trust prompt")
+
+        assert "cnb-test" in request
+        assert "tmux capture-pane" in request
+        assert "cnb feishu reply" in request
+        assert "trust prompt" in request
+
+    def test_tunnel_health_skips_non_ngrok_url(self, tmp_path):
+        cfg = _cfg(tmp_path, webhook_public_url="https://myserver.example.com/webhook")
+
+        result = feishu_bridge.check_tunnel_health(cfg)
+
+        assert result.handled is True
+        assert "non-ngrok" in result.detail
+
+    def test_tunnel_health_restarts_dead_ngrok(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787)
+        restarts = []
+
+        monkeypatch.setattr(feishu_bridge, "ngrok_public_url_for", lambda h, p: "")
+        monkeypatch.setattr(
+            feishu_bridge,
+            "ensure_tunnel",
+            lambda h, p: (restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app")),
+        )
+        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(feishu_bridge, "_update_config_url", lambda c, u: None)
+
+        result = feishu_bridge.check_tunnel_health(cfg)
+
+        assert result.handled is True
+        assert len(restarts) == 1
+        assert "restarted" in result.detail
 
     def test_route_event_starts_pilot_and_sends_message(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, pilot_tmux="cnb-pilot-test", agent="codex")
@@ -1398,7 +1655,7 @@ class TestRouting:
         assert feishu_bridge.activity_is_done(cfg, "om_1") is True
 
     def test_send_activity_update_builds_one_screen_snapshot(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path)
+        cfg = _cfg(tmp_path, agent="codex")
         event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
         snapshots = []
 
@@ -1453,7 +1710,7 @@ class TestRouting:
         assert "- 等待回复" in rendered
 
     def test_activity_card_screen_mode_only_renders_current_screen(self, tmp_path):
-        cfg = _cfg(tmp_path)
+        cfg = _cfg(tmp_path, agent="codex")
         snapshot = feishu_bridge.ActivitySnapshot(
             title="20s",
             subtitle="设备主管同学当前 TUI 画面",
@@ -1475,7 +1732,7 @@ class TestRouting:
         assert "CNB tmux" not in rendered
 
     def test_activity_card_screen_mode_keeps_mobile_tail_readable(self, tmp_path):
-        cfg = _cfg(tmp_path)
+        cfg = _cfg(tmp_path, agent="codex")
         body = "\n".join(f"line {i:02d} with `code` and *stars*" for i in range(1, 16))
         snapshot = feishu_bridge.ActivitySnapshot(
             title="Codex 实时一屏 · 1s",
