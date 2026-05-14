@@ -22,7 +22,7 @@ Type `/cnb-skills` in Claude Code to list all registered skills, grouped by cate
 
 Edit `registry/skills.yaml` and add an entry:
 
-```yaml
+```yaml title="YAML"
 - name: my-skill
   display: My Skill
   category: dev           # cnb | lark | media | dev | infra | builtin
@@ -52,7 +52,7 @@ commands/
 
 ### File Format
 
-```markdown
+```markdown title="Markdown"
 ---
 allowed-tools: Bash(...)        # Permitted tools
 description: One-line summary   # Shown in /cnb-help
@@ -73,7 +73,7 @@ User layer calls program layer: `/cnb-status` → calls `/cnbx-board overview` +
 
 `${ME}` in command files is replaced with the current session name at install time:
 
-```markdown
+```markdown title="Markdown"
 allowed-tools: Bash(board --as ${ME} inbox)
 ```
 

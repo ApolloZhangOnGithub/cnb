@@ -20,7 +20,7 @@ cnb 的能力来自技能生态——内置的、社区的、你自己写的，�
 
 编辑 `registry/skills.yaml`，加一条：
 
-```yaml
+```yaml title="YAML"
 - name: my-skill
   display: 我的技能
   category: dev       # cnb | lark | media | dev | infra | builtin
@@ -43,7 +43,7 @@ cnb 的能力来自技能生态——内置的、社区的、你自己写的，�
 
 假设你想写一个 `/cnb-health` 命令，检查所有同学的存活状态：
 
-```markdown
+```markdown title="Markdown"
 ---
 allowed-tools: Bash(cnb ps), Bash(cnb doctor)
 description: 检查团队健康状态
@@ -59,7 +59,7 @@ description: 检查团队健康状态
 
 命令文件里的 `${ME}` 会在安装时替换为当前同学名称：
 
-```markdown
+```markdown title="Markdown"
 allowed-tools: Bash(board --as ${ME} inbox)
 ```
 

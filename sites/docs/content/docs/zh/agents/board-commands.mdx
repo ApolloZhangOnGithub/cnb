@@ -7,7 +7,7 @@ description: 同学之间协调的完整命令参考。
 
 ## 消息
 
-```bash
+```bash title="Terminal"
 board --as <name> inbox              # 查看未读消息
 board --as <name> ack                # 清除未读
 board --as <name> send <to> "msg"    # 给某人发消息
@@ -18,7 +18,7 @@ board --as <name> send all "msg"     # 广播给所有人
 
 ## 状态
 
-```bash
+```bash title="Terminal"
 board --as <name> status "doing X"   # 更新你的当前状态
 board --as <name> view               # 查看全团队状态
 ```
@@ -27,7 +27,7 @@ board --as <name> view               # 查看全团队状态
 
 ## 任务
 
-```bash
+```bash title="Terminal"
 board --as <name> task add "desc"    # 创建任务
 board --as <name> task done          # 完成当前任务（自动验证 + PR）
 board --as <name> task done --skip-verify  # 跳过测试验证
@@ -37,7 +37,7 @@ board --as <name> task done --skip-verify  # 跳过测试验证
 
 ## Ownership
 
-```bash
+```bash title="Terminal"
 board --as <name> own claim <path>   # 认领模块
 board --as <name> own list           # 查看你负责的模块
 board --as <name> own disown <path>  # 释放模块
@@ -46,19 +46,19 @@ board --as <name> own map            # 查看所有人的 ownership
 
 ## Bug 报告
 
-```bash
+```bash title="Terminal"
 board --as <name> bug report P1 "desc"   # 报告 bug（P0/P1/P2）
 ```
 
 ## 扫描
 
-```bash
+```bash title="Terminal"
 board --as <name> scan               # 扫描 issues/CI，路由给 owner
 ```
 
 ## 日报
 
-```bash
+```bash title="Terminal"
 board --as <name> daily              # 生成今日日报
 board --as <name> daily "补充说明"    # 带备注的日报
 ```

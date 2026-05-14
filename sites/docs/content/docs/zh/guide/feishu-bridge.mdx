@@ -7,7 +7,7 @@ description: "将飞书群聊连接到 Mac 设备主管同学，实现异步指�
 
 ## 快速开始
 
-```bash
+```bash title="Terminal"
 cnb feishu setup
 cnb feishu status
 cnb feishu start
@@ -55,7 +55,7 @@ cnb feishu start
 
 `cnb feishu setup` 将此部分写入 `~/.cnb/config.toml`。密钥由用户持有，按环境区分。
 
-```toml
+```toml title="TOML"
 [feishu]
 transport = "local_openapi"
 app_id = "cli_xxxxx"
@@ -118,7 +118,7 @@ Live 模式更新一个飞书 activity 卡片，显示可读的终端尾部文�
 
 回读是诊断模式，不是常规的上下文加载。默认保持 `readback_enabled = false`。仅当用户询问飞书消息、历史条目、会话或已读状态异常时才开启。在拥有必要的飞书消息读取权限后，主管可以运行：
 
-```bash
+```bash title="Terminal"
 cnb feishu history --limit 12
 cnb feishu inspect-message <message_id>
 ```
@@ -151,7 +151,7 @@ Web TUI 每 `watch_refresh_ms` 毫秒刷新一次，仅在屏幕文本变化时�
 
 对于当前的 bridge 路径，在飞书开发者控制台中申请以下广泛的 IM/Chat/Contact 权限。这是"尽可能开放 bridge 可用权限"的集合，不是最小集合。
 
-```json
+```json title="JSON"
 {
   "scopes": {
     "tenant": [
@@ -183,7 +183,7 @@ Web TUI 每 `watch_refresh_ms` 毫秒刷新一次，仅在屏幕文本变化时�
 
 `ngrok` 是用户持有的基础设施。cnb 只有在本机已安装并认证 ngrok 后才能启动 `ngrok http ...`，例如：
 
-```bash
+```bash title="Terminal"
 ngrok config add-authtoken <your-token>
 ```
 

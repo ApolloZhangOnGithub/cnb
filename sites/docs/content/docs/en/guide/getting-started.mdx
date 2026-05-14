@@ -14,7 +14,7 @@ cnb coordinates multiple Claude Code sessions as a team — with ownership, hand
 
 ## Install
 
-```bash
+```bash title="Terminal"
 npm install -g claude-nb
 ```
 
@@ -28,7 +28,7 @@ The npm package is `claude-nb`. It installs the `cnb` command. Do not install `c
 <Tab value="Single session">
 Inside any Claude Code session, type:
 
-```bash
+```bash title="Terminal"
 /cnb
 ```
 
@@ -37,7 +37,7 @@ The current session becomes the device supervisor — it manages status, receive
 <Tab value="Full team">
 In a project directory:
 
-```bash
+```bash title="Terminal"
 cd your-project
 cnb
 ```
@@ -53,13 +53,13 @@ This initializes `.cnb/`, creates the board database, starts tongxue sessions in
 Default engine. No extra configuration needed. Just run `cnb`.
 </Tab>
 <Tab value="Codex">
-```bash
+```bash title="Terminal"
 cnb codex
 ```
 
 Or set via environment variable:
 
-```bash
+```bash title="Terminal"
 CNB_AGENT=codex cnb
 ```
 </Tab>

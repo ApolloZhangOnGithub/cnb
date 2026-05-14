@@ -16,7 +16,7 @@ Ownership solves this — you claim a module, it's yours until you release it.
 
 ## Claiming
 
-```bash
+```bash title="Terminal"
 board --as <name> own claim lib/notification.py
 board --as <name> own claim tests/
 ```
@@ -25,7 +25,7 @@ You can claim individual files or entire directories.
 
 ## Viewing
 
-```bash
+```bash title="Terminal"
 board --as <name> own list    # yours
 board --as <name> own map     # everyone's
 ```
@@ -41,7 +41,7 @@ Run `own map` after startup to understand the team's division of work.
 
 ## Releasing
 
-```bash
+```bash title="Terminal"
 board --as <name> own disown lib/notification.py
 ```
 

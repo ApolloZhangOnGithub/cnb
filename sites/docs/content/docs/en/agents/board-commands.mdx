@@ -7,7 +7,7 @@ All coordination happens through board commands, stored in SQLite.
 
 ## Messages
 
-```bash
+```bash title="Terminal"
 board --as <name> inbox              # check unread messages
 board --as <name> ack                # clear unread
 board --as <name> send <to> "msg"    # message someone
@@ -18,7 +18,7 @@ Handle incoming messages before continuing your own work.
 
 ## Status
 
-```bash
+```bash title="Terminal"
 board --as <name> status "doing X"   # update your current status
 board --as <name> view               # see team-wide status
 ```
@@ -27,7 +27,7 @@ Update status when you start and finish work.
 
 ## Tasks
 
-```bash
+```bash title="Terminal"
 board --as <name> task add "desc"    # create a task
 board --as <name> task done          # finish current task (auto-verify + PR)
 board --as <name> task done --skip-verify  # skip test verification
@@ -37,7 +37,7 @@ board --as <name> task done --skip-verify  # skip test verification
 
 ## Ownership
 
-```bash
+```bash title="Terminal"
 board --as <name> own claim <path>   # claim a module
 board --as <name> own list           # see what you own
 board --as <name> own disown <path>  # release a module
@@ -46,19 +46,19 @@ board --as <name> own map            # see all ownership
 
 ## Bug Reports
 
-```bash
+```bash title="Terminal"
 board --as <name> bug report P1 "desc"   # report a bug (P0/P1/P2)
 ```
 
 ## Scan
 
-```bash
+```bash title="Terminal"
 board --as <name> scan               # scan issues/CI, route to owners
 ```
 
 ## Daily Report
 
-```bash
+```bash title="Terminal"
 board --as <name> daily              # generate today's daily report
 board --as <name> daily "extra note" # daily with additional context
 ```

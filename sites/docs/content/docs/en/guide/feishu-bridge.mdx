@@ -11,7 +11,7 @@ watch links.
 
 ## Quick Path
 
-```bash
+```bash title="Terminal"
 cnb feishu setup
 cnb feishu status
 cnb feishu start
@@ -81,7 +81,7 @@ but they remain owned by the project sessions.
 `cnb feishu setup` writes this section to `~/.cnb/config.toml`. Keep secrets
 user-owned and per environment.
 
-```toml
+```toml title="TOML"
 [feishu]
 transport = "local_openapi"
 app_id = "cli_xxxxx"
@@ -158,7 +158,7 @@ Readback is diagnostic mode, not normal context loading. Keep
 Feishu message, history item, thread, or read status looks wrong. With the
 required Feishu message-read permissions, the supervisor can run:
 
-```bash
+```bash title="Terminal"
 cnb feishu history --limit 12
 cnb feishu inspect-message <message_id>
 ```
@@ -211,7 +211,7 @@ For the current bridge path, request the broad IM/Chat/Contact scopes below in
 the Feishu developer console. This is the "open as much as the bridge can use"
 set, not a minimal set.
 
-```json
+```json title="JSON"
 {
   "scopes": {
     "tenant": [
@@ -247,7 +247,7 @@ current control-room flow.
 `ngrok` is user-owned infrastructure. cnb can start `ngrok http ...` only after
 the local machine has installed and authenticated ngrok, for example:
 
-```bash
+```bash title="Terminal"
 ngrok config add-authtoken <your-token>
 ```
 
