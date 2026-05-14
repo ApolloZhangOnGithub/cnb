@@ -74,6 +74,8 @@ _STRINGS = {
         "pin": "置顶",
         "unpin": "取消置顶",
         "pinned": "已置顶",
+        "link_url": "链接",
+        "link_url_ph": "https://...",
         "login_title": "登录",
         "login_desc": "输入你的用户名和密码登录。",
         "login_username": "用户名",
@@ -147,6 +149,8 @@ _STRINGS = {
         "pin": "Pin",
         "unpin": "Unpin",
         "pinned": "Pinned",
+        "link_url": "Link",
+        "link_url_ph": "https://...",
         "login_title": "Login",
         "login_desc": "Enter your username and password to log in.",
         "login_username": "Username",
@@ -367,6 +371,8 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .post-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
 .post-title a { color: var(--fg); }
 .post-title a:hover { text-decoration: underline; }
+.post-domain { font-size: 12px; color: var(--dim); font-weight: 400; margin-left: 6px; }
+.post-domain:hover { color: var(--muted); }
 .post-body { margin: 8px 0; color: var(--muted); }
 .post-body p { margin: 4px 0; }
 .post-body a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line); }
@@ -578,14 +584,29 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
     meta = f"<div class='post-meta'>{''.join(meta_parts)}</div>"
 
     title_html = ""
+    post_url = post.get("url", "")
+    if post_url:
+        from urllib.parse import urlparse as _urlparse
+        domain = _urlparse(post_url).netloc.replace("www.", "")
+        domain_html = f"<a class='post-domain' href='{escape(post_url)}'>({escape(domain)})</a>"
+    else:
+        domain_html = ""
+
     if post.get("title"):
         if full:
-            title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
+            if post_url:
+                title_html = f"<div class='post-title'><a href='{escape(post_url)}'>{escape(post['title'])}</a>{domain_html}</div>"
+            else:
+                title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
         else:
             post_id = post.get("id", "")
-            href = f"/blog/{escape(post['username'])}/{post_id}" if post_id else ""
-            if href:
-                title_html = f"<div class='post-title'><a href='{href}'>{escape(post['title'])}</a></div>"
+            local_href = f"/blog/{escape(post['username'])}/{post_id}" if post_id else ""
+            if post_url:
+                title_html = f"<div class='post-title'><a href='{escape(post_url)}'>{escape(post['title'])}</a>{domain_html}</div>"
+                if local_href:
+                    title_html += f"<div style='font-size:12px'><a href='{local_href}' style='color:var(--dim)'>{t(lang, 'comments')}</a></div>"
+            elif local_href:
+                title_html = f"<div class='post-title'><a href='{local_href}'>{escape(post['title'])}</a></div>"
             else:
                 title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
 
@@ -810,8 +831,8 @@ def _render_comment_tree(comments: list[dict], parent_id: int | None, post_id: i
         html_parts.append(
             f"<div class='comment'>"
             f"<div class='comment-meta'>"
-            f"<img class='avatar-sm' src='{escape(c_avatar)}' alt=''>"
-            f"<span class='author'>{escape(c['display_name'])}</span>"
+            f"<a href='/blog/{escape(c['username'])}'><img class='avatar-sm' src='{escape(c_avatar)}' alt=''></a>"
+            f"<a href='/blog/{escape(c['username'])}' class='author'>{escape(c['display_name'])}</a>"
             f"{c_badge}{pinned}"
             f"<span>&middot; {format_timestamp(c['created_at'])}</span>"
             f"</div>"
@@ -899,6 +920,8 @@ def submit_page(lang: str = "zh", user: dict | None = None, csrf: str = "") -> s
         f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
         f"<div class='form-row'><label>{t(lang, 'submit_title_label')}</label>"
         f"<input name='title' placeholder='{t(lang, 'submit_title_ph')}'></div>"
+        f"<div class='form-row'><label>{t(lang, 'link_url')}</label>"
+        f"<input name='url' type='url' placeholder='{t(lang, 'link_url_ph')}'></div>"
         f"<div style='margin:12px 0'>"
         f"<textarea name='body' rows='12' placeholder='{t(lang, 'submit_body_ph')}' required "
         "class='form-input' style='width:100%;resize:vertical'></textarea>"

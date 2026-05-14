@@ -527,10 +527,13 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         title = form.get("title", "").strip() or None
         body = form.get("body", "").strip()
-        if not body:
+        url = form.get("url", "").strip() or None
+        if not body and not url:
             self._send_html(submit_page(lang, user))
             return
-        post_id = self.server.db.create_post(user["id"], body, title)
+        if not body:
+            body = ""
+        post_id = self.server.db.create_post(user["id"], body, title, url=url)
         post_path = str(post_id)
         self._redirect(f"/blog/{user['username']}/{post_path}")
 
@@ -717,12 +720,13 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         text = str(body.get("body", "")).strip()
         title = body.get("title")
+        url = body.get("url")
 
-        if not text:
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "body required"})
+        if not text and not url:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "body or url required"})
             return
 
-        post_id = self.server.db.create_post(user["id"], text, title)
+        post_id = self.server.db.create_post(user["id"], text or "", title, url=url)
         self._send_json(HTTPStatus.CREATED, {"id": post_id})
 
     def _handle_update_post(self, post_id: int) -> None:

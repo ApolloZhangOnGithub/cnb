@@ -150,6 +150,9 @@ class BlogDB:
             comment_cols = {row[1] for row in c.execute("PRAGMA table_info(blog_comments)").fetchall()}
             if "parent_id" not in comment_cols:
                 c.execute("ALTER TABLE blog_comments ADD COLUMN parent_id INTEGER REFERENCES blog_comments(id)")
+            post_cols = {row[1] for row in c.execute("PRAGMA table_info(blog_posts)").fetchall()}
+            if "url" not in post_cols:
+                c.execute("ALTER TABLE blog_posts ADD COLUMN url TEXT")
             if "is_pinned" not in comment_cols:
                 c.execute("ALTER TABLE blog_comments ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
             c.execute("CREATE INDEX IF NOT EXISTS idx_blog_comments_parent ON blog_comments(parent_id)")
@@ -293,12 +296,13 @@ class BlogDB:
         body: str,
         title: str | None = None,
         slug: str | None = None,
+        url: str | None = None,
     ) -> int:
         now = _utc_now()
         with self.conn() as c:
             cur = c.execute(
-                "INSERT INTO blog_posts (author_id, slug, title, body, created_at) VALUES (?, ?, ?, ?, ?)",
-                (author_id, slug, title, body, now),
+                "INSERT INTO blog_posts (author_id, slug, title, body, url, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (author_id, slug, title, body, url, now),
             )
             return cur.lastrowid  # type: ignore[return-value]
 
