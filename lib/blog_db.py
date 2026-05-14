@@ -182,6 +182,8 @@ class BlogDB:
                     PRIMARY KEY (comment_id, user_id)
                 );
             """)
+            if "lang" not in cols:
+                c.execute("ALTER TABLE blog_users ADD COLUMN lang TEXT NOT NULL DEFAULT 'zh'")
             if "avatar_url" not in cols:
                 c.execute("ALTER TABLE blog_users ADD COLUMN avatar_url TEXT")
             if "github_id" not in cols:
@@ -296,7 +298,7 @@ class BlogDB:
             return c.execute("SELECT * FROM blog_users WHERE username = ?", (username,)).fetchone()
 
     def update_user(self, user_id: int, **fields: Any) -> bool:
-        allowed = {"display_name", "avatar_emoji", "bio"}
+        allowed = {"display_name", "avatar_emoji", "bio", "lang"}
         updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if not updates:
             return False

@@ -37,6 +37,7 @@ from lib.blog_html import (
     follow_list_page,
     inbox_page,
     landing_page,
+    edit_page,
     login_page,
     notifications_page,
     post_page,
@@ -150,10 +151,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
     # ── GET ──
 
-    def _get_lang(self, params: dict) -> str:
-        explicit = (params.get("lang") or [""])[0]
-        if explicit:
-            return "en" if explicit == "en" else "zh"
+    def _get_lang(self, params: dict, user: dict | None = None) -> str:
+        if user and user.get("lang"):
+            return user["lang"]
         accept = self.headers.get("Accept-Language", "")
         if accept.startswith("zh") or ",zh" in accept:
             return "zh"
@@ -185,8 +185,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = parsed.path.rstrip("/") or "/"
         params = parse_qs(parsed.query)
-        lang = self._get_lang(params)
         user = self._get_cookie_user()
+        lang = self._get_lang(params, user)
 
         unread = self.server.db.get_unread_count(user["id"]) if user else 0
         notif_count = self.server.db.get_notif_unread_count(user["id"]) if user else 0
@@ -256,6 +256,19 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if route == "/register":
             self._send_html(register_page(lang))
             return
+        m = re.match(r"^/edit/(\d+)$", route)
+        if m:
+            if not user:
+                self._redirect("/login")
+                return
+            post = self.server.db.get_post(int(m.group(1)))
+            if post and post["author_id"] == user["id"]:
+                csrf = self._make_csrf(user)
+                self._send_html(edit_page(dict(post), lang, user, csrf))
+            else:
+                self._redirect("/posts")
+            return
+
         m = re.match(r"^/delete-post/(\d+)$", route)
         if m:
             self._handle_delete_post(int(m.group(1)), user)
@@ -329,7 +342,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = parsed.path.rstrip("/")
         params = parse_qs(parsed.query)
-        lang = self._get_lang(params)
+        user = self._get_cookie_user()
+        lang = self._get_lang(params, user)
 
         # HTML form routes
         if route == "/login":
@@ -342,6 +356,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         m = re.match(r"^/comment/(\d+)$", route)
         if m:
             self._handle_form_comment(int(m.group(1)), lang)
+            return
+
+        m = re.match(r"^/edit/(\d+)$", route)
+        if m:
+            self._handle_form_edit(int(m.group(1)), lang)
             return
 
         m = re.match(r"^/messages/([a-z0-9][a-z0-9_-]*)$", route)
@@ -768,6 +787,20 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         referer = self.headers.get("Referer", "/posts")
         self._redirect(referer)
 
+    def _handle_form_edit(self, post_id: int, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
+        title = form.get("title", "").strip() or None
+        body = form.get("body", "").strip()
+        self.server.db.update_post(post_id, user["id"], title, body)
+        self._redirect(f"/blog/{user['username']}/{post_id}")
+
     def _handle_form_message(self, username: str, lang: str) -> None:
         user = self._get_cookie_user()
         if not user:
@@ -796,11 +829,14 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         display_name = form.get("display_name", "").strip()
         bio = form.get("bio", "").strip()
+        new_lang = form.get("lang", "").strip()
         updates = {}
         if display_name:
             updates["display_name"] = display_name
         if bio is not None:
             updates["bio"] = bio
+        if new_lang in ("zh", "en"):
+            updates["lang"] = new_lang
         if updates:
             self.server.db.update_user(user["id"], **updates)
         user = self._get_cookie_user()

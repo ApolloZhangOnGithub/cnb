@@ -71,6 +71,7 @@ _STRINGS = {
         "submit": "发帖",
         "my_page": "我的主页",
         "settings": "设置",
+        "settings_lang": "语言",
         "settings_save": "保存",
         "settings_saved": "已保存",
         "tab_recommend": "推荐",
@@ -90,6 +91,7 @@ _STRINGS = {
         "notif_reply": "回复了你的评论",
         "notif_follow": "关注了你",
         "no_notifications": "暂无通知",
+        "edit": "编辑",
         "follow": "关注",
         "unfollow": "已关注",
         "followers": "关注者",
@@ -159,6 +161,7 @@ _STRINGS = {
         "submit": "Submit",
         "my_page": "My Page",
         "settings": "Settings",
+        "settings_lang": "Language",
         "settings_save": "Save",
         "settings_saved": "Saved",
         "tab_recommend": "Explore",
@@ -178,6 +181,7 @@ _STRINGS = {
         "notif_reply": "replied to your comment",
         "notif_follow": "followed you",
         "no_notifications": "No notifications",
+        "edit": "Edit",
         "follow": "Follow",
         "unfollow": "Following",
         "followers": "followers",
@@ -567,7 +571,18 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .msg-read { color: #3b82f6; }
 .unread-badge { background: #3b82f6; color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 8px; margin-left: 4px; font-weight: 600; }
 
-@media (max-width: 700px) { .wrap { width: auto; min-width: 0; } }
+@media (max-width: 700px) {
+    .wrap { width: auto; min-width: 0; padding: 0 16px; }
+    .post-with-thumb { flex-direction: column; }
+    .post-thumb { width: 100%; height: auto; max-height: 200px; }
+    .link-card { flex-direction: column; }
+    .link-card-thumb { width: 100%; height: 120px; }
+    .form-row { flex-direction: column; align-items: flex-start; }
+    .form-row label { width: auto; }
+    .form-row input { max-width: 100%; }
+    .fu-bar { gap: 12px; }
+    .profile { flex-direction: column; text-align: center; }
+}
 """
 
 
@@ -598,7 +613,6 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
             + (f" <span class='unread-badge'>{unread}</span>" if unread else "") +
             f"</a>"
             f"<a href='/settings{lp}'>{t(lang, 'settings')}</a>"
-            f"<a href='?lang={tl}'>{t(lang, 'lang_switch')}</a>"
             f"<a href='/logout'>{t(lang, 'logout')}</a>"
             f"</div></div></div>"
         )
@@ -952,9 +966,11 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     card = _post_card(post, lang, full=True, user=user)
     post_id = post.get("id", "")
-    delete_btn = ""
+    post_actions = ""
+    if user and post.get("author_id") == user.get("id"):
+        post_actions = f"<a class='delete-btn' href='/edit/{post_id}' style='color:var(--muted);border-color:var(--line)'>{t(lang, 'edit')}</a> "
     if user and (post.get("author_id") == user.get("id") or user.get("role") == "admin"):
-        delete_btn = f"<a class='delete-btn' href='/delete-post/{post_id}' onclick='return confirm(\"确定删除？\")'>删除帖子</a> "
+        post_actions += f"<a class='delete-btn' href='/delete-post/{post_id}' onclick='return confirm(\"确定删除？\")'>删除帖子</a> "
     count = len(comments)
 
     comment_tree = _render_comment_tree(comments, None, post_id, lang, user, csrf)
@@ -977,7 +993,7 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
 
     return _page_wrap(
         post.get("title") or "post",
-        f"{back}{card}{delete_btn}{comments_section}{comment_form}",
+        f"{back}{card}{post_actions}{comments_section}{comment_form}",
         lang,
         user,
     )
@@ -1038,6 +1054,29 @@ def submit_page(lang: str = "zh", user: dict | None = None, csrf: str = "") -> s
         "</section>"
     )
     return _page_wrap(t(lang, "submit_title"), body, lang, user)
+
+
+def edit_page(post: dict, lang: str = "zh", user: dict | None = None, csrf: str = "") -> str:
+    lp = _lang_param(lang)
+    post_id = post.get("id", "")
+    back = f"<a class='back' href='/blog/{escape(post.get('username', ''))}/{post_id}'>{t(lang, 'back')}</a>"
+    body = (
+        f"{back}"
+        "<section class='register-section'>"
+        f"<h2>{t(lang, 'edit')}</h2>"
+        f"<form method='POST' action='/edit/{post_id}{lp}'>"
+        f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
+        f"<div class='form-row'><label>{t(lang, 'submit_title_label')}</label>"
+        f"<input name='title' value='{escape(post.get('title', '') or '')}'></div>"
+        f"<div style='margin:12px 0'>"
+        f"<textarea name='body' rows='12' class='form-input' style='width:100%;resize:vertical'>"
+        f"{escape(post.get('body', ''))}</textarea>"
+        f"</div>"
+        f"<button class='btn' type='submit'>{t(lang, 'settings_save')}</button>"
+        f"</form>"
+        "</section>"
+    )
+    return _page_wrap(t(lang, "edit"), body, lang, user)
 
 
 def register_page(lang: str = "zh", error: str = "") -> str:
@@ -1162,6 +1201,11 @@ def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", ms
         f"<input name='display_name' value='{escape(user.get('display_name', ''))}'></div>"
         f"<div class='form-row'><label>{t(lang, 'reg_bio')}</label>"
         f"<input name='bio' value='{escape(user.get('bio', ''))}'></div>"
+        f"<div class='form-row'><label>{t(lang, 'settings_lang')}</label>"
+        f"<select name='lang' style='background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:6px 10px;font-size:14px'>"
+        f"<option value='zh'{'selected' if user.get('lang','zh')=='zh' else ''}>中文</option>"
+        f"<option value='en'{' selected' if user.get('lang')=='en' else ''}>English</option>"
+        f"</select></div>"
         f"<div class='form-row'><label></label><button class='btn' type='submit'>{t(lang, 'settings_save')}</button></div>"
         "</form>"
         "</section>"
