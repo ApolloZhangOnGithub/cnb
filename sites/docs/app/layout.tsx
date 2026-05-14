@@ -12,6 +12,9 @@ export default async function Layout({
   const { lang } = await params;
   return (
     <html lang={lang ?? 'zh'} className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/docs/logo.svg" type="image/svg+xml" />
+      </head>
       <body className="flex flex-col min-h-screen">
         {children}
       </body>

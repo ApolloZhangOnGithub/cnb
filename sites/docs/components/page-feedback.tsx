@@ -89,8 +89,9 @@ const ThumbDown = () => (
   </svg>
 );
 
-export function PageFeedback() {
+export function PageFeedback({ lang }: { lang?: string }) {
   const pathname = usePathname();
+  const isZh = lang === 'zh';
   const [vote, setVote] = useState<'up' | 'down' | null>(null);
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -109,14 +110,14 @@ export function PageFeedback() {
   if (submitted) {
     return (
       <div style={container} className="not-prose">
-        <p style={thankYou}>Thanks for your feedback!</p>
+        <p style={thankYou}>{isZh ? '感谢你的反馈！' : 'Thanks for your feedback!'}</p>
       </div>
     );
   }
 
   return (
     <div style={container} className="not-prose">
-      <p style={title}>Was this page helpful?</p>
+      <p style={title}>{isZh ? '这个页面有帮助吗？' : 'Was this page helpful?'}</p>
       <div style={btnGroup}>
         <button
           type="button"
@@ -135,16 +136,16 @@ export function PageFeedback() {
       </div>
       {vote === 'down' && (
         <div>
-          <label style={labelStyle}>How can we improve this page? (optional)</label>
+          <label style={labelStyle}>{isZh ? '我们可以如何改进这个页面？（可选）' : 'How can we improve this page? (optional)'}</label>
           <textarea
             style={textareaStyle}
             value={comment}
             onChange={e => setComment(e.target.value)}
-            placeholder="Tell us what could be better..."
+            placeholder={isZh ? '告诉我们哪里可以做得更好...' : 'Tell us what could be better...'}
           />
           <div>
             <button type="button" style={submitBtn} onClick={() => submit('down', comment)}>
-              Submit
+              {isZh ? '提交' : 'Submit'}
             </button>
           </div>
         </div>

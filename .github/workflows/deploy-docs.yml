@@ -4,7 +4,7 @@ on:
   push:
     branches: [master]
     paths:
-      - "docs-site/**"
+      - "sites/docs/**"
       - "docs/**"
       - ".github/workflows/deploy-docs.yml"
   workflow_dispatch:
@@ -21,21 +21,21 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: docs-site/package-lock.json
+          cache-dependency-path: sites/docs/package-lock.json
 
       - name: Install dependencies
         run: npm ci
-        working-directory: docs-site
+        working-directory: sites/docs
 
       - name: Build
         run: npm run build
-        working-directory: docs-site
+        working-directory: sites/docs
 
       - name: Deploy to server
         uses: burnett01/rsync-deployments@7.0.2
         with:
           switches: -azP --delete
-          path: docs-site/out/
+          path: sites/docs/out/
           remote_path: /opt/cnb-docs/site/
           remote_host: ${{ secrets.DEPLOY_HOST }}
           remote_user: root

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Download cnb</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        background: #0a0a0a;
+        color: #fafafa;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: #fafafa; text-decoration: none; }
+
+      .nav { height: 56px; display: flex; align-items: center; gap: 24px; padding: 0 24px; border-bottom: 1px solid rgba(255,255,255,0.08); max-width: 1200px; margin: 0 auto; }
+      .nav a:first-child { font-weight: 600; }
+      .nav a { color: #666; font-size: 14px; }
+      .nav a:hover { color: #fafafa; }
+      .nav a:first-child:hover { color: #fafafa; }
+      .nav a:first-child svg { pointer-events: none; }
+
+      .hero { text-align: center; padding: 100px 24px 60px; max-width: 700px; margin: 0 auto; }
+      .hero h1 { font-size: clamp(36px, 5vw, 56px); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 16px; }
+      .hero p { font-size: 18px; color: #888; margin-bottom: 48px; }
+
+      .platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto; padding: 0 24px 80px; }
+
+      .platform-card { border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 32px; display: flex; flex-direction: column; gap: 16px; transition: border-color 0.15s; }
+      .platform-card:hover { border-color: rgba(255,255,255,0.2); }
+
+      .platform-header { display: flex; align-items: center; gap: 12px; }
+      .platform-icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.06); border-radius: 12px; }
+      .platform-name { font-size: 20px; font-weight: 600; }
+      .platform-req { font-size: 13px; color: #666; }
+
+      .platform-desc { font-size: 14px; color: #888; line-height: 1.6; flex: 1; }
+
+      .download-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; transition: opacity 0.15s; margin-top: auto; }
+      .download-btn-primary { background: #fafafa; color: #0a0a0a; }
+      .download-btn-primary:hover { opacity: 0.9; }
+      .download-btn-secondary { border: 1px solid rgba(255,255,255,0.15); color: #888; }
+      .download-btn-secondary:hover { border-color: rgba(255,255,255,0.3); color: #fafafa; }
+
+      .cli-section { text-align: center; padding: 60px 24px 100px; max-width: 600px; margin: 0 auto; }
+      .cli-section h2 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+      .cli-section p { font-size: 14px; color: #666; margin-bottom: 24px; }
+      .cli-code { background: #111; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 16px 24px; font-family: ui-monospace, 'SF Mono', monospace; font-size: 14px; color: #22c55e; }
+
+      .footer { padding: 24px; text-align: center; font-size: 12px; color: #444; border-top: 1px solid rgba(255,255,255,0.06); }
+    </style>
+  </head>
+  <body>
+    <nav class="nav">
+      <a href="/" style="display:inline-flex;align-items:center;gap:8px">
+        <svg width="20" height="20" viewBox="11 4 43 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="16" y1="8" x2="38" y2="8" stroke="#fafafa" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="38" y1="8" x2="27" y2="42" stroke="#fafafa" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="27" y1="42" x2="16" y2="8" stroke="#fafafa" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="16" cy="8" r="5" fill="#D97757"/><circle cx="38" cy="8" r="5" fill="#D97757"/><circle cx="27" cy="42" r="5" fill="#D97757"/>
+          <circle cx="27" cy="19" r="3" fill="#fafafa"/>
+        </svg>
+        cnb
+      </a>
+      <a href="//blog.c-n-b.space/feed">blog</a>
+      <a href="//platform.c-n-b.space/docs/en">docs</a>
+      <a href="https://github.com/ApolloZhangOnGithub/cnb">github</a>
+    </nav>
+
+    <section class="hero">
+      <h1>Download cnb</h1>
+      <p>Monitor and interact with your AI coding team from any device.</p>
+    </section>
+
+    <div class="platforms">
+      <div class="platform-card">
+        <div class="platform-header">
+          <div class="platform-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+          </div>
+          <div>
+            <div class="platform-name">Mac</div>
+            <div class="platform-req">macOS 13+</div>
+          </div>
+        </div>
+        <div class="platform-desc">
+          Native SwiftUI desktop app. Reads local board state, displays team status in a window and menu bar extra.
+        </div>
+        <a href="https://github.com/ApolloZhangOnGithub/cnb/tree/master/tools/cnb-mac-companion" class="download-btn download-btn-primary">
+          Download for Mac
+        </a>
+      </div>
+
+      <div class="platform-card">
+        <div class="platform-header">
+          <div class="platform-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>
+          </div>
+          <div>
+            <div class="platform-name">iPhone</div>
+            <div class="platform-req">iOS 17+</div>
+          </div>
+        </div>
+        <div class="platform-desc">
+          Live Activity bridge. Shows device supervisor status on your lock screen via ActivityKit.
+        </div>
+        <a href="https://github.com/ApolloZhangOnGithub/cnb/tree/master/tools/cnb-island" class="download-btn download-btn-secondary">
+          Download for iPhone
+        </a>
+      </div>
+
+      <div class="platform-card">
+        <div class="platform-header">
+          <div class="platform-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <div>
+            <div class="platform-name">Vision Pro</div>
+            <div class="platform-req">visionOS 2+</div>
+          </div>
+        </div>
+        <div class="platform-desc">
+          Native SwiftUI visionOS viewer. Aggregates Feishu messages from all device supervisors in a spatial interface.
+        </div>
+        <a href="https://github.com/ApolloZhangOnGithub/cnb/tree/master/tools/cnb-island" class="download-btn download-btn-secondary">
+          Download for Vision Pro
+        </a>
+      </div>
+    </div>
+
+    <section class="cli-section">
+      <h2>Command Line</h2>
+      <p>The core cnb experience. Works everywhere.</p>
+      <div class="cli-code">npm install -g claude-nb</div>
+    </section>
+
+    <footer class="footer">
+      cnb is open source, local-first software.
+    </footer>
+  </body>
+</html>

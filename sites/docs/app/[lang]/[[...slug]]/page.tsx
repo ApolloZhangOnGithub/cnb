@@ -23,17 +23,16 @@ export default async function Page(props: {
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription>{page.data.description}</DocsDescription>
+      {!page.data.full && <DocsTitle>{page.data.title}</DocsTitle>}
+      {!page.data.full && <DocsDescription>{page.data.description}</DocsDescription>}
       <DocsBody>
         <MDX
           components={getMDXComponents({
-            // this allows you to link to other pages with relative file paths
             a: createRelativeLink(source, page),
           })}
         />
       </DocsBody>
-      <PageFeedback />
+      {!page.data.full && <PageFeedback lang={params.lang} />}
     </DocsPage>
   );
 }
