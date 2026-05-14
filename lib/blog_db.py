@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS blog_messages (
 CREATE INDEX IF NOT EXISTS idx_blog_messages_receiver ON blog_messages(receiver_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_blog_messages_pair ON blog_messages(sender_id, receiver_id);
 
+CREATE TABLE IF NOT EXISTS blog_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    actor_id INTEGER REFERENCES blog_users(id),
+    post_id INTEGER REFERENCES blog_posts(id),
+    comment_id INTEGER,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_blog_notif_user ON blog_notifications(user_id, is_read);
+
 CREATE TABLE IF NOT EXISTS docs_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     page TEXT NOT NULL,
@@ -680,6 +692,55 @@ class BlogDB:
                 " + (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) DESC,"
                 " p.id DESC LIMIT ?",
                 (pattern, pattern, pattern, pattern, pattern, limit),
+            ).fetchall()
+
+    # ── notifications ──
+
+    def notify(self, user_id: int, type: str, actor_id: int, post_id: int | None = None, comment_id: int | None = None) -> None:
+        if user_id == actor_id:
+            return
+        now = _utc_now()
+        with self.conn() as c:
+            c.execute(
+                "INSERT INTO blog_notifications (user_id, type, actor_id, post_id, comment_id, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, type, actor_id, post_id, comment_id, now),
+            )
+
+    def get_notifications(self, user_id: int, limit: int = 30) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT n.*, u.username AS actor_username, u.display_name AS actor_name, u.avatar_url AS actor_avatar"
+                " FROM blog_notifications n JOIN blog_users u ON n.actor_id = u.id"
+                " WHERE n.user_id = ? ORDER BY n.id DESC LIMIT ?",
+                (user_id, limit),
+            ).fetchall()
+
+    def get_notif_unread_count(self, user_id: int) -> int:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT COUNT(*) FROM blog_notifications WHERE user_id = ? AND is_read = 0",
+                (user_id,),
+            ).fetchone()[0]
+
+    def mark_notifications_read(self, user_id: int) -> None:
+        with self.conn() as c:
+            c.execute("UPDATE blog_notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0", (user_id,))
+
+    def search_users(self, query: str, limit: int = 10) -> list[sqlite3.Row]:
+        q = query.strip()
+        if not q:
+            return []
+        pattern = f"%{q}%"
+        with self.conn() as c:
+            return c.execute(
+                "SELECT u.*,"
+                " (SELECT COUNT(*) FROM blog_follows WHERE following_id = u.id) AS follower_count,"
+                " (SELECT COUNT(*) FROM blog_posts WHERE author_id = u.id) AS post_count"
+                " FROM blog_users u"
+                " WHERE u.username LIKE ? OR u.display_name LIKE ? OR u.bio LIKE ?"
+                " ORDER BY follower_count DESC, post_count DESC LIMIT ?",
+                (pattern, pattern, pattern, limit),
             ).fetchall()
 
     def save_docs_feedback(self, page: str, vote: str, comment: str) -> int:

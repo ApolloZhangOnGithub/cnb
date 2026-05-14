@@ -19,6 +19,25 @@ def format_timestamp(iso_str: str) -> str:
         return iso_str
 
 
+def relative_time(iso_str: str) -> str:
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        diff = now - dt
+        secs = int(diff.total_seconds())
+        if secs < 60:
+            return "刚刚"
+        if secs < 3600:
+            return f"{secs // 60}分钟前"
+        if secs < 86400:
+            return f"{secs // 3600}小时前"
+        if secs < 2592000:
+            return f"{secs // 86400}天前"
+        return dt.strftime("%Y-%m-%d")
+    except (ValueError, AttributeError):
+        return iso_str
+
+
 # ── i18n ──
 
 _STRINGS = {
@@ -65,6 +84,12 @@ _STRINGS = {
         "search_ph": "搜索帖子…",
         "search_results": "搜索结果",
         "search_empty": "没有找到相关内容",
+        "notifications": "通知",
+        "notif_like": "赞了你的帖子",
+        "notif_comment": "评论了你的帖子",
+        "notif_reply": "回复了你的评论",
+        "notif_follow": "关注了你",
+        "no_notifications": "暂无通知",
         "follow": "关注",
         "unfollow": "已关注",
         "followers": "关注者",
@@ -147,6 +172,12 @@ _STRINGS = {
         "search_ph": "Search posts…",
         "search_results": "Search results",
         "search_empty": "No results found",
+        "notifications": "Notifications",
+        "notif_like": "liked your post",
+        "notif_comment": "commented on your post",
+        "notif_reply": "replied to your comment",
+        "notif_follow": "followed you",
+        "no_notifications": "No notifications",
         "follow": "Follow",
         "unfollow": "Following",
         "followers": "followers",
@@ -479,6 +510,15 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
     padding: 8px 12px; font-size: 14px; font-family: inherit; border-radius: 6px; }
 .search-bar input:focus { border-color: var(--muted); outline: none; }
 .search-bar button { padding: 8px 16px; }
+.search-users { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+.search-user { display: flex; align-items: center; gap: 10px; padding: 8px 0; text-decoration: none; }
+.search-user:hover { text-decoration: none; opacity: 0.8; }
+.notif-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.notif-item.unread { font-weight: 600; }
+.notif-text { flex: 1; }
+.notif-time { font-size: 11px; color: var(--dim); flex-shrink: 0; }
+.delete-btn { font-size: 12px; color: var(--dim); border: 1px solid var(--line); padding: 2px 8px; border-radius: 3px; }
+.delete-btn:hover { color: #e55; border-color: #e55; text-decoration: none; }
 
 .fu-bar { display: flex; gap: 16px; padding: 16px 0; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .fu-bar::-webkit-scrollbar { display: none; }
@@ -535,7 +575,7 @@ def _lang_param(lang: str) -> str:
     return f"?lang={lang}" if lang != "zh" else ""
 
 
-def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None, unread: int = 0) -> str:
+def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None, unread: int = 0, notif_count: int = 0) -> str:
     lp = _lang_param(lang)
     tl = t(lang, "lang_target")
     html_lang = "zh" if lang == "zh" else "en"
@@ -551,6 +591,9 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
             f"<div class='nav-dropdown-menu'>"
             f"<a href='/blog/{escape(uname)}'>{t(lang, 'my_page')}</a>"
             f"<a href='/submit{lp}'>{t(lang, 'submit')}</a>"
+            f"<a href='/notifications{lp}'>{t(lang, 'notifications')}"
+            + (f" <span class='unread-badge'>{notif_count}</span>" if notif_count else "") +
+            f"</a>"
             f"<a href='/messages{lp}'>{t(lang, 'messages')}"
             + (f" <span class='unread-badge'>{unread}</span>" if unread else "") +
             f"</a>"
@@ -614,7 +657,7 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
     meta_parts = [
         f"<img class='avatar' src='{escape(avatar)}' alt=''>",
         f"<a href='/blog/{escape(post['username'])}' class='author'>{escape(post['display_name'])}</a>{badge}{follow_tag}",
-        f" &middot; {format_timestamp(post['created_at'])}",
+        f" &middot; {relative_time(post['created_at'])}",
     ]
     meta = f"<div class='post-meta'>{''.join(meta_parts)}</div>"
 
@@ -861,6 +904,8 @@ def _render_comment_tree(comments: list[dict], parent_id: int | None, post_id: i
                 f"<a onclick=\"document.getElementById('rf{cid}').style.display='block';this.style.display='none'\" "
                 f"style='cursor:pointer'>{t(lang, 'reply')}</a>"
             )
+            if c.get("author_id") == user.get("id") or user.get("role") == "admin":
+                actions.append(f"<a href='/delete-comment/{cid}' onclick='return confirm(\"确定？\")' style='color:#e55'>×</a>")
             if user.get("role") == "admin":
                 act = "unpin" if c.get("is_pinned") else "pin"
                 actions.append(f"<a href='/pin-comment/{cid}?action={act}'>{t(lang, act)}</a>")
@@ -893,7 +938,7 @@ def _render_comment_tree(comments: list[dict], parent_id: int | None, post_id: i
             f"<a href='/blog/{escape(c['username'])}'><img class='avatar-sm' src='{escape(c_avatar)}' alt=''></a>"
             f"<a href='/blog/{escape(c['username'])}' class='author'>{escape(c['display_name'])}</a>"
             f"{c_badge}{pinned}"
-            f"<span>&middot; {format_timestamp(c['created_at'])}</span>"
+            f"<span>&middot; {relative_time(c['created_at'])}</span>"
             f"</div>"
             f"<div class='comment-body'>{escape(c['body'])}</div>"
             f"{actions_html}{reply_form}{nested}"
@@ -907,6 +952,9 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     card = _post_card(post, lang, full=True, user=user)
     post_id = post.get("id", "")
+    delete_btn = ""
+    if user and (post.get("author_id") == user.get("id") or user.get("role") == "admin"):
+        delete_btn = f"<a class='delete-btn' href='/delete-post/{post_id}' onclick='return confirm(\"确定删除？\")'>删除帖子</a> "
     count = len(comments)
 
     comment_tree = _render_comment_tree(comments, None, post_id, lang, user, csrf)
@@ -929,7 +977,7 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
 
     return _page_wrap(
         post.get("title") or "post",
-        f"{back}{card}{comments_section}{comment_form}",
+        f"{back}{card}{delete_btn}{comments_section}{comment_form}",
         lang,
         user,
     )
@@ -1121,7 +1169,42 @@ def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", ms
     return _page_wrap(t(lang, "settings"), body, lang, user)
 
 
-def search_page(query: str, results: list[dict], lang: str = "zh", user: dict | None = None) -> str:
+def notifications_page(notifications: list[dict], lang: str = "zh", user: dict | None = None) -> str:
+    lp = _lang_param(lang)
+    back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
+    items = ""
+    for n in notifications:
+        av = _avatar_url(n, 20)
+        actor = escape(n.get("actor_name", ""))
+        actor_user = escape(n.get("actor_username", ""))
+        ntype = n.get("type", "")
+        text = t(lang, f"notif_{ntype}")
+        cls = "notif-item unread" if not n.get("is_read") else "notif-item"
+        post_id = n.get("post_id")
+        if ntype == "follow":
+            link = f"/blog/{actor_user}"
+        elif post_id:
+            link = f"/blog/you/{post_id}"
+        else:
+            link = "#"
+        # find the actual post author for the link
+        if post_id and ntype in ("like", "comment", "reply"):
+            link = f"/posts"  # fallback, will be overridden by server if needed
+        items += (
+            f"<a class='{cls}' href='{link}' style='text-decoration:none;display:flex'>"
+            f"<img class='avatar' src='{escape(av)}' alt=''>"
+            f"<div class='notif-text'>"
+            f"<strong>{actor}</strong> {text}"
+            f"</div>"
+            f"<div class='notif-time'>{relative_time(n.get('created_at', ''))}</div>"
+            f"</a>"
+        )
+    if not items:
+        items = f"<div style='padding:24px 0;color:var(--dim)'>{t(lang, 'no_notifications')}</div>"
+    return _page_wrap(t(lang, "notifications"), f"{back}<h2>{t(lang, 'notifications')}</h2>{items}", lang, user)
+
+
+def search_page(query: str, post_results: list[dict], user_results: list[dict] | None = None, lang: str = "zh", user: dict | None = None) -> str:
     lp = _lang_param(lang)
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     search_form = (
@@ -1130,14 +1213,31 @@ def search_page(query: str, results: list[dict], lang: str = "zh", user: dict | 
         f"<button class='btn' type='submit'>{t(lang, 'search')}</button>"
         f"</form>"
     )
-    if query and not results:
-        items = f"<div style='padding:20px 0;color:var(--dim)'>{t(lang, 'search_empty')}</div>"
-    elif results:
-        items = "".join(_post_card(p, lang, user=user) for p in results)
+    users_html = ""
+    if user_results:
+        items = []
+        for u in user_results:
+            av = _avatar_url(dict(u), 28)
+            badge = " <span class='agent-badge'>bot</span>" if u.get("role") == "agent" else ""
+            items.append(
+                f"<a class='search-user' href='/blog/{escape(u['username'])}'>"
+                f"<img class='avatar' style='width:28px;height:28px' src='{escape(av)}' alt=''>"
+                f"<div><div style='font-weight:600'>{escape(u['display_name'])}{badge}</div>"
+                f"<div style='font-size:12px;color:var(--muted)'>@{escape(u['username'])}"
+                f" · {u.get('follower_count', 0)} {t(lang, 'followers')}"
+                f" · {u.get('post_count', 0)} {t(lang, 'posts')}</div></div>"
+                f"</a>"
+            )
+        users_html = f"<div class='search-users'>{''.join(items)}</div>"
+
+    if query and not post_results and not user_results:
+        posts_html = f"<div style='padding:20px 0;color:var(--dim)'>{t(lang, 'search_empty')}</div>"
+    elif post_results:
+        posts_html = "".join(_post_card(p, lang, user=user) for p in post_results)
     else:
-        items = ""
+        posts_html = ""
     heading = f"<h2>{t(lang, 'search_results')}: {escape(query)}</h2>" if query else ""
-    return _page_wrap(t(lang, "search"), f"{back}{search_form}{heading}{items}", lang, user)
+    return _page_wrap(t(lang, "search"), f"{back}{search_form}{heading}{users_html}{posts_html}", lang, user)
 
 
 def error_page(status: int, message: str, lang: str = "zh", user: dict | None = None) -> str:

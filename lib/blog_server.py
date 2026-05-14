@@ -38,6 +38,7 @@ from lib.blog_html import (
     inbox_page,
     landing_page,
     login_page,
+    notifications_page,
     post_page,
     register_page,
     search_page,
@@ -188,6 +189,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         user = self._get_cookie_user()
 
         unread = self.server.db.get_unread_count(user["id"]) if user else 0
+        notif_count = self.server.db.get_notif_unread_count(user["id"]) if user else 0
 
         if route == "/":
             self._send_html(landing_page(lang, user))
@@ -210,6 +212,14 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if route == "/submit":
             csrf = self._make_csrf(user) if user else ""
             self._send_html(submit_page(lang, user, csrf))
+            return
+        if route == "/notifications":
+            if not user:
+                self._redirect("/login")
+                return
+            notifs = [dict(r) for r in self.server.db.get_notifications(user["id"])]
+            self.server.db.mark_notifications_read(user["id"])
+            self._send_html(notifications_page(notifs, lang, user))
             return
         if route == "/messages":
             if not user:
@@ -239,12 +249,23 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         if route == "/search":
             q = (params.get("q") or [""])[0].strip()
-            results = [dict(r) for r in self.server.db.search_posts(q)] if q else []
-            self._send_html(search_page(q, results, lang, user))
+            post_results = [dict(r) for r in self.server.db.search_posts(q)] if q else []
+            user_results = [dict(r) for r in self.server.db.search_users(q)] if q else []
+            self._send_html(search_page(q, post_results, user_results, lang, user))
             return
         if route == "/register":
             self._send_html(register_page(lang))
             return
+        m = re.match(r"^/delete-post/(\d+)$", route)
+        if m:
+            self._handle_delete_post(int(m.group(1)), user)
+            return
+
+        m = re.match(r"^/delete-comment/(\d+)$", route)
+        if m:
+            self._handle_delete_comment(int(m.group(1)), user)
+            return
+
         m = re.match(r"^/vote-comment/(\d+)$", route)
         if m:
             self._handle_vote_comment(int(m.group(1)))
@@ -477,6 +498,15 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
     # ── API GET handlers ──
 
     def _dispatch_api_get(self, route: str, params: dict) -> None:
+        if route == "/api/notifications":
+            user = self._authenticate()
+            if not user:
+                return
+            notifs = [dict(r) for r in self.server.db.get_notifications(user["id"])]
+            unread = self.server.db.get_notif_unread_count(user["id"])
+            self.server.db.mark_notifications_read(user["id"])
+            self._send_json(HTTPStatus.OK, {"notifications": notifs, "unread": unread})
+            return
         if route == "/api/feed":
             before = self._parse_int(params.get("before", [None])[0])
             page_size = min(self._parse_int(params.get("size", ["20"])[0]) or 20, 50)
@@ -650,8 +680,41 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         parent_id = self._parse_int(form.get("parent_id"))
         if body:
-            self.server.db.add_comment(post_id, user["id"], body, parent_id)
+            cid = self.server.db.add_comment(post_id, user["id"], body, parent_id)
+            self.server.db.notify(post["author_id"], "comment", user["id"], post_id, cid)
+            if parent_id:
+                parent = self.server.db.get_comment(parent_id)
+                if parent and parent["author_id"] != post["author_id"]:
+                    self.server.db.notify(parent["author_id"], "reply", user["id"], post_id, cid)
         self._redirect(f"/blog/{post['username']}/{post_id}")
+
+    def _handle_delete_post(self, post_id: int, user: dict | None) -> None:
+        if not user:
+            self._redirect("/login")
+            return
+        post = self.server.db.get_post(post_id)
+        if not post:
+            self._redirect("/posts")
+            return
+        if post["author_id"] == user["id"] or user.get("role") == "admin":
+            self.server.db.delete_post(post_id)
+        self._redirect("/posts")
+
+    def _handle_delete_comment(self, comment_id: int, user: dict | None) -> None:
+        if not user:
+            self._redirect("/login")
+            return
+        comment = self.server.db.get_comment(comment_id)
+        if not comment:
+            self._redirect("/posts")
+            return
+        if comment["author_id"] == user["id"] or user.get("role") == "admin":
+            self.server.db.delete_comment(comment_id)
+            post = self.server.db.get_post(comment["post_id"])
+            if post:
+                self._redirect(f"/blog/{post['username']}/{post['id']}")
+                return
+        self._redirect("/posts")
 
     def _handle_vote_comment(self, comment_id: int) -> None:
         user = self._get_cookie_user()
@@ -687,7 +750,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         target = self.server.db.get_user_by_username(username)
         if target:
-            self.server.db.toggle_follow(user["id"], target["id"])
+            followed = self.server.db.toggle_follow(user["id"], target["id"])
+            if followed:
+                self.server.db.notify(target["id"], "follow", user["id"])
         self._redirect(f"/blog/{username}")
 
     def _handle_form_vote(self, post_id: int, lang: str) -> None:
@@ -697,7 +762,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         post = self.server.db.get_post(post_id)
         if post:
-            self.server.db.toggle_like(post_id, user["id"])
+            liked = self.server.db.toggle_like(post_id, user["id"])
+            if liked:
+                self.server.db.notify(post["author_id"], "like", user["id"], post_id)
         referer = self.headers.get("Referer", "/posts")
         self._redirect(referer)
 
@@ -854,6 +921,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "post not found"})
             return
         liked = self.server.db.toggle_like(post_id, user["id"])
+        if liked:
+            self.server.db.notify(post["author_id"], "like", user["id"], post_id)
         count = self.server.db.get_like_count(post_id)
         self._send_json(HTTPStatus.OK, {"liked": liked, "like_count": count})
 
@@ -876,6 +945,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if parent_id is not None:
             parent_id = int(parent_id)
         comment_id = self.server.db.add_comment(post_id, user["id"], text, parent_id)
+        self.server.db.notify(post["author_id"], "comment", user["id"], post_id, comment_id)
+        if parent_id:
+            parent = self.server.db.get_comment(parent_id)
+            if parent and parent["author_id"] != post["author_id"]:
+                self.server.db.notify(parent["author_id"], "reply", user["id"], post_id, comment_id)
         self._send_json(HTTPStatus.CREATED, {"id": comment_id})
 
     def _handle_api_message(self, username: str) -> None:
