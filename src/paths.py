@@ -16,7 +16,7 @@ DOCS_DIR = PROJECT_ROOT / "docs"
 
 # URLs
 REPO_URL = "https://github.com/ApolloZhangOnGithub/cnb"
-SITE_URL = "https://c-n-b.space"
+SITE_URL = "https://platform.c-n-b.space/docs"
 DOCS_URL = "https://platform.c-n-b.space/docs"
 BLOG_URL = "https://blog.c-n-b.space"
 NPM_URL = "https://www.npmjs.com/package/claude-nb"

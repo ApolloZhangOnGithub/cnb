@@ -6,156 +6,154 @@
     <title>Download cnb</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
       *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #f9f8f5; color: #141413; font-family: 'Inter', -apple-system, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+      body { background: #f9f8f5; color: #141413; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
       a { color: inherit; text-decoration: none; }
 
-      .nav { height: 56px; display: flex; align-items: center; gap: 24px; padding: 0 24px; max-width: 1200px; margin: 0 auto; }
+      .wrap { max-width: 1200px; margin: 0 auto; padding: 0 clamp(24px, 5vw, 72px); }
+
+      .nav { height: 56px; display: flex; align-items: center; gap: 24px; }
       .nav-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
       .nav a { color: #726f65; font-size: 14px; font-weight: 500; }
       .nav a:hover { color: #141413; }
 
-      .hero { text-align: center; padding: 80px 24px 48px; max-width: 640px; margin: 0 auto; }
-      .hero h1 { font-size: 48px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 12px; }
-      .hero p { font-size: 18px; color: #726f65; margin-bottom: 32px; }
-      .hero-btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px; border-radius: 999px; background: #141413; color: #fff; font-size: 16px; font-weight: 600; transition: opacity 0.15s; }
-      .hero-btn:hover { opacity: 0.9; }
+      .hero { text-align: center; padding: 80px 0 40px; }
+      .hero h1 { font-size: clamp(56px, 8vw, 96px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; margin-bottom: 16px; }
+      .hero p { font-size: 18px; color: #726f65; line-height: 1.5; margin-bottom: 36px; }
+      .hero-btn { display: inline-flex; align-items: center; gap: 10px; padding: 16px 36px; border-radius: 999px; background: #141413; color: #f9f8f5; font-size: 16px; font-weight: 600; transition: opacity 0.15s; }
+      .hero-btn:hover { opacity: 0.88; }
 
-      .section { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
-      .section-label { font-size: 13px; font-weight: 600; color: #726f65; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 24px; }
+      .divider { border: none; border-top: 0.5px solid rgba(0,0,0,0.08); margin: 48px 0; }
 
-      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-      .card { border: 0.5px solid rgba(0,0,0,0.08); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 12px; background: #fff; }
-      .card-header { display: flex; align-items: center; gap: 10px; }
-      .card-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: #f3f2ed; border-radius: 10px; }
-      .card-title { font-size: 16px; font-weight: 600; }
-      .card-desc { font-size: 14px; color: #726f65; line-height: 1.5; flex: 1; }
-      .card-btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; background: #141413; color: #fff; margin-top: auto; align-self: flex-start; transition: opacity 0.15s; }
-      .card-btn:hover { opacity: 0.9; }
-      .card-btn-outline { background: transparent; border: 0.5px solid rgba(0,0,0,0.12); color: #141413; }
-      .card-btn-outline:hover { border-color: rgba(0,0,0,0.3); }
+      .get-started { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; align-items: start; }
+      .gs-text h2 { font-size: clamp(32px, 4vw, 48px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 12px; }
+      .gs-text p { font-size: 16px; color: #726f65; line-height: 1.5; }
 
-      .faq { max-width: 640px; margin: 0 auto; padding: 48px 24px 80px; }
-      .faq-label { font-size: 13px; font-weight: 600; color: #726f65; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 24px; }
+      .gs-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.06); border-radius: 16px; padding: 28px; }
+      .gs-card-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+      .gs-card-desc { font-size: 14px; color: #726f65; line-height: 1.5; margin-bottom: 20px; }
+      .gs-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-top: 0.5px solid rgba(0,0,0,0.06); }
+      .gs-row-name { font-size: 15px; }
+      .gs-btn { display: inline-flex; align-items: center; padding: 8px 18px; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.12); font-size: 13px; font-weight: 500; transition: border-color 0.15s; }
+      .gs-btn:hover { border-color: rgba(0,0,0,0.3); }
+
+      .go-further { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+      .gf-text h2 { font-size: clamp(32px, 4vw, 48px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 12px; }
+      .gf-text p { font-size: 16px; color: #726f65; line-height: 1.5; }
+
+      .faq-section { max-width: 720px; margin: 0 auto; padding-bottom: 80px; }
+      .faq-section h2 { font-size: clamp(32px, 4vw, 48px); font-weight: 800; letter-spacing: -0.03em; margin-bottom: 32px; }
       .faq-item { border-top: 0.5px solid rgba(0,0,0,0.08); }
       .faq-item:last-child { border-bottom: 0.5px solid rgba(0,0,0,0.08); }
-      .faq-q { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; font-size: 15px; font-weight: 500; cursor: pointer; width: 100%; background: none; border: none; font-family: inherit; color: inherit; text-align: left; }
-      .faq-q svg { flex-shrink: 0; transition: transform 0.2s; }
-      .faq-item[open] .faq-q svg { transform: rotate(180deg); }
-      .faq-a { padding: 0 0 16px; font-size: 14px; color: #726f65; line-height: 1.6; }
+      details summary { list-style: none; }
+      details summary::-webkit-details-marker { display: none; }
+      .faq-q { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; background: none; border: none; font-family: inherit; color: inherit; text-align: left; line-height: 1.4; }
+      .faq-q svg { flex-shrink: 0; margin-left: 16px; transition: transform 0.2s; }
+      details[open] .faq-q svg { transform: rotate(180deg); }
+      .faq-a { padding: 0 0 20px; font-size: 15px; color: #726f65; line-height: 1.6; }
+      .faq-a a { text-decoration: underline; }
 
-      .footer { padding: 24px; text-align: center; font-size: 12px; color: #726f65; }
+      .footer { padding: 32px 0; text-align: center; font-size: 13px; color: #726f65; }
+
+      @media (max-width: 768px) {
+        .get-started { grid-template-columns: 1fr; }
+        .go-further { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
-    <nav class="nav">
-      <a href="/" class="nav-brand">
-        <svg width="18" height="18" viewBox="11 4 43 44" fill="none">
-          <line x1="16" y1="8" x2="38" y2="8" stroke="#141413" stroke-width="2.5" stroke-linecap="round"/>
-          <line x1="38" y1="8" x2="27" y2="42" stroke="#141413" stroke-width="2.5" stroke-linecap="round"/>
-          <line x1="27" y1="42" x2="16" y2="8" stroke="#141413" stroke-width="2.5" stroke-linecap="round"/>
-          <circle cx="16" cy="8" r="5" fill="#D97757"/><circle cx="38" cy="8" r="5" fill="#D97757"/><circle cx="27" cy="42" r="5" fill="#D97757"/>
-          <circle cx="27" cy="19" r="3" fill="#141413"/>
-        </svg>
-        cnb
-      </a>
-      <a href="//blog.c-n-b.space/feed">Blog</a>
-      <a href="//platform.c-n-b.space/docs/en">Docs</a>
-      <a href="https://github.com/ApolloZhangOnGithub/cnb">GitHub</a>
-    </nav>
+    <div class="wrap">
+      <nav class="nav">
+        <a href="/" class="nav-brand">
+          <svg width="18" height="18" viewBox="11 4 43 44" fill="none">
+            <line x1="16" y1="8" x2="38" y2="8" stroke="#141413" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="38" y1="8" x2="27" y2="42" stroke="#141413" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="27" y1="42" x2="16" y2="8" stroke="#141413" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="16" cy="8" r="5" fill="#D97757"/><circle cx="38" cy="8" r="5" fill="#D97757"/><circle cx="27" cy="42" r="5" fill="#D97757"/>
+            <circle cx="27" cy="19" r="3" fill="#141413"/>
+          </svg>
+          cnb
+        </a>
+        <a href="//blog.c-n-b.space/feed">Blog</a>
+        <a href="//platform.c-n-b.space/docs/en">Docs</a>
+        <a href="https://github.com/ApolloZhangOnGithub/cnb">GitHub</a>
+      </nav>
 
-    <!-- Hero -->
-    <section class="hero">
-      <h1>Download cnb</h1>
-      <p>Monitor your AI coding team from any device.</p>
-      <a href="/download/cnb-mac.dmg" class="hero-btn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
-        Download for macOS
-      </a>
-    </section>
+      <section class="hero">
+        <h1>Download cnb</h1>
+        <p>Monitor your AI coding team from any device.</p>
+        <a href="/download/cnb-mac.dmg" class="hero-btn">Download for macOS</a>
+      </section>
 
-    <!-- Get Started -->
-    <div class="section">
-      <div class="section-label">Get started</div>
-      <div style="font-size:13px;color:#726f65;margin-bottom:8px;font-weight:500">Desktop</div>
-      <div class="cards" style="margin-bottom:24px">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></div>
-            <div class="card-title">macOS</div>
-          </div>
-          <div class="card-desc">Native SwiftUI companion app. Reads local board state, shows team status in a window and menu bar.</div>
-          <a href="/download/cnb-mac.dmg" class="card-btn">Download</a>
+      <hr class="divider">
+
+      <div class="get-started">
+        <div class="gs-text">
+          <h2>Get started</h2>
+          <p>Access cnb on desktop and mobile.</p>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <div class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
-            <div class="card-title">Command Line</div>
-          </div>
-          <div class="card-desc">The core cnb experience. Install via npm, works on macOS, Linux, and Windows with WSL.</div>
-          <a href="https://www.npmjs.com/package/claude-nb" class="card-btn card-btn-outline">npm install -g claude-nb</a>
+
+        <div class="gs-card">
+          <div class="gs-card-title">Desktop</div>
+          <div class="gs-card-desc">Native companion app. Reads board state, shows team status in a window and menu bar.</div>
+          <div class="gs-row"><span class="gs-row-name">macOS</span><a href="/download/cnb-mac.dmg" class="gs-btn">Download</a></div>
+        </div>
+
+        <div class="gs-card">
+          <div class="gs-card-title">Mobile</div>
+          <div class="gs-card-desc">Live Activity on your lock screen. Pair with the desktop app.</div>
+          <div class="gs-row"><span class="gs-row-name">iOS</span><a href="#" class="gs-btn">TestFlight</a></div>
         </div>
       </div>
 
-      <div style="font-size:13px;color:#726f65;margin-bottom:8px;font-weight:500">Mobile</div>
-      <div class="cards">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg></div>
-            <div class="card-title">iPhone</div>
-          </div>
-          <div class="card-desc">Live Activity bridge. Shows device supervisor status on your lock screen.</div>
-          <a href="#" class="card-btn card-btn-outline">Join TestFlight</a>
+      <hr class="divider">
+
+      <div class="go-further">
+        <div class="gf-text">
+          <h2>Go further</h2>
+          <p>Expand cnb to spatial computing.</p>
+        </div>
+
+        <div class="gs-card">
+          <div class="gs-card-title">Vision Pro</div>
+          <div class="gs-card-desc">Spatial team viewer. Aggregates messages from all device supervisors.</div>
+          <div class="gs-row"><span class="gs-row-name">visionOS</span><a href="#" class="gs-btn">TestFlight</a></div>
+          <div class="gs-row"><span class="gs-row-name">Command Line</span><a href="https://www.npmjs.com/package/claude-nb" class="gs-btn">npm</a></div>
         </div>
       </div>
-    </div>
 
-    <!-- Go Further -->
-    <div class="section">
-      <div class="section-label">Go further</div>
-      <div class="cards">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></div>
-            <div class="card-title">Apple Vision Pro</div>
-          </div>
-          <div class="card-desc">Spatial team monitoring. Aggregates Feishu messages from all device supervisors in a native visionOS viewer.</div>
-          <a href="#" class="card-btn card-btn-outline">Join TestFlight</a>
-        </div>
+      <hr class="divider">
+
+      <div class="faq-section">
+        <h2>FAQ</h2>
+
+        <details class="faq-item">
+          <summary class="faq-q">Do I need a paid plan to use cnb?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
+          <div class="faq-a">No. cnb is open source and free. You need a Claude Code or Codex subscription separately, but cnb itself has no cost.</div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">What's the difference between the Mac app and the CLI?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
+          <div class="faq-a">The CLI is the core tool that manages tmux sessions, the board database, and tongxue coordination. The Mac app is a companion that displays the same board state in a native UI. You need the CLI; the Mac app is optional.</div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">How does the iPhone app work?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
+          <div class="faq-a">It uses ActivityKit to show a Live Activity on your lock screen with the device supervisor's current status. You don't need a separate app if you only want Feishu notifications.</div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">Does the Vision Pro app require a Mac?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
+          <div class="faq-a">Yes. It's a read-only viewer that connects to your Feishu control chat. Your Mac needs to be running cnb with the Feishu bridge active.</div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">Where can I get help?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
+          <div class="faq-a">Open an issue on <a href="https://github.com/ApolloZhangOnGithub/cnb/issues">GitHub</a> or check the <a href="//platform.c-n-b.space/docs/en">documentation</a>.</div>
+        </details>
       </div>
+
+      <footer class="footer">cnb is open source, local-first software. MIT License.</footer>
     </div>
-
-    <!-- FAQ -->
-    <div class="faq">
-      <div class="faq-label">Frequently asked questions</div>
-
-      <details class="faq-item">
-        <summary class="faq-q">Do I need a paid plan to use cnb?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
-        <div class="faq-a">No. cnb is open source and free. You need a Claude Code or Codex subscription separately, but cnb itself has no cost.</div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-q">What's the difference between the Mac app and the CLI?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
-        <div class="faq-a">The CLI (<code>cnb</code>) is the core tool that manages tmux sessions, the board database, and tongxue coordination. The Mac app is a companion that reads the same board state and displays it in a native UI with a menu bar extra. You need the CLI; the Mac app is optional.</div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-q">How does the iPhone app work?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
-        <div class="faq-a">The iPhone app uses ActivityKit to show a Live Activity on your lock screen with the device supervisor's current status. It reads from the same state file that the Feishu bridge writes. You don't need to install a separate app if you only want Feishu notifications.</div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-q">Does the Vision Pro app require a Mac running cnb?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
-        <div class="faq-a">Yes. The Vision Pro app is a read-only viewer that connects to your Feishu control chat. Your Mac needs to be running cnb with the Feishu bridge active.</div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-q">Where can I get help?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
-        <div class="faq-a">Open an issue on <a href="https://github.com/ApolloZhangOnGithub/cnb/issues" style="text-decoration:underline">GitHub</a> or check the <a href="//platform.c-n-b.space/docs/en" style="text-decoration:underline">documentation</a>.</div>
-      </details>
-    </div>
-
-    <footer class="footer">cnb is open source, local-first software. MIT License.</footer>
   </body>
 </html>
