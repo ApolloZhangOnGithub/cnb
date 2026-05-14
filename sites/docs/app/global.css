@@ -141,6 +141,7 @@ body {
 
 /* ── code blocks: white rounded, like Anthropic ── */
 
+figure.shiki,
 figure.not-prose.shiki,
 figure.shiki.not-prose {
   border-radius: 0.5rem !important;
@@ -167,32 +168,15 @@ figure.shiki:hover div:has(> button[aria-label]) {
   opacity: 1 !important;
 }
 
-/* ── tabs: flat container, no rounded outer box ── */
+/* ── tabs: keep outer rounded box, flat divider between tabs and content ── */
 
-div[dir="ltr"]:has(> [role="tablist"]) {
+div[dir="ltr"] > [role="tablist"] {
   border-radius: 0 !important;
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  border-bottom: 0.5px solid var(--color-fd-border) !important;
 }
 
 div[dir="ltr"] > [role="tabpanel"] {
-  border-radius: 0 !important;
-  background: transparent !important;
-}
-
-/* code blocks inside tabs: consistent styling */
-[role="tabpanel"] figure.shiki {
-  border-radius: 0.375rem !important;
-  border: 0.5px solid var(--color-fd-border) !important;
-}
-
-/* all code blocks: reduce radius to match */
-figure.shiki,
-figure.not-prose.shiki,
-figure.shiki.not-prose {
-  border-radius: 0.375rem !important;
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
 }
 
 /* ── top header ── */
