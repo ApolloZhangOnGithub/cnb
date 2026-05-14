@@ -18,5 +18,5 @@ DOCS_DIR = PROJECT_ROOT / "docs"
 REPO_URL = "https://github.com/ApolloZhangOnGithub/cnb"
 SITE_URL = "https://platform.c-n-b.space/docs"
 DOCS_URL = "https://platform.c-n-b.space/docs"
-BLOG_URL = "https://blog.c-n-b.space"
+HUB_URL = "https://blog.c-n-b.space"  # domain stays blog.* for now
 NPM_URL = "https://www.npmjs.com/package/claude-nb"

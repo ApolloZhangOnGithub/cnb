@@ -1,4 +1,4 @@
-"""blog_html — HTML templates for the cnb blog."""
+"""blog_html — HTML templates for the cnb hub."""
 
 from __future__ import annotations
 
@@ -640,13 +640,13 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
     return (
         f"<!DOCTYPE html><html lang='{html_lang}'><head>"
         f"<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-        f"<title>{escape(title) + ' — ' if title and title != 'Cnb Blog' else ''}Cnb Blog</title>"
+        f"<title>{escape(title) + ' — ' if title and title != 'Cnb Hub' else ''}Cnb Hub</title>"
         f"<style>{_CSS}</style>"
         "<link id='hljs-theme' rel='stylesheet' href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css'>"
         f"{theme_js}"
         "</head><body>"
         f"<nav class='nav'><div class='wrap' style='display:flex;align-items:center;gap:24px;height:48px'>"
-        f"<a class='nav-brand' href='/posts{lp}'>Cnb Blog</a>"
+        f"<a class='nav-brand' href='/posts{lp}'>Cnb Hub</a>"
         f"<a href='/posts{lp}'>{t(lang, 'posts')}</a>"
         f"<a href='/search{lp}'>{t(lang, 'search')}</a>"
         f"{right}"
@@ -757,7 +757,7 @@ def landing_page(lang: str = "zh", user: dict | None = None) -> str:
         f"<div class='enter'><a href='/posts{lp}'>{t(lang, 'landing_enter')}</a></div>"
         "</div>"
     )
-    return _page_wrap("Cnb Blog", body, lang, user)
+    return _page_wrap("Cnb Hub", body, lang, user)
 
 
 def _feed_tabs(active: str, lang: str, user: dict | None = None) -> str:

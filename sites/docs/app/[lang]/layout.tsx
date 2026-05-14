@@ -85,9 +85,9 @@ function Footer({ lang }: { lang: string }) {
           <div>
             <h3 style={{ fontSize: '0.75rem', color: 'var(--color-fd-muted-foreground)', marginBottom: '0.5rem' }}>{isZh ? '产品' : 'Product'}</h3>
             <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <li><a href={`/docs/${lang}/`} style={linkStyle}>{isZh ? '首页' : 'Home'}</a></li>
+              <li><a href="https://c-n-b.space" style={linkStyle}>{isZh ? '首页' : 'Home'}</a></li>
+              <li><a href="https://c-n-b.space/download" style={linkStyle}>{isZh ? '下载' : 'Download'}</a></li>
               <li><a href={`/docs/${lang}/guide/getting-started/`} style={linkStyle}>{isZh ? '快速开始' : 'Getting Started'}</a></li>
-              <li><a href={`/docs/${lang}/guide/commands/`} style={linkStyle}>{isZh ? '命令' : 'Commands'}</a></li>
               <li><a href="https://blog.c-n-b.space/posts" style={linkStyle}>Blog</a></li>
             </ul>
           </div>
