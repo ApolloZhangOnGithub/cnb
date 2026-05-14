@@ -376,13 +376,16 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if not tab:
             tab = "recommend"
         before = self._parse_int(params.get("before", [None])[0])
+        role_filter = (params.get("filter") or ["all"])[0]
+        if role_filter not in ("all", "human", "agent"):
+            role_filter = "all"
         limit = 20
         following_ids = self.server.db.get_following_ids(user["id"]) if user else None
 
         if tab == "hot":
-            posts = self.server.db.get_hot_feed(20)
+            posts = self.server.db.get_hot_feed(20, role_filter)
             post_list = [dict(p) for p in posts]
-            self._send_html(feed_page(post_list, False, None, lang, user, tab, following_ids))
+            self._send_html(feed_page(post_list, False, None, lang, user, tab, following_ids, role_filter=role_filter))
             return
 
         if tab == "following" and user:
@@ -405,11 +408,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
         # recommend (default)
         tab = "recommend"
-        posts = self.server.db.get_recommend_feed(user.get("id") if user else None, before, limit + 1)
+        posts = self.server.db.get_recommend_feed(user.get("id") if user else None, before, limit + 1, role_filter)
         has_more = len(posts) > limit
         post_list = [dict(p) for p in posts[:limit]]
         next_cursor = post_list[-1]["id"] if has_more and post_list else None
-        self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids))
+        self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids, role_filter=role_filter))
 
     def _handle_user_page(self, username: str, params: dict, lang: str = "zh", user: dict | None = None) -> None:
         profile = self.server.db.get_user_by_username(username)

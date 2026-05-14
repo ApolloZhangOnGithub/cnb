@@ -58,6 +58,9 @@ _STRINGS = {
         "tab_following": "关注",
         "tab_hot": "热门",
         "tab_all": "全部",
+        "filter_all": "全部",
+        "filter_human": "仅真人",
+        "filter_agent": "仅同学",
         "follow": "关注",
         "unfollow": "已关注",
         "followers": "关注者",
@@ -133,6 +136,9 @@ _STRINGS = {
         "tab_following": "Following",
         "tab_hot": "Hot",
         "tab_all": "All",
+        "filter_all": "All",
+        "filter_human": "Humans only",
+        "filter_agent": "Bots only",
         "follow": "Follow",
         "unfollow": "Following",
         "followers": "followers",
@@ -455,6 +461,10 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .tab { padding: 10px 16px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; }
 .tab:hover { color: var(--fg); text-decoration: none; }
 .tab.active { color: var(--fg); border-bottom-color: var(--fg); }
+.filter-bar { display: flex; gap: 8px; padding: 8px 0; }
+.filter-chip { font-size: 12px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); }
+.filter-chip:hover { border-color: var(--muted); color: var(--fg); text-decoration: none; }
+.filter-chip.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 
 .fu-bar { display: flex; gap: 16px; padding: 16px 0; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .fu-bar::-webkit-scrollbar { display: none; }
@@ -717,13 +727,30 @@ def _following_bar(followed_users: list[dict], active_user: str | None, lang: st
     return f"<div class='fu-bar'>{''.join(items)}</div>"
 
 
+def _filter_bar(active: str, lang: str, tab: str) -> str:
+    lp = _lang_param(lang)
+    sep = "&" if lp else "?"
+    tab_param = f"{sep}tab={tab}" if tab != "recommend" else ""
+    base = f"/posts{lp}{tab_param}"
+    fsep = "&" if ("?" in base) else "?"
+    filters = [("all", t(lang, "filter_all")), ("human", t(lang, "filter_human")), ("agent", t(lang, "filter_agent"))]
+    parts = []
+    for key, label in filters:
+        cls = "filter-chip active" if key == active else "filter-chip"
+        href = base if key == "all" else f"{base}{fsep}filter={key}"
+        parts.append(f"<a class='{cls}' href='{href}'>{label}</a>")
+    return f"<div class='filter-bar'>{''.join(parts)}</div>"
+
+
 def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh",
               user: dict | None = None, tab: str = "recommend", following_ids: set | None = None,
-              followed_users: list[dict] | None = None, active_follow_user: str | None = None) -> str:
+              followed_users: list[dict] | None = None, active_follow_user: str | None = None,
+              role_filter: str = "all") -> str:
     tabs_html = _feed_tabs(tab, lang, user)
     fu_bar = ""
     if tab == "following" and followed_users is not None:
         fu_bar = _following_bar(followed_users, active_follow_user, lang)
+    filter_html = _filter_bar(role_filter, lang, tab) if tab in ("recommend", "hot") else ""
 
     if not posts and tab == "following" and user:
         items = f"<div class='post' style='color:var(--dim)'>{t(lang, 'feed_empty')}</div>"
@@ -739,7 +766,7 @@ def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: 
         tab_param = f"&tab={tab}" if tab != "feed" else ""
         pagination = f"<div class='pagination'><a href='/posts{lp}{sep}before={next_cursor}{tab_param}'>{t(lang, 'older')}</a></div>"
 
-    return _page_wrap(t(lang, "posts"), f"{tabs_html}{fu_bar}{items}{pagination}", lang, user)
+    return _page_wrap(t(lang, "posts"), f"{tabs_html}{fu_bar}{filter_html}{items}{pagination}", lang, user)
 
 
 def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor: int | None,

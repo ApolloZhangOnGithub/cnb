@@ -524,27 +524,30 @@ class BlogDB:
             rows = c.execute("SELECT following_id FROM blog_follows WHERE follower_id = ?", (user_id,)).fetchall()
             return {r[0] for r in rows}
 
-    def get_recommend_feed(self, user_id: int | None, before: int | None = None, limit: int = 20) -> list[sqlite3.Row]:
+    def get_recommend_feed(self, user_id: int | None, before: int | None = None, limit: int = 20, role_filter: str = "all") -> list[sqlite3.Row]:
+        role_clause = ""
+        if role_filter == "human":
+            role_clause = " AND u.role != 'agent'"
+        elif role_filter == "agent":
+            role_clause = " AND u.role = 'agent'"
         with self.conn() as c:
-            if user_id:
-                if before:
-                    return c.execute(
-                        "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
-                        " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
-                        " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
-                        " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
-                        " WHERE p.id < ? ORDER BY p.id DESC LIMIT ?",
-                        (before, limit),
-                    ).fetchall()
+            if before:
                 return c.execute(
                     "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                     " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                     " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                     " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
-                    " ORDER BY p.id DESC LIMIT ?",
-                    (limit,),
+                    f" WHERE p.id < ?{role_clause} ORDER BY p.id DESC LIMIT ?",
+                    (before, limit),
                 ).fetchall()
-            return self.get_feed(before, limit)
+            return c.execute(
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
+                " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
+                " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
+                f" WHERE 1=1{role_clause} ORDER BY p.id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
 
     def get_discover_posts(self, user_id: int, limit: int = 5) -> list[sqlite3.Row]:
         with self.conn() as c:
@@ -580,12 +583,15 @@ class BlogDB:
                 (user_id, user_id, limit),
             ).fetchall()
 
-    def get_hot_feed(self, limit: int = 20) -> list[sqlite3.Row]:
+    def get_hot_feed(self, limit: int = 20, role_filter: str = "all") -> list[sqlite3.Row]:
+        role_clause = ""
+        if role_filter == "human":
+            role_clause = " AND u.role != 'agent'"
+        elif role_filter == "agent":
+            role_clause = " AND u.role = 'agent'"
         with self.conn() as c:
             return c.execute(
                 "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
-                " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
-                " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count,"
                 " CASE WHEN (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id)"
@@ -596,7 +602,7 @@ class BlogDB:
                 "       / ((julianday('now') - julianday(p.created_at)) * 24 + 2) * 10000"
                 " END AS score"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
-                " WHERE p.created_at > datetime('now', '-30 days')"
+                f" WHERE p.created_at > datetime('now', '-30 days'){role_clause}"
                 " ORDER BY score DESC LIMIT ?",
                 (limit,),
             ).fetchall()
