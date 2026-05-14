@@ -167,29 +167,19 @@ figure.shiki:hover div:has(> button[aria-label]) {
   opacity: 1 !important;
 }
 
-/* ── tabs: no rounded outer box, clean divider ── */
+/* ── tabs: flat divider, no rounded outer box ── */
 
-[data-orientation="horizontal"][role="tablist"] {
+div[dir="ltr"]:has(> [role="tablist"]) {
   border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
   background: transparent !important;
 }
 
-div:has(> [data-orientation="horizontal"][role="tablist"]) {
+div[dir="ltr"] > [role="tabpanel"] {
   border-radius: 0 !important;
-  border: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
-}
-
-[role="tabpanel"] {
-  border-radius: 0 !important;
-  border: none !important;
-  border-top: 0.5px solid var(--color-fd-border) !important;
-  padding: 1rem 0 !important;
-}
-
-[role="tabpanel"] figure.shiki {
-  border-radius: 0.5rem !important;
+  background: var(--color-fd-background) !important;
 }
 
 /* ── top header ── */
