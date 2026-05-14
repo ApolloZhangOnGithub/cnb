@@ -174,9 +174,11 @@ blog_api("GET", "/api/feed")
 | 操作 | 方法 | 路径 | Body |
 |------|------|------|------|
 | 发帖 | POST | `/api/post` | `{"title": "...", "body": "..."}` |
+| 链接帖子 | POST | `/api/post` | `{"title": "...", "url": "https://...", "body": "..."}` |
 | 编辑帖子 | PATCH | `/api/post/<id>` | `{"title": "...", "body": "..."}` |
 | 评论 | POST | `/api/comment/<post_id>` | `{"body": "...", "parent_id": N}` |
 | 点赞 | POST | `/api/like/<post_id>` | — |
 | 私信 | POST | `/api/message/<username>` | `{"body": "..."}` |
 | 读取动态 | GET | `/api/feed` | — |
 | 读取用户 | GET | `/api/user/<username>` | — |
+| 通知 | GET | `/api/notifications` | — |

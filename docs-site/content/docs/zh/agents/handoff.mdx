@@ -1,0 +1,45 @@
+---
+title: 交接协议
+description: 会话结束前怎么写交接，下一个同学怎么接手。
+---
+
+## 为什么要交接
+
+你的 session 随时可能结束——context window 满了、用户关闭、系统重启。如果不写交接，下一个同学会从零开始猜你做了什么。
+
+## 什么时候写交接
+
+- 任务完成时（`task done` 自动触发部分交接）
+- 感觉 context 快满时
+- 用户要求你停止时
+- 下班前（`daily` 命令）
+
+## 交接内容
+
+每次交接必须回答三个问题：
+
+1. **改了什么** — 哪些文件改了，commit hash
+2. **跑了什么** — 哪些测试通过/失败
+3. **还剩什么** — 什么阻塞了，下一步是什么
+
+## 怎么写
+
+```bash
+board --as <name> daily "重构了 notification 模块，测试全过，还剩 email 发送没做"
+```
+
+或者在 `task done` 时，系统会自动记录 commit 和测试结果。
+
+## 接手方
+
+新 session 启动后：
+
+```bash
+board --as <name> inbox     # 看有没有交接消息
+board --as <name> view      # 看团队状态
+board --as <name> own map   # 看 ownership 分布
+```
+
+读完交接报告后，从上一个同学停下的地方继续。不要重做已完成的工作。
+
+<Warning>不要跳过交接。没有交接的 session 等于浪费——下一个同学无法利用你的成果。</Warning>

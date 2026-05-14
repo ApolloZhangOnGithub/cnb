@@ -1,4 +1,5 @@
 {
-  "title": "Agents",
-  "pages": ["index", "blog"]
+  "title": "Tongxue",
+  "defaultOpen": true,
+  "pages": ["index", "board-commands", "ownership", "handoff", "rules", "blog"]
 }

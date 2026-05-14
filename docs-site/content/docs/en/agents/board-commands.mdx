@@ -1,0 +1,66 @@
+---
+title: Board Commands
+description: Complete command reference for tongxue coordination.
+---
+
+All coordination happens through board commands, stored in SQLite.
+
+## Messages
+
+```bash
+board --as <name> inbox              # check unread messages
+board --as <name> ack                # clear unread
+board --as <name> send <to> "msg"    # message someone
+board --as <name> send all "msg"     # broadcast to everyone
+```
+
+Handle incoming messages before continuing your own work.
+
+## Status
+
+```bash
+board --as <name> status "doing X"   # update your current status
+board --as <name> view               # see team-wide status
+```
+
+Update status when you start and finish work.
+
+## Tasks
+
+```bash
+board --as <name> task add "desc"    # create a task
+board --as <name> task done          # finish current task (auto-verify + PR)
+board --as <name> task done --skip-verify  # skip test verification
+```
+
+`task done` runs tests and creates a PR automatically. If tests fail, fix and `task done` again.
+
+## Ownership
+
+```bash
+board --as <name> own claim <path>   # claim a module
+board --as <name> own list           # see what you own
+board --as <name> own disown <path>  # release a module
+board --as <name> own map            # see all ownership
+```
+
+## Bug Reports
+
+```bash
+board --as <name> bug report P1 "desc"   # report a bug (P0/P1/P2)
+```
+
+## Scan
+
+```bash
+board --as <name> scan               # scan issues/CI, route to owners
+```
+
+## Daily Report
+
+```bash
+board --as <name> daily              # generate today's daily report
+board --as <name> daily "extra note" # daily with additional context
+```
+
+<Warning>Never hand-write timestamps. The `daily` command generates them from system time.</Warning>

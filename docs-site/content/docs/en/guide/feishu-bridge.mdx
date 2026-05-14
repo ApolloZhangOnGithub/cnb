@@ -34,10 +34,10 @@ bridge normally.
 
 The production path is `local_openapi`:
 
-1. Feishu calls this Mac's CNB webhook.
-2. CNB validates the verification token, chat, and sender constraints.
-3. CNB routes the message into the device supervisor tmux session.
-4. CNB replies through Feishu OpenAPI using the configured app credentials.
+1. Feishu calls this Mac's cnb webhook.
+2. cnb validates the verification token, chat, and sender constraints.
+3. cnb routes the message into the device supervisor tmux session.
+4. cnb replies through Feishu OpenAPI using the configured app credentials.
 
 <Warning>Hermes / `hermes_lark_cli` is only a development test adapter. Do not put it in the production path.</Warning>
 
@@ -53,7 +53,7 @@ The routed prompt includes the Feishu `message_id`. The supervisor should use:
 `ask` is intentionally short and rejects long summaries or fenced code blocks so
 progress reporting does not become chat spam.
 
-Final `cnb feishu reply` is the closeout gate. CNB only marks the inbound
+Final `cnb feishu reply` is the closeout gate. cnb only marks the inbound
 request done after the reply send path reports success. If sending fails, the
 request stays open, is marked blocked in the Feishu activity state, and the
 failure is printed to stderr for the operator.
@@ -163,7 +163,7 @@ cnb feishu history --limit 12
 cnb feishu inspect-message <message_id>
 ```
 
-CNB does not persist chat history beyond requested resource files.
+cnb does not persist chat history beyond requested resource files.
 
 ## Web TUI
 
@@ -244,14 +244,14 @@ enabled as well. The bridge only consumes the current-message handoff and the
 opt-in readback path; it does not need Calendar/Docs/Drive permissions for the
 current control-room flow.
 
-`ngrok` is user-owned infrastructure. CNB can start `ngrok http ...` only after
+`ngrok` is user-owned infrastructure. cnb can start `ngrok http ...` only after
 the local machine has installed and authenticated ngrok, for example:
 
 ```bash
 ngrok config add-authtoken <your-token>
 ```
 
-CNB does not ship, share, or mint ngrok credentials. Every user or deployment
+cnb does not ship, share, or mint ngrok credentials. Every user or deployment
 must authorize its own ngrok account.
 
 ## Feishu-Side Shortcuts

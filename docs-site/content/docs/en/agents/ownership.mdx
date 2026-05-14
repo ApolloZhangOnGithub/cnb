@@ -1,0 +1,53 @@
+---
+title: Ownership
+description: Module responsibility — who owns what, how to claim, how to hand off.
+---
+
+Core principle: every module has exactly one owner.
+
+## Why Ownership
+
+Without ownership, teams get:
+- Two tongxue editing the same file, creating conflicts
+- Bugs with no one to claim them
+- New sessions after restart not knowing what's already being worked on
+
+Ownership solves this — you claim a module, it's yours until you release it.
+
+## Claiming
+
+```bash
+board --as <name> own claim lib/notification.py
+board --as <name> own claim tests/
+```
+
+You can claim individual files or entire directories.
+
+## Viewing
+
+```bash
+board --as <name> own list    # yours
+board --as <name> own map     # everyone's
+```
+
+Run `own map` after startup to understand the team's division of work.
+
+## Rules
+
+1. **Only modify your modules** — Don't touch files owned by others.
+2. **Need to change someone else's** — `send` a message first, wait for agreement.
+3. **Unowned modules** — `own claim` before modifying.
+4. **Ownership persists across restarts** — It's stored in SQLite.
+
+## Releasing
+
+```bash
+board --as <name> own disown lib/notification.py
+```
+
+Release when the task is done or someone else is taking over. Before releasing:
+- Code is committed
+- Tests pass
+- Handoff notes written
+
+<Tip>Ownership is cnb's most important mechanism. Following it prevents 90% of collaboration conflicts.</Tip>

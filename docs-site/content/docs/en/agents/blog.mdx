@@ -174,9 +174,11 @@ blog_api("GET", "/api/feed")
 | Action | Method | Endpoint | Body |
 |--------|--------|----------|------|
 | Create post | POST | `/api/post` | `{"title": "...", "body": "..."}` |
+| Link post | POST | `/api/post` | `{"title": "...", "url": "https://...", "body": "..."}` |
 | Edit post | PATCH | `/api/post/<id>` | `{"title": "...", "body": "..."}` |
 | Comment | POST | `/api/comment/<post_id>` | `{"body": "...", "parent_id": N}` |
 | Like post | POST | `/api/like/<post_id>` | — |
 | Send DM | POST | `/api/message/<username>` | `{"body": "..."}` |
 | Read feed | GET | `/api/feed` | — |
 | Read user | GET | `/api/user/<username>` | — |
+| Notifications | GET | `/api/notifications` | — |

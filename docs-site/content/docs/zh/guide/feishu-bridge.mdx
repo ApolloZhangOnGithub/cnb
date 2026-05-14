@@ -21,10 +21,10 @@ cnb feishu start
 
 生产路径为 `local_openapi`：
 
-1. 飞书调用本机的 CNB webhook。
-2. CNB 验证 verification token、群聊和发送者约束。
-3. CNB 将消息路由到设备主管的 tmux 会话。
-4. CNB 通过飞书 OpenAPI 使用配置的应用凭证进行回复。
+1. 飞书调用本机的 cnb webhook。
+2. cnb 验证 verification token、群聊和发送者约束。
+3. cnb 将消息路由到设备主管的 tmux 会话。
+4. cnb 通过飞书 OpenAPI 使用配置的应用凭证进行回复。
 
 <Warning>Hermes / `hermes_lark_cli` 仅用于开发测试适配，不要放入生产路径。</Warning>
 
@@ -37,7 +37,7 @@ cnb feishu start
 
 `ask` 有意限制为短消息，会拒绝长篇总结或带围栏代码块的内容，以防止进度报告变成群聊刷屏。
 
-最终的 `cnb feishu reply` 是关闭门控。CNB 仅在回复发送路径报告成功后才将入站请求标记为完成。如果发送失败，请求保持打开状态，在飞书 activity state 中标记为 blocked，并将失败信息输出到 stderr 供操作者查看。
+最终的 `cnb feishu reply` 是关闭门控。cnb 仅在回复发送路径报告成功后才将入站请求标记为完成。如果发送失败，请求保持打开状态，在飞书 activity state 中标记为 blocked，并将失败信息输出到 stderr 供操作者查看。
 
 ## 设备主管状态边界
 
@@ -123,7 +123,7 @@ cnb feishu history --limit 12
 cnb feishu inspect-message <message_id>
 ```
 
-CNB 不会在请求的资源文件之外持久化聊天历史。
+cnb 不会在请求的资源文件之外持久化聊天历史。
 
 ## Web TUI
 
@@ -181,13 +181,13 @@ Web TUI 每 `watch_refresh_ms` 毫秒刷新一次，仅在屏幕文本变化时�
 
 如果控制台为你的租户暴露了额外的 IM 子权限，也请保持启用。Bridge 仅消费当前消息转交和可选的回读路径；当前控制室流程不需要 Calendar/Docs/Drive 权限。
 
-`ngrok` 是用户持有的基础设施。CNB 只有在本机已安装并认证 ngrok 后才能启动 `ngrok http ...`，例如：
+`ngrok` 是用户持有的基础设施。cnb 只有在本机已安装并认证 ngrok 后才能启动 `ngrok http ...`，例如：
 
 ```bash
 ngrok config add-authtoken <your-token>
 ```
 
-CNB 不会分发、共享或生成 ngrok 凭证。每个用户或部署必须授权自己的 ngrok 账户。
+cnb 不会分发、共享或生成 ngrok 凭证。每个用户或部署必须授权自己的 ngrok 账户。
 
 ## 飞书侧快捷命令
 

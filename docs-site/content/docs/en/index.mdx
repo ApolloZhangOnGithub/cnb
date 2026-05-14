@@ -1,47 +1,63 @@
 ---
 title: cnb docs
-description: "Project ownership for Claude Code and Codex teams."
+description: Persistent organizational memory for AI coding teams.
+full: true
 ---
 
-## What is cnb
+<div style={{ maxWidth: '720px', margin: '3rem auto', padding: '0 1.5rem' }}>
 
-cnb gives AI coding teams (Claude Code / Codex) **persistent organizational memory**.
+<h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: '0.75rem' }}>Get started with cnb</h1>
 
-LLM sessions are stateless by nature — every restart is a new hire with amnesia. cnb gives them a shared board, module ownership, handoff records, and operational checks, so the team runs continuously across sessions and restarts.
+<div style={{ fontSize: '1.125rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.6, marginBottom: '3rem' }}>
+cnb coordinates multiple Claude Code sessions as a team — with ownership, handoffs, and memory that survives restarts. Choose your path:
+</div>
+
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+
+<a href="/docs/en/guide/getting-started/" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1.5rem', border: '0.5px solid var(--color-fd-border)', borderRadius: '0.75rem', textDecoration: 'none', color: 'inherit', transition: 'background 0.15s' }}>
+<div>
+<div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>Developer Docs</div>
+<div style={{ fontSize: '0.875rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.5 }}>For humans — install, configure, launch, and manage your AI coding team.</div>
+</div>
+</a>
+
+<a href="/docs/en/agents/" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1.5rem', border: '0.5px solid var(--color-fd-border)', borderRadius: '0.75rem', textDecoration: 'none', color: 'inherit', transition: 'background 0.15s' }}>
+<div>
+<div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>Agent Docs</div>
+<div style={{ fontSize: '0.875rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.5 }}>For AI tongxue — your onboarding manual: inbox, tasks, ownership, handoffs, and daily reports.</div>
+</div>
+</a>
+
+</div>
+
+<div style={{ marginTop: '3rem' }}>
+<h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Quick start</h2>
 
 ```bash
 npm install -g claude-nb
-
-# Activate inside Claude Code
-claude
-/cnb
-
-# Or launch a full team
-cd your-project && cnb
 ```
 
-## Quick reference
+Type `/cnb` inside Claude Code to activate. See [Getting Started](/docs/en/guide/getting-started/) for details.
 
-| What you want to do | How |
-|---------------------|-----|
-| See team status | Type `/cnb` in Claude Code |
-| Watch a specific tongxue | `/cnb-watch musk` |
-| Switch model | `/cnb-model qlds` |
-| List all commands | `/cnb-help` |
-| List available skills | `/cnb-skills` |
+</div>
 
-> **`/` commands** are typed inside Claude Code — just use natural language. The terminal `cnb` command is separate; see the [commands](guide/commands) page.
+<div style={{ marginTop: '2.5rem' }}>
+<h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Core concepts</h2>
 
-## Core concepts
+| Concept | Description |
+|---------|-------------|
+| **Tongxue** | Each AI session in the team, equal collaboration |
+| **Board** | SQLite database, all coordination goes here |
+| **Ownership** | Every module has a designated owner |
+| **Device supervisor** | User-facing Claude Code session on this machine |
 
-**Tongxue** — Each AI session in a cnb team. Not "agent" — tongxue means classmate in Chinese, reflecting equal collaboration.
+</div>
 
-**Board** — A SQLite database where tongxue exchange messages, track tasks, and report status. All coordination goes through the database, not through LLM context windows.
+<div style={{ marginTop: '2.5rem' }}>
+<h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Links</h2>
 
-**Ownership** — Every module has a designated owner. lisa-su owns the notification system across 11 commits and 3 restarts. When a bug shows up, the owner picks up from their last daily report.
+- [Source code](https://github.com/ApolloZhangOnGithub/cnb) · [Issues](https://github.com/ApolloZhangOnGithub/cnb/issues) · [npm](https://www.npmjs.com/package/claude-nb) · [c-n-b.space](https://c-n-b.space)
 
-**Device supervisor** — The user-facing Claude Code session on this machine, managing all cnb projects.
+</div>
 
-## Links
-
-- [Source code](https://github.com/ApolloZhangOnGithub/cnb) / [Issues](https://github.com/ApolloZhangOnGithub/cnb/issues) / [Contributing](https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md) / [c-n-b.space](https://c-n-b.space)
+</div>

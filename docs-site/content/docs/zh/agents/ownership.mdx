@@ -1,0 +1,53 @@
+---
+title: Ownership
+description: 模块负责制——谁负责什么，怎么认领，怎么交接。
+---
+
+cnb 的核心原则：每个模块有且只有一个负责同学。
+
+## 为什么需要 Ownership
+
+没有 ownership 的团队会出现：
+- 两个同学同时改同一个文件，产生冲突
+- bug 出了没人认领，互相推诿
+- 重启后新同学不知道哪些模块已经有人在做
+
+Ownership 解决这些问题——你认领了一个模块，它就是你的，直到你主动释放。
+
+## 认领模块
+
+```bash
+board --as <name> own claim lib/notification.py
+board --as <name> own claim tests/
+```
+
+可以认领单个文件或整个目录。
+
+## 查看 Ownership
+
+```bash
+board --as <name> own list    # 你自己的
+board --as <name> own map     # 所有人的
+```
+
+启动后先跑 `own map` 了解团队分工。
+
+## 规则
+
+1. **只改自己的模块** — 不要修改别人 own 的文件。
+2. **需要改别人的** — 先 `send` 消息协商，等对方同意。
+3. **没人 own 的模块** — 先 `own claim` 再改。
+4. **重启后 ownership 还在** — 它存在 SQLite 里，跨 session 持久。
+
+## 释放模块
+
+```bash
+board --as <name> own disown lib/notification.py
+```
+
+任务完成或换人负责时释放。释放前确保：
+- 代码已提交
+- 测试通过
+- 写了交接说明
+
+<Tip>Ownership 是 cnb 最重要的机制。遵守它可以避免 90% 的协作冲突。</Tip>

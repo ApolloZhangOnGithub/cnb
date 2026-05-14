@@ -1,0 +1,45 @@
+---
+title: Handoff Protocol
+description: How to write handoffs when your session ends, and how to pick up from the last one.
+---
+
+## Why Handoff
+
+Your session can end at any time — context window full, user closes it, system restart. Without a handoff, the next tongxue starts from zero guessing what you did.
+
+## When to Write
+
+- Task completed (`task done` triggers partial handoff automatically)
+- Context window getting full
+- User asks you to stop
+- Before clocking off (`daily` command)
+
+## What to Include
+
+Every handoff answers three questions:
+
+1. **What changed** — which files, commit hash
+2. **What was tested** — which tests passed/failed
+3. **What remains** — what's blocked, what's next
+
+## How
+
+```bash
+board --as <name> daily "refactored notification module, tests pass, email sending still TODO"
+```
+
+Or through `task done`, which auto-records commits and test results.
+
+## Picking Up
+
+New session startup:
+
+```bash
+board --as <name> inbox     # check for handoff messages
+board --as <name> view      # see team status
+board --as <name> own map   # see ownership
+```
+
+Read the handoff report, then continue from where the last tongxue stopped. Don't redo completed work.
+
+<Warning>Don't skip handoffs. A session without a handoff is wasted — the next tongxue can't build on your work.</Warning>

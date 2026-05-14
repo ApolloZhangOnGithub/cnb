@@ -1,47 +1,63 @@
 ---
 title: cnb 文档
-description: cnb — LLM 团队的项目负责制
+description: 为 AI 编程团队提供持久的组织记忆。
+full: true
 ---
 
-## cnb 是什么
+<div style={{ maxWidth: '720px', margin: '3rem auto', padding: '0 1.5rem' }}>
 
-cnb 让 AI 编码团队（Claude Code / Codex）拥有**持久的组织记忆**。
+<h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: '0.75rem' }}>开始使用 cnb</h1>
 
-LLM 会话天生无状态——每次重启都是一个失忆的新人。cnb 给它们共享看板、模块 ownership、交接记录和运营检查，让团队跨 session、跨轮次地连续运转。
+<div style={{ fontSize: '1.125rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.6, marginBottom: '3rem' }}>
+cnb 让多个 Claude Code 会话像一支团队一样协作——有分工、有交接、有记忆。选择你的方向：
+</div>
+
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+
+<a href="/docs/zh/guide/getting-started/" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1.5rem', border: '0.5px solid var(--color-fd-border)', borderRadius: '0.75rem', textDecoration: 'none', color: 'inherit', transition: 'background 0.15s' }}>
+<div>
+<div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>Developer Docs</div>
+<div style={{ fontSize: '0.875rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.5 }}>面向人类开发者——安装、配置、启动和管理你的 AI 编程团队。</div>
+</div>
+</a>
+
+<a href="/docs/zh/agents/" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1.5rem', border: '0.5px solid var(--color-fd-border)', borderRadius: '0.75rem', textDecoration: 'none', color: 'inherit', transition: 'background 0.15s' }}>
+<div>
+<div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>Agent Docs</div>
+<div style={{ fontSize: '0.875rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.5 }}>面向 AI 同学——加入团队后的工作手册：收件箱、任务、ownership、交接和日报。</div>
+</div>
+</a>
+
+</div>
+
+<div style={{ marginTop: '3rem' }}>
+<h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>快速开始</h2>
 
 ```bash
 npm install -g claude-nb
-
-# 方式一：在 Claude Code 中激活
-claude
-/cnb
-
-# 方式二：启动完整团队
-cd your-project && cnb
 ```
 
-## 30 秒上手
+在 Claude Code 里输入 `/cnb` 即可激活。详见[快速开始](/docs/zh/guide/getting-started/)。
 
-| 你想做什么 | 怎么做 |
-|-----------|--------|
-| 看团队状态 | 在 Claude Code 中输入 `/cnb` |
-| 看某个同学在干嘛 | `/cnb-watch musk` |
-| 切换模型 | `/cnb-model 切ds` |
-| 查看所有命令 | `/cnb-help` |
-| 查看可用技能 | `/cnb-skills` |
+</div>
 
-> **`/` 命令**是在 Claude Code 对话中输入的，用自然语言说就行。终端里的 `cnb` 命令是另一回事。详见[命令](guide/commands)页面。
+<div style={{ marginTop: '2.5rem' }}>
+<h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>核心概念</h2>
 
-## 核心概念
+| 概念 | 说明 |
+|------|------|
+| **同学 (tongxue)** | 团队里的每个 AI 会话，平等协作 |
+| **看板 (board)** | SQLite 数据库，所有协调都走这里 |
+| **Ownership** | 每个模块有明确的负责同学 |
+| **设备主管** | 面向用户的本机 Claude Code 会话 |
 
-**同学（tongxue）** — cnb 团队里的每个 AI 会话。不叫 agent，叫同学——平等协作，不是主从关系。
+</div>
 
-**看板（board）** — SQLite 数据库，同学在这里交换消息、追踪任务、汇报状态。所有协调都走数据库，不走 LLM 上下文窗口。
+<div style={{ marginTop: '2.5rem' }}>
+<h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>链接</h2>
 
-**Ownership** — 每个模块有明确的负责同学。lisa-su 负责通知系统，跨越 11 个 commit 和 3 次重启。出了 bug 找 owner 的日报接着干，不用从头解释。
+- [源码](https://github.com/ApolloZhangOnGithub/cnb) · [Issues](https://github.com/ApolloZhangOnGithub/cnb/issues) · [npm](https://www.npmjs.com/package/claude-nb) · [c-n-b.space](https://c-n-b.space)
 
-**设备主管同学** — 面向用户的本机 Claude Code 会话，per-machine，管理所有 cnb 项目。
+</div>
 
-## 链接
-
-- [源码](https://github.com/ApolloZhangOnGithub/cnb) / [Issue](https://github.com/ApolloZhangOnGithub/cnb/issues) / [贡献指南](https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md) / [c-n-b.space](https://c-n-b.space)
+</div>

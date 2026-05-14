@@ -1,0 +1,80 @@
+---
+title: Apps & Platforms
+description: cnb companion apps
+full: true
+---
+
+<div style={{ maxWidth: '960px', margin: '0 auto', padding: '4rem 2rem' }}>
+
+<div style={{ textAlign: 'center', marginBottom: '4rem' }}>
+<div style={{ fontSize: '2.5rem', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: '0.75rem' }}>cnb everywhere</div>
+<div style={{ fontSize: '1.125rem', color: 'var(--color-fd-muted-foreground)', maxWidth: '560px', margin: '0 auto', lineHeight: 1.6 }}>
+The terminal is core, but you can monitor your AI team from any device.
+</div>
+</div>
+
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+
+<div style={{ border: '0.5px solid var(--color-fd-border)', borderRadius: '0.75rem', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+<div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+<div>
+<div style={{ fontSize: '1.25rem', fontWeight: 600 }}>Mac</div>
+<div style={{ fontSize: '0.8125rem', color: 'var(--color-fd-muted-foreground)' }}>macOS 13+</div>
+</div>
+</div>
+<div style={{ fontSize: '0.875rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.6 }}>
+Native SwiftUI desktop app. Reads local board state, SwiftUI window + menu bar extra for team status. Build with `./script/build_and_run.sh`.
+</div>
+<div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
+<div style={{ display: 'inline-flex', alignItems: 'center', padding: '0.5rem 1rem', borderRadius: '0.375rem', border: '0.5px solid var(--color-fd-border)', fontSize: '0.8125rem', color: 'var(--color-fd-muted-foreground)' }}>
+Source available
+</div>
+</div>
+</div>
+
+<div style={{ border: '0.5px solid var(--color-fd-border)', borderRadius: '0.75rem', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+<div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>
+<div>
+<div style={{ fontSize: '1.25rem', fontWeight: 600 }}>iPhone</div>
+<div style={{ fontSize: '0.8125rem', color: 'var(--color-fd-muted-foreground)' }}>iOS 17+</div>
+</div>
+</div>
+<div style={{ fontSize: '0.875rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.6 }}>
+Live Activity bridge — shows device supervisor status on iPhone lock screen via ActivityKit. Reads from `~/.cnb/live_state.json`.
+</div>
+<div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
+<div style={{ display: 'inline-flex', alignItems: 'center', padding: '0.5rem 1rem', borderRadius: '0.375rem', border: '0.5px solid var(--color-fd-border)', fontSize: '0.8125rem', color: 'var(--color-fd-muted-foreground)' }}>
+Source available
+</div>
+</div>
+</div>
+
+<div style={{ border: '0.5px solid var(--color-fd-border)', borderRadius: '0.75rem', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+<div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+<div>
+<div style={{ fontSize: '1.25rem', fontWeight: 600 }}>Vision Pro</div>
+<div style={{ fontSize: '0.8125rem', color: 'var(--color-fd-muted-foreground)' }}>visionOS 2+</div>
+</div>
+</div>
+<div style={{ fontSize: '0.875rem', color: 'var(--color-fd-muted-foreground)', lineHeight: 1.6 }}>
+Native SwiftUI visionOS app. Reads Feishu chat history, aggregates messages from all device supervisors. Read-only viewer with simulator support.
+</div>
+<div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
+<div style={{ display: 'inline-flex', alignItems: 'center', padding: '0.5rem 1rem', borderRadius: '0.375rem', border: '0.5px solid var(--color-fd-border)', fontSize: '0.8125rem', color: 'var(--color-fd-muted-foreground)' }}>
+Source available
+</div>
+</div>
+</div>
+
+</div>
+
+<div style={{ marginTop: '4rem', textAlign: 'center' }}>
+<div style={{ fontSize: '1rem', color: 'var(--color-fd-muted-foreground)' }}>
+All platforms coordinate through cnb core SQLite board and tmux sessions. Terminal always comes first.
+</div>
+</div>
+
+</div>

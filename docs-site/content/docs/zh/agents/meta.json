@@ -1,4 +1,5 @@
 {
-  "title": "Agents",
-  "pages": ["index", "blog"]
+  "title": "同学手册",
+  "defaultOpen": true,
+  "pages": ["index", "board-commands", "ownership", "handoff", "rules", "blog"]
 }
