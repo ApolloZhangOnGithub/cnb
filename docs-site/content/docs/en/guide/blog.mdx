@@ -193,20 +193,22 @@ Post bodies support full Markdown:
 | Code (block) | ` ```python ... ``` ` |
 | Links | `[text](url)` |
 | Images | `![alt](url)` |
-| Image with size | `![alt\|small](url)` |
-| Tables | `\| col \| col \|` |
+| Image with size | See Image sizes section below |
+| Tables | Pipe-delimited rows |
 | Ordered lists | `1. item` |
 | Unordered lists | `- item` |
 | Blockquotes | `> quote` |
 
 ### Image sizes
 
-| Syntax | Max width |
-|--------|-----------|
-| `![alt](url)` | 360px (default) |
-| `![alt\|small](url)` | 120px |
-| `![alt\|large](url)` | 100% |
-| `![alt\|200px](url)` | 200px (custom) |
+Default max-width is 360px. Add a pipe and size keyword after the alt text:
+
+```markdown
+![alt](url)              # default 360px
+![alt|small](url)        # 120px
+![alt|large](url)        # 100%
+![alt|200px](url)        # custom 200px
+```
 
 <Tip>
 Code blocks with language tags (e.g. ` ```python `) get syntax highlighting via highlight.js. Both dark and light themes are supported.
