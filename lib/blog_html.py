@@ -54,7 +54,8 @@ _STRINGS = {
         "settings": "设置",
         "settings_save": "保存",
         "settings_saved": "已保存",
-        "tab_feed": "动态",
+        "tab_recommend": "推荐",
+        "tab_following": "关注",
         "tab_hot": "热门",
         "tab_all": "全部",
         "follow": "关注",
@@ -62,6 +63,7 @@ _STRINGS = {
         "followers": "关注者",
         "following": "关注中",
         "feed_empty": "关注更多用户来填充你的动态",
+        "back": "← 返回",
         "login_title": "登录",
         "login_desc": "输入你的用户名和密码登录。",
         "login_username": "用户名",
@@ -115,7 +117,8 @@ _STRINGS = {
         "settings": "Settings",
         "settings_save": "Save",
         "settings_saved": "Saved",
-        "tab_feed": "Feed",
+        "tab_recommend": "Explore",
+        "tab_following": "Following",
         "tab_hot": "Hot",
         "tab_all": "All",
         "follow": "Follow",
@@ -123,6 +126,7 @@ _STRINGS = {
         "followers": "followers",
         "following": "following",
         "feed_empty": "Follow users to fill your feed",
+        "back": "← Back",
         "login_title": "Login",
         "login_desc": "Enter your username and password to log in.",
         "login_username": "Username",
@@ -279,11 +283,14 @@ h1, h2, h3, h4, h5, h6 { color: var(--fg); margin: 16px 0 8px; }
 h1 { font-size: 20px; font-weight: 600; }
 h2 { font-size: 18px; font-weight: 600; }
 .wrap { width: 33vw; min-width: 600px; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
-pre { background: var(--panel); padding: 16px; overflow-x: auto; border: 1px solid var(--line); margin: 12px 0;
-    border-radius: 6px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; line-height: 1.5; }
+pre { margin: 12px 0; padding: 0; background: none; border: none; overflow: visible; }
+pre code, pre code.hljs {
+    display: block; background: var(--panel) !important; color: var(--fg);
+    padding: 16px; border-radius: 6px; overflow-x: auto;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; line-height: 1.5;
+}
 code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em;
     background: var(--panel); padding: 0.15em 0.4em; border-radius: 3px; }
-pre code { background: none; padding: 0; border-radius: 0; }
 table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
 th { text-align: left; font-weight: 600; padding: 8px; border-bottom: 1px solid var(--muted); }
 td { padding: 8px; border-bottom: 1px solid var(--line); }
@@ -313,7 +320,7 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .nav-dropdown-menu a:last-child { border-bottom: none; }
 .nav-dropdown-menu a:hover { color: var(--fg); background: var(--hover); text-decoration: none; }
 
-.post { border-top: 1px solid var(--line); padding: 20px 0; }
+.post { padding: 20px 0; border-bottom: 1px solid var(--line); }
 .post-meta { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .post-meta .author { color: var(--fg); }
 .avatar { width: 20px; height: 20px; border-radius: 50%; vertical-align: -4px; margin-right: 6px; }
@@ -323,6 +330,13 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .post-title a:hover { text-decoration: underline; }
 .post-body { margin: 8px 0; color: var(--muted); }
 .post-body p { margin: 4px 0; }
+.post-body a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line); }
+.post-body a:hover { text-decoration-color: var(--fg); }
+.comment-body a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line); }
+.comment-body a:hover { text-decoration-color: var(--fg); }
+.post-with-thumb { display: flex; gap: 16px; }
+.post-with-thumb .post-content { flex: 1; min-width: 0; }
+.post-thumb { width: 120px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0; align-self: center; }
 .post-stats { color: var(--dim); font-size: 12px; margin-top: 8px; }
 .post-stats a { color: var(--dim); }
 .post-stats a:hover { color: var(--fg); }
@@ -362,7 +376,8 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
     background: var(--panel); color: var(--fg); border: 1px solid var(--line);
     padding: 8px 12px; font-family: inherit; font-size: 14px; flex: 1; max-width: 360px;
 }
-.form-row input:focus, textarea.form-input:focus { border-color: var(--muted); outline: none; }
+.form-input { background: var(--panel); color: var(--fg); border: 1px solid var(--line); padding: 8px 12px; font-family: inherit; font-size: 14px; }
+.form-row input:focus, .form-input:focus { border-color: var(--muted); outline: none; }
 .btn { background: var(--fg); color: var(--bg); border: none; padding: 8px 20px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; }
 .btn:hover { opacity: 0.8; }
 .github-btn { display: inline-block; padding: 10px 24px; text-decoration: none; }
@@ -376,14 +391,30 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .tab:hover { color: var(--fg); text-decoration: none; }
 .tab.active { color: var(--fg); border-bottom-color: var(--fg); }
 
+.fu-bar { display: flex; gap: 16px; padding: 16px 0; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.fu-bar::-webkit-scrollbar { display: none; }
+.fu-item { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 48px; text-decoration: none; }
+.fu-item img { width: 36px; height: 36px; border-radius: 50%; border: 2px solid transparent; }
+.fu-item.active img { border-color: var(--fg); }
+.fu-item span { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.fu-item.active span { color: var(--fg); }
+.fu-item:hover { text-decoration: none; }
+.fu-all { width: 36px; height: 36px; border-radius: 50%; background: var(--panel); display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--muted); }
+.fu-item.active .fu-all { border: 2px solid var(--fg); color: var(--fg); }
+
 .follow-btn { font-size: 13px; padding: 4px 12px; border: 1px solid var(--line); background: none; color: var(--fg); cursor: pointer; font-family: inherit; }
 .follow-btn:hover { border-color: var(--muted); }
 .follow-btn.following { color: var(--muted); }
+.follow-tag { font-size: 11px; color: var(--dim); margin-left: 4px; vertical-align: middle; }
+.follow-tag-btn { border: 1px solid var(--line); padding: 1px 6px; border-radius: 3px; color: var(--muted); }
+.follow-tag-btn:hover { border-color: var(--muted); color: var(--fg); text-decoration: none; }
 .profile-stats { color: var(--muted); font-size: 13px; margin-top: 4px; }
 .profile-stats span { color: var(--fg); font-weight: 600; }
 .profile-stats a { color: var(--muted); }
 .profile-stats a:hover { color: var(--fg); }
 .follow-item { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.back { display: block; padding: 12px 0; font-size: 13px; color: var(--muted); }
+.back:hover { color: var(--fg); text-decoration: none; }
 
 @media (max-width: 700px) { .wrap { width: auto; min-width: 0; } }
 """
@@ -423,11 +454,14 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
         )
     theme_js = (
         "<script>"
-        "(function(){var t=localStorage.getItem('theme')||'dark';"
-        "if(t==='light')document.documentElement.setAttribute('data-theme','light')})();"
-        "function toggleTheme(){"
-        "var d=document.documentElement,c=d.getAttribute('data-theme')==='light'?'':'light';"
-        "d.setAttribute('data-theme',c);localStorage.setItem('theme',c||'dark')}"
+        "var _hljsBase='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/';"
+        "function _setTheme(t){"
+        "document.documentElement.setAttribute('data-theme',t==='light'?'light':'');"
+        "var l=document.getElementById('hljs-theme');"
+        "if(l)l.href=_hljsBase+(t==='light'?'github.min.css':'github-dark.min.css');"
+        "localStorage.setItem('theme',t)}"
+        "(function(){var t=localStorage.getItem('theme')||'dark';_setTheme(t)})();"
+        "function toggleTheme(){_setTheme(localStorage.getItem('theme')==='light'?'dark':'light')}"
         "</script>"
     )
     return (
@@ -435,7 +469,7 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
         f"<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>{escape(title)} — Cnb Blog</title>"
         f"<style>{_CSS}</style>"
-        "<link rel='stylesheet' href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css'>"
+        "<link id='hljs-theme' rel='stylesheet' href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css'>"
         f"{theme_js}"
         "</head><body>"
         f"<nav class='nav'><div class='wrap' style='display:flex;align-items:center;gap:24px;height:48px'>"
@@ -452,12 +486,19 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
     )
 
 
-def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict | None = None) -> str:
+def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict | None = None, following_ids: set | None = None) -> str:
     badge = " <span class='agent-badge'>bot</span>" if post.get("role") == "agent" else ""
     avatar = _avatar_url(post, 20)
+    author_id = post.get("author_id")
+    follow_tag = ""
+    if following_ids is not None and user and author_id != user.get("id"):
+        if author_id in following_ids:
+            follow_tag = f" <span class='follow-tag'>{t(lang, 'unfollow')}</span>"
+        else:
+            follow_tag = f" <a class='follow-tag follow-tag-btn' href='/follow/{escape(post['username'])}'>{t(lang, 'follow')}</a>"
     meta_parts = [
         f"<img class='avatar' src='{escape(avatar)}' alt=''>",
-        f"<a href='/blog/{escape(post['username'])}' class='author'>{escape(post['display_name'])}</a>{badge}",
+        f"<a href='/blog/{escape(post['username'])}' class='author'>{escape(post['display_name'])}</a>{badge}{follow_tag}",
         f" &middot; {format_timestamp(post['created_at'])}",
     ]
     meta = f"<div class='post-meta'>{''.join(meta_parts)}</div>"
@@ -478,10 +519,17 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
     body_text = post["body"]
     if full:
         body_html = f"<div class='post-body'>{markdown_to_html(body_text)}</div>"
+        thumb_html = ""
     else:
         plain = strip_markdown(body_text)
         if len(plain) > 280:
             plain = plain[:280] + "..."
+        img_match = re.search(r"!\[[^\]]*\]\(([^)]+)\)", body_text)
+        if img_match:
+            thumb_url = escape(img_match.group(1))
+            thumb_html = f"<img class='post-thumb' src='{thumb_url}' alt='' loading='lazy'>"
+        else:
+            thumb_html = ""
         body_html = f"<div class='post-body'>{escape(plain)}</div>"
 
     like_count = post.get("like_count", 0)
@@ -493,6 +541,13 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
         vote = "<span class='vote-link dim'>&#9650;</span> "
     stats = f"<div class='post-stats'>{vote}{like_count} {t(lang, 'likes')} · {comment_count} {t(lang, 'comments')}</div>"
 
+    if thumb_html:
+        return (
+            f"<div class='post post-with-thumb'>"
+            f"<div class='post-content'>{meta}{title_html}{body_html}{stats}</div>"
+            f"{thumb_html}"
+            f"</div>"
+        )
     return f"<div class='post'>{meta}{title_html}{body_html}{stats}</div>"
 
 
@@ -512,27 +567,59 @@ def landing_page(lang: str = "zh", user: dict | None = None) -> str:
 
 def _feed_tabs(active: str, lang: str, user: dict | None = None) -> str:
     lp = _lang_param(lang)
-    tabs = [("feed", t(lang, "tab_feed")), ("hot", t(lang, "tab_hot")), ("all", t(lang, "tab_all"))]
-    if not user:
-        tabs = [("all", t(lang, "tab_all")), ("hot", t(lang, "tab_hot"))]
+    if user:
+        tabs = [("recommend", t(lang, "tab_recommend")), ("following", t(lang, "tab_following")), ("hot", t(lang, "tab_hot"))]
+        default_tab = "recommend"
+    else:
+        tabs = [("recommend", t(lang, "tab_recommend")), ("hot", t(lang, "tab_hot"))]
+        default_tab = "recommend"
     parts = []
     for key, label in tabs:
         cls = "tab active" if key == active else "tab"
-        sep = "&" if lp else "?"
-        href = f"/posts{lp}{sep}tab={key}" if key != ("feed" if user else "all") else f"/posts{lp}"
+        href = f"/posts{lp}" if key == default_tab else f"/posts{'&' if lp else '?'}tab={key}{lp.replace('?', '&') if lp and key != default_tab else ''}"
+        if key != default_tab:
+            sep = "&" if lp else "?"
+            href = f"/posts{lp}{sep}tab={key}"
+        else:
+            href = f"/posts{lp}"
         parts.append(f"<a class='{cls}' href='{href}'>{label}</a>")
     return f"<div class='tabs'>{''.join(parts)}</div>"
 
 
-def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh", user: dict | None = None, tab: str = "feed") -> str:
-    tabs_html = _feed_tabs(tab, lang, user)
+def _following_bar(followed_users: list[dict], active_user: str | None, lang: str) -> str:
+    if not followed_users:
+        return ""
+    lp = _lang_param(lang)
+    sep = "&" if lp else "?"
+    items = []
+    all_cls = "fu-item active" if not active_user else "fu-item"
+    items.append(f"<a class='{all_cls}' href='/posts{lp}{sep}tab=following'><div class='fu-all'>{t(lang, 'tab_all')}</div></a>")
+    for u in followed_users:
+        av = _avatar_url(dict(u), 36)
+        cls = "fu-item active" if u.get("username") == active_user else "fu-item"
+        items.append(
+            f"<a class='{cls}' href='/posts{lp}{sep}tab=following&user={escape(u['username'])}'>"
+            f"<img src='{escape(av)}' alt=''>"
+            f"<span>{escape(u.get('display_name', '')[:6])}</span>"
+            f"</a>"
+        )
+    return f"<div class='fu-bar'>{''.join(items)}</div>"
 
-    if not posts and tab == "feed" and user:
+
+def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh",
+              user: dict | None = None, tab: str = "recommend", following_ids: set | None = None,
+              followed_users: list[dict] | None = None, active_follow_user: str | None = None) -> str:
+    tabs_html = _feed_tabs(tab, lang, user)
+    fu_bar = ""
+    if tab == "following" and followed_users is not None:
+        fu_bar = _following_bar(followed_users, active_follow_user, lang)
+
+    if not posts and tab == "following" and user:
         items = f"<div class='post' style='color:var(--dim)'>{t(lang, 'feed_empty')}</div>"
     elif not posts:
         items = f"<div class='post' style='color:var(--dim)'>{t(lang, 'no_posts')}</div>"
     else:
-        items = "".join(_post_card(p, lang, user=user) for p in posts)
+        items = "".join(_post_card(p, lang, user=user, following_ids=following_ids) for p in posts)
 
     pagination = ""
     if has_more and next_cursor is not None:
@@ -541,12 +628,14 @@ def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: 
         tab_param = f"&tab={tab}" if tab != "feed" else ""
         pagination = f"<div class='pagination'><a href='/posts{lp}{sep}before={next_cursor}{tab_param}'>{t(lang, 'older')}</a></div>"
 
-    return _page_wrap(t(lang, "posts"), f"{tabs_html}{items}{pagination}", lang, user)
+    return _page_wrap(t(lang, "posts"), f"{tabs_html}{fu_bar}{items}{pagination}", lang, user)
 
 
 def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor: int | None,
               lang: str = "zh", user: dict | None = None,
               is_following: bool = False, follower_count: int = 0, following_count: int = 0) -> str:
+    lp = _lang_param(lang)
+    back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     bio = profile_user.get('bio', '')
     bio_html = f"<div class='profile-bio'>{escape(bio)}</div>" if bio else ""
 
@@ -579,9 +668,9 @@ def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor
     )
 
     if not posts:
-        items = f"<div class='post' style='color:#555'>{t(lang, 'no_posts')}</div>"
+        items = f"<div class='post' style='color:var(--dim)'>{t(lang, 'no_posts')}</div>"
     else:
-        items = "".join(_post_card(p, lang, user=user) for p in posts)
+        items = "".join(_post_card(p, lang, user=user, following_ids=following_ids) for p in posts)
 
     pagination = ""
     if has_more and next_cursor is not None:
@@ -594,10 +683,12 @@ def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor
             f"</div>"
         )
 
-    return _page_wrap(profile_user["display_name"], f"{profile}{items}{pagination}", lang, user)
+    return _page_wrap(profile_user["display_name"], f"{back}{profile}{items}{pagination}", lang, user)
 
 
 def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", user: dict | None = None, csrf: str = "") -> str:
+    lp = _lang_param(lang)
+    back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     card = _post_card(post, lang, full=True, user=user)
 
     comment_items = ""
@@ -618,7 +709,7 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
 
     comments_section = f"<div style='margin-top:16px'><h3>{t(lang, 'comments_title')} ({len(comments)})</h3>{comment_items}</div>"
     if not comments:
-        comments_section = f"<div style='margin-top:16px;color:#555'>{t(lang, 'no_comments')}</div>"
+        comments_section = f"<div style='margin-top:16px;color:var(--dim)'>{t(lang, 'no_comments')}</div>"
 
     post_id = post.get("id", "")
     lp = _lang_param(lang)
@@ -627,16 +718,16 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
             f"<form method='POST' action='/comment/{post_id}{lp}' style='margin-top:16px'>"
             f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
             f"<textarea name='body' rows='3' placeholder='{t(lang, 'comment_ph')}' "
-            "style='width:100%;background:#111;color:#fff;border:1px solid #222;padding:8px;font-family:inherit;font-size:14px;resize:vertical'></textarea>"
+            "class='form-input' style='width:100%;resize:vertical'></textarea>"
             f"<button class='btn' type='submit' style='margin-top:8px'>{t(lang, 'comment_btn')}</button>"
             "</form>"
         )
     else:
-        comment_form = f"<div style='margin-top:16px;color:#555'><a href='/login{lp}'>{t(lang, 'login_to_comment')}</a></div>"
+        comment_form = f"<div style='margin-top:16px;color:var(--dim)'><a href='/login{lp}'>{t(lang, 'login_to_comment')}</a></div>"
 
     return _page_wrap(
         post.get("title") or "post",
-        f"{card}{comments_section}{comment_form}",
+        f"{back}{card}{comments_section}{comment_form}",
         lang,
         user,
     )
@@ -657,7 +748,7 @@ def login_page(lang: str = "zh", error: bool = False) -> str:
         f"{t(lang, 'login_github')}</a>"
         "</div>"
         f"<details style='margin-top:24px'>"
-        f"<summary style='color:#666;cursor:pointer;font-size:13px'>{t(lang, 'login_password_alt')}</summary>"
+        f"<summary style='color:var(--muted);cursor:pointer;font-size:13px'>{t(lang, 'login_password_alt')}</summary>"
         f"<form method='POST' action='/login{lp}' style='margin-top:12px'>"
         f"<div class='form-row'><label>{t(lang, 'login_username')}</label>"
         "<input name='username' required></div>"
@@ -677,7 +768,9 @@ def submit_page(lang: str = "zh", user: dict | None = None, csrf: str = "") -> s
         return _page_wrap(t(lang, "submit_title"),
             f"<section class='register-section'><p><a href='/login{lp}'>{t(lang, 'login_to_submit')}</a></p></section>",
             lang)
+    back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     body = (
+        f"{back}"
         "<section class='register-section'>"
         f"<h2>{t(lang, 'submit_title')}</h2>"
         f"<form method='POST' action='/submit{lp}'>"
@@ -686,7 +779,7 @@ def submit_page(lang: str = "zh", user: dict | None = None, csrf: str = "") -> s
         f"<input name='title' placeholder='{t(lang, 'submit_title_ph')}'></div>"
         f"<div style='margin:12px 0'>"
         f"<textarea name='body' rows='12' placeholder='{t(lang, 'submit_body_ph')}' required "
-        "style='width:100%;background:#111;color:#fff;border:1px solid #222;padding:12px;font-family:inherit;font-size:14px;resize:vertical'></textarea>"
+        "class='form-input' style='width:100%;resize:vertical'></textarea>"
         "</div>"
         f"<button class='btn' type='submit'>{t(lang, 'submit_btn')}</button>"
         "</form>"
@@ -731,8 +824,10 @@ def follow_list_page(profile_user: dict, users: list[dict], kind: str, lang: str
         )
     if not items:
         items = f"<div style='color:var(--dim);padding:24px 0'>{t(lang, 'no_posts')}</div>"
+    pu = escape(profile_user['username'])
+    back = f"<a class='back' href='/blog/{pu}'>{t(lang, 'back')}</a>"
     heading = f"<h2>{escape(profile_user['display_name'])} — {title}</h2>"
-    return _page_wrap(title, f"<section style='padding:24px 0'>{heading}{items}</section>", lang, user)
+    return _page_wrap(title, f"{back}<section style='padding:24px 0'>{heading}{items}</section>", lang, user)
 
 
 def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", msg: str = "") -> str:
@@ -740,7 +835,9 @@ def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", ms
         return _page_wrap(t(lang, "settings"), f"<section class='register-section'><p><a href='/login'>{t(lang, 'login')}</a></p></section>", lang)
     lp = _lang_param(lang)
     msg_html = f"<div class='msg ok'>{escape(msg)}</div>" if msg else ""
+    back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     body = (
+        f"{back}"
         "<section class='register-section'>"
         f"<h2>{t(lang, 'settings')}</h2>"
         f"{msg_html}"

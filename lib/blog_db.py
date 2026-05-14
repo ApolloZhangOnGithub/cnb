@@ -436,6 +436,57 @@ class BlogDB:
                 (user_id,),
             ).fetchall()
 
+    def get_following_users_ranked(self, user_id: int) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT u.id, u.username, u.display_name, u.avatar_url, u.role,"
+                " (SELECT COUNT(*) FROM blog_likes l JOIN blog_posts p ON l.post_id = p.id"
+                "  WHERE l.user_id = ? AND p.author_id = u.id) AS interaction"
+                " FROM blog_follows f JOIN blog_users u ON f.following_id = u.id"
+                " WHERE f.follower_id = ?"
+                " ORDER BY interaction DESC, f.created_at DESC",
+                (user_id, user_id),
+            ).fetchall()
+
+    def get_following_ids(self, user_id: int) -> set[int]:
+        with self.conn() as c:
+            rows = c.execute("SELECT following_id FROM blog_follows WHERE follower_id = ?", (user_id,)).fetchall()
+            return {r[0] for r in rows}
+
+    def get_recommend_feed(self, user_id: int | None, before: int | None = None, limit: int = 20) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            if user_id:
+                if before:
+                    return c.execute(
+                        "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
+                        " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                        " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
+                        " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
+                        " WHERE p.id < ? ORDER BY p.id DESC LIMIT ?",
+                        (before, limit),
+                    ).fetchall()
+                return c.execute(
+                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
+                    " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                    " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
+                    " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
+                    " ORDER BY p.id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            return self.get_feed(before, limit)
+
+    def get_discover_posts(self, user_id: int, limit: int = 5) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
+                " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
+                " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
+                " WHERE p.author_id != ? AND p.author_id NOT IN (SELECT following_id FROM blog_follows WHERE follower_id = ?)"
+                " ORDER BY RANDOM() LIMIT ?",
+                (user_id, user_id, limit),
+            ).fetchall()
+
     def get_following_feed(self, user_id: int, before: int | None = None, limit: int = 20) -> list[sqlite3.Row]:
         with self.conn() as c:
             if before is not None:
@@ -458,17 +509,24 @@ class BlogDB:
                 (user_id, user_id, limit),
             ).fetchall()
 
-    def get_hot_feed(self, limit: int = 30) -> list[sqlite3.Row]:
+    def get_hot_feed(self, limit: int = 20) -> list[sqlite3.Row]:
         with self.conn() as c:
             return c.execute(
                 "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count,"
-                " ((SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id)"
-                "  + (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) * 2) AS score"
+                " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count,"
+                " CASE WHEN (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id)"
+                "         + (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) = 0 THEN 0"
+                "  ELSE ((SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id)"
+                "        + (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) * 0.5)"
+                "       / ((julianday('now') - julianday(p.created_at)) * 24 + 2)"
+                "       / ((julianday('now') - julianday(p.created_at)) * 24 + 2) * 10000"
+                " END AS score"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
-                " WHERE p.created_at > datetime('now', '-7 days')"
-                " ORDER BY score DESC, p.id DESC LIMIT ?",
+                " WHERE p.created_at > datetime('now', '-30 days')"
+                " ORDER BY score DESC LIMIT ?",
                 (limit,),
             ).fetchall()
 

@@ -240,29 +240,42 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
     def _handle_feed_page(self, params: dict, lang: str = "zh", user: dict | None = None) -> None:
         tab = (params.get("tab") or [""])[0]
         if not tab:
-            tab = "feed" if user else "all"
+            tab = "recommend"
         before = self._parse_int(params.get("before", [None])[0])
         limit = 20
+        following_ids = self.server.db.get_following_ids(user["id"]) if user else None
 
         if tab == "hot":
-            posts = self.server.db.get_hot_feed(limit)
-            has_more = False
-            next_cursor = None
-        elif tab == "feed" and user:
-            posts = self.server.db.get_following_feed(user["id"], before, limit + 1)
+            posts = self.server.db.get_hot_feed(20)
+            post_list = [dict(p) for p in posts]
+            self._send_html(feed_page(post_list, False, None, lang, user, tab, following_ids))
+            return
+
+        if tab == "following" and user:
+            filter_user = (params.get("user") or [""])[0]
+            followed_users = [dict(r) for r in self.server.db.get_following_users_ranked(user["id"])]
+            if filter_user:
+                target = self.server.db.get_user_by_username(filter_user)
+                if target:
+                    posts = self.server.db.get_user_posts(target["id"], before, limit + 1)
+                else:
+                    posts = []
+            else:
+                posts = self.server.db.get_following_feed(user["id"], before, limit + 1)
             has_more = len(posts) > limit
             post_list = [dict(p) for p in posts[:limit]]
             next_cursor = post_list[-1]["id"] if has_more and post_list else None
-            self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab))
+            self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids,
+                                      followed_users, filter_user or None))
             return
-        else:
-            tab = "all"
-            posts = self.server.db.get_feed(before, limit + 1)
-            has_more = len(posts) > limit
 
+        # recommend (default)
+        tab = "recommend"
+        posts = self.server.db.get_recommend_feed(user.get("id") if user else None, before, limit + 1)
+        has_more = len(posts) > limit
         post_list = [dict(p) for p in posts[:limit]]
         next_cursor = post_list[-1]["id"] if has_more and post_list else None
-        self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab))
+        self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids))
 
     def _handle_user_page(self, username: str, params: dict, lang: str = "zh", user: dict | None = None) -> None:
         profile = self.server.db.get_user_by_username(username)
