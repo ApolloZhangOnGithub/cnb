@@ -34,6 +34,7 @@ from lib.blog_html import (
     login_page,
     post_page,
     register_page,
+    settings_page,
     submit_page,
     user_page,
 )
@@ -117,6 +118,10 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             csrf = self._make_csrf(user) if user else ""
             self._send_html(submit_page(lang, user, csrf))
             return
+        if route == "/settings":
+            csrf = self._make_csrf(user) if user else ""
+            self._send_html(settings_page(lang, user, csrf))
+            return
         if route == "/register":
             self._send_html(register_page(lang))
             return
@@ -177,6 +182,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._handle_form_comment(int(m.group(1)), lang)
             return
 
+        if route == "/settings":
+            self._handle_form_settings(lang)
+            return
         if route == "/register":
             self._handle_form_register(lang)
             return
@@ -449,6 +457,29 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self.server.db.toggle_like(post_id, user["id"])
         referer = self.headers.get("Referer", "/posts")
         self._redirect(referer)
+
+    def _handle_form_settings(self, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
+        display_name = form.get("display_name", "").strip()
+        bio = form.get("bio", "").strip()
+        updates = {}
+        if display_name:
+            updates["display_name"] = display_name
+        if bio is not None:
+            updates["bio"] = bio
+        if updates:
+            self.server.db.update_user(user["id"], **updates)
+        user = self._get_cookie_user()
+        from lib.blog_html import t
+        csrf = self._make_csrf(user) if user else ""
+        self._send_html(settings_page(lang, user, csrf, t(lang, "settings_saved")))
 
     def _handle_form_register(self, lang: str) -> None:
         form = self._read_form_body()

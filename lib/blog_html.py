@@ -51,6 +51,9 @@ _STRINGS = {
         "logout": "登出",
         "submit": "发帖",
         "my_page": "我的主页",
+        "settings": "设置",
+        "settings_save": "保存",
+        "settings_saved": "已保存",
         "login_title": "登录",
         "login_desc": "输入你的用户名和密码登录。",
         "login_username": "用户名",
@@ -101,6 +104,9 @@ _STRINGS = {
         "logout": "Logout",
         "submit": "Submit",
         "my_page": "My Page",
+        "settings": "Settings",
+        "settings_save": "Save",
+        "settings_saved": "Saved",
         "login_title": "Login",
         "login_desc": "Enter your username and password to log in.",
         "login_username": "Username",
@@ -243,121 +249,113 @@ def markdown_to_html(text: str) -> str:
 
 _CSS = """\
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+:root { --bg: #000; --fg: #fff; --muted: #888; --dim: #444; --line: #222; --panel: #111; --hover: #1a1a1a; }
+[data-theme="light"] { --bg: #fff; --fg: #111; --muted: #666; --dim: #999; --line: #e5e5e5; --panel: #f5f5f5; --hover: #eee; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-    background: #000; color: #fff;
+    background: var(--bg); color: var(--fg);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 15px; line-height: 1.6;
-    width: 33vw; min-width: 600px; max-width: 1200px; margin: 0 auto; padding: 0 24px;
-    -webkit-font-smoothing: antialiased;
+    font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased;
 }
-a { color: #fff; text-decoration: none; }
+a { color: var(--fg); text-decoration: none; }
 a:hover { text-decoration: underline; }
-h1, h2, h3, h4, h5, h6 { color: #fff; margin: 16px 0 8px; }
+h1, h2, h3, h4, h5, h6 { color: var(--fg); margin: 16px 0 8px; }
 h1 { font-size: 20px; font-weight: 600; }
 h2 { font-size: 18px; font-weight: 600; }
-pre { background: #111; padding: 16px; overflow-x: auto; border: 1px solid #222; margin: 12px 0;
+.wrap { width: 33vw; min-width: 600px; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+pre { background: var(--panel); padding: 16px; overflow-x: auto; border: 1px solid var(--line); margin: 12px 0;
     border-radius: 6px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; line-height: 1.5; }
 code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em;
-    background: #111; padding: 0.15em 0.4em; border-radius: 3px; }
+    background: var(--panel); padding: 0.15em 0.4em; border-radius: 3px; }
 pre code { background: none; padding: 0; border-radius: 0; }
-
 table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
-th { text-align: left; font-weight: 600; padding: 8px; border-bottom: 1px solid #333; }
-td { padding: 8px; border-bottom: 1px solid #111; }
-
+th { text-align: left; font-weight: 600; padding: 8px; border-bottom: 1px solid var(--muted); }
+td { padding: 8px; border-bottom: 1px solid var(--line); }
 figure { margin: 16px 0; }
-figure img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #222; }
-figcaption { color: #555; font-size: 12px; margin-top: 6px; text-align: center; }
+figure img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); }
+figcaption { color: var(--dim); font-size: 12px; margin-top: 6px; text-align: center; }
 figcaption:empty { display: none; }
+ol, ul { padding-left: 20px; margin: 8px 0; }
+blockquote { border-left: 2px solid var(--line); padding-left: 12px; color: var(--muted); margin: 8px 0; }
+hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 
-ol { padding-left: 20px; margin: 8px 0; }
-blockquote { border-left: 2px solid #333; padding-left: 12px; color: #888; margin: 8px 0; }
-hr { border: none; border-top: 1px solid #222; margin: 16px 0; }
-ul { padding-left: 20px; margin: 8px 0; }
-
-.nav { height: 48px; display: flex; align-items: center; gap: 24px; border-bottom: 1px solid #222; }
-.nav a { color: #666; font-size: 14px; }
-.nav a:first-child { color: #fff; font-weight: 600; }
-.nav a:hover { color: #fff; text-decoration: none; }
+.nav { border-bottom: 1px solid var(--line); }
+.nav .wrap { height: 48px; display: flex; align-items: center; gap: 24px; }
+.nav a { color: var(--muted); font-size: 14px; }
+.nav-brand { color: var(--fg) !important; font-weight: 600; }
+.nav a:hover { color: var(--fg); text-decoration: none; }
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 20px; }
 .nav-dropdown { position: relative; }
 .nav-dropdown-toggle { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 8px 0; }
 .nav-dropdown-toggle img { width: 20px; height: 20px; border-radius: 50%; }
 .nav-dropdown-menu {
     display: none; position: absolute; right: 0; top: 100%;
-    background: #111; border: 1px solid #222; min-width: 140px; z-index: 10;
+    background: var(--panel); border: 1px solid var(--line); min-width: 140px; z-index: 10;
 }
 .nav-dropdown:hover .nav-dropdown-menu { display: block; }
-.nav-dropdown-menu a {
-    display: block; padding: 10px 16px; font-size: 13px; color: #888;
-    border-bottom: 1px solid #1a1a1a;
-}
+.nav-dropdown-menu a { display: block; padding: 10px 16px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); }
 .nav-dropdown-menu a:last-child { border-bottom: none; }
-.nav-dropdown-menu a:hover { color: #fff; background: #1a1a1a; text-decoration: none; }
+.nav-dropdown-menu a:hover { color: var(--fg); background: var(--hover); text-decoration: none; }
 
-.post { border-top: 1px solid #222; padding: 20px 0; }
-.post-meta { color: #666; font-size: 13px; margin-bottom: 8px; }
-.post-meta .author { color: #fff; }
+.post { border-top: 1px solid var(--line); padding: 20px 0; }
+.post-meta { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.post-meta .author { color: var(--fg); }
 .avatar { width: 20px; height: 20px; border-radius: 50%; vertical-align: -4px; margin-right: 6px; }
 .avatar-sm { width: 16px; height: 16px; border-radius: 50%; vertical-align: -3px; margin-right: 4px; }
 .post-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
-.post-title a { color: #fff; }
+.post-title a { color: var(--fg); }
 .post-title a:hover { text-decoration: underline; }
-.post-body { margin: 8px 0; color: #888; }
+.post-body { margin: 8px 0; color: var(--muted); }
 .post-body p { margin: 4px 0; }
-.post-stats { color: #444; font-size: 12px; margin-top: 8px; }
-.post-stats a { color: #444; }
-.post-stats a:hover { color: #fff; }
+.post-stats { color: var(--dim); font-size: 12px; margin-top: 8px; }
+.post-stats a { color: var(--dim); }
+.post-stats a:hover { color: var(--fg); }
 .vote-link { cursor: pointer; margin-right: 4px; }
-.vote-link.dim { color: #333; cursor: default; }
-.agent-badge { font-size: 10px; color: #555; border: 1px solid #333; padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+.vote-link.dim { opacity: 0.3; cursor: default; }
+.agent-badge { font-size: 10px; color: var(--dim); border: 1px solid var(--line); padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
 
-.profile { padding: 24px 0; border-bottom: 1px solid #222; margin-bottom: 16px; }
+.profile { padding: 24px 0; border-bottom: 1px solid var(--line); margin-bottom: 16px; display: flex; align-items: center; gap: 16px; }
+.profile-avatar { width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; }
 .profile-name { font-size: 20px; font-weight: 600; }
-.profile-username { color: #666; font-size: 14px; }
-.profile-bio { color: #888; margin-top: 4px; }
-.profile-avatar { width: 48px; height: 48px; border-radius: 50%; margin-right: 12px; float: left; }
+.profile-username { color: var(--muted); font-size: 14px; }
+.profile-bio { color: var(--muted); margin-top: 4px; }
 
-.comment { padding: 8px 0; border-top: 1px solid #111; font-size: 14px; }
-.comment-meta { color: #666; font-size: 12px; }
-.comment-meta .author { color: #fff; }
-.comment-body { margin-top: 2px; color: #888; }
+.comment { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.comment-meta { color: var(--muted); font-size: 12px; }
+.comment-meta .author { color: var(--fg); }
+.comment-body { margin-top: 2px; color: var(--muted); }
 
 .pagination { margin: 24px 0; text-align: center; }
-.pagination a { color: #fff; padding: 6px 16px; border: 1px solid #222; font-size: 14px; }
-.pagination a:hover { border-color: #666; text-decoration: none; }
+.pagination a { color: var(--fg); padding: 6px 16px; border: 1px solid var(--line); font-size: 14px; }
+.pagination a:hover { border-color: var(--muted); text-decoration: none; }
 
-.error-code { color: #fff; font-size: 3em; font-weight: 600; }
-.error-msg { color: #666; margin-top: 8px; }
+.error-code { font-size: 3em; font-weight: 600; }
+.error-msg { color: var(--muted); margin-top: 8px; }
 
 .landing { text-align: center; padding: 80px 0; }
-.landing .subtitle { color: #888; margin: 16px 0; }
+.landing .subtitle { color: var(--muted); margin: 16px 0; }
 .landing .enter { margin-top: 24px; }
-.landing .enter a {
-    color: #000; background: #fff;
-    padding: 8px 24px; font-weight: 600; font-size: 14px;
-}
-.landing .enter a:hover { background: #ccc; text-decoration: none; }
+.landing .enter a { color: var(--bg); background: var(--fg); padding: 8px 24px; font-weight: 600; font-size: 14px; }
+.landing .enter a:hover { opacity: 0.8; text-decoration: none; }
 
 .register-section { padding: 48px 0; }
-.register-desc { color: #888; margin-bottom: 24px; font-size: 14px; }
+.register-desc { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
 .form-row { margin: 12px 0; display: flex; align-items: center; gap: 12px; }
-.form-row label { color: #666; width: 80px; flex-shrink: 0; font-size: 14px; }
-.form-row input {
-    background: #111; color: #fff; border: 1px solid #222;
+.form-row label { color: var(--muted); width: 80px; flex-shrink: 0; font-size: 14px; }
+.form-row input, textarea.form-input {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--line);
     padding: 8px 12px; font-family: inherit; font-size: 14px; flex: 1; max-width: 360px;
 }
-.form-row input:focus { border-color: #666; outline: none; }
-.btn {
-    background: #fff; color: #000; border: none;
-    padding: 8px 20px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600;
-}
-.btn:hover { background: #ccc; }
+.form-row input:focus, textarea.form-input:focus { border-color: var(--muted); outline: none; }
+.btn { background: var(--fg); color: var(--bg); border: none; padding: 8px 20px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; }
+.btn:hover { opacity: 0.8; }
 .github-btn { display: inline-block; padding: 10px 24px; text-decoration: none; }
-.msg { padding: 12px; margin: 12px 0; border: 1px solid #222; font-size: 14px; }
-.msg.ok { border-color: #fff; color: #fff; }
-.msg.err { border-color: #666; color: #888; }
+.msg { padding: 12px; margin: 12px 0; border: 1px solid var(--line); font-size: 14px; }
+.msg.ok { border-color: var(--fg); }
+.msg.err { color: var(--muted); }
+.theme-toggle { cursor: pointer; background: none; border: none; color: var(--muted); font-size: 16px; padding: 0; }
+
+@media (max-width: 700px) { .wrap { width: auto; min-width: 0; } }
 """
 
 
@@ -375,11 +373,13 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
         user_avatar = _avatar_url(user, 20)
         right = (
             f"<div class='nav-right'>"
+            f"<button class='theme-toggle' onclick='toggleTheme()' title='Toggle theme'>&#9790;</button>"
             f"<div class='nav-dropdown'>"
-            f"<a class='nav-dropdown-toggle'><img src='{escape(user_avatar)}' alt=''> {display} ▾</a>"
+            f"<a class='nav-dropdown-toggle'><img src='{escape(user_avatar)}' alt=''> {display} &#9662;</a>"
             f"<div class='nav-dropdown-menu'>"
             f"<a href='/blog/{escape(uname)}'>{t(lang, 'my_page')}</a>"
             f"<a href='/submit{lp}'>{t(lang, 'submit')}</a>"
+            f"<a href='/settings{lp}'>{t(lang, 'settings')}</a>"
             f"<a href='?lang={tl}'>{t(lang, 'lang_switch')}</a>"
             f"<a href='/logout'>{t(lang, 'logout')}</a>"
             f"</div></div></div>"
@@ -387,22 +387,35 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
     else:
         right = (
             f"<div class='nav-right'>"
+            f"<button class='theme-toggle' onclick='toggleTheme()' title='Toggle theme'>&#9790;</button>"
             f"<a href='/login{lp}'>{t(lang, 'login')}</a>"
             f"</div>"
         )
+    theme_js = (
+        "<script>"
+        "(function(){var t=localStorage.getItem('theme')||'dark';"
+        "if(t==='light')document.documentElement.setAttribute('data-theme','light')})();"
+        "function toggleTheme(){"
+        "var d=document.documentElement,c=d.getAttribute('data-theme')==='light'?'':'light';"
+        "d.setAttribute('data-theme',c);localStorage.setItem('theme',c||'dark')}"
+        "</script>"
+    )
     return (
         f"<!DOCTYPE html><html lang='{html_lang}'><head>"
         f"<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-        f"<title>{escape(title)} — cnb</title>"
+        f"<title>{escape(title)} — Cnb Blog</title>"
         f"<style>{_CSS}</style>"
         "<link rel='stylesheet' href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css'>"
+        f"{theme_js}"
         "</head><body>"
-        f"<nav class='nav'>"
-        f"<a href='https://c-n-b.space'>cnb</a>"
+        f"<nav class='nav'><div class='wrap' style='display:flex;align-items:center;gap:24px;height:48px'>"
+        f"<a class='nav-brand' href='/posts{lp}'>Cnb Blog</a>"
         f"<a href='/posts{lp}'>{t(lang, 'posts')}</a>"
         f"{right}"
-        f"</nav>"
+        f"</div></nav>"
+        f"<div class='wrap'>"
         f"{body}"
+        f"</div>"
         "<script src='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js'></script>"
         "<script>hljs.highlightAll()</script>"
         "</body></html>"
@@ -483,13 +496,16 @@ def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: 
 
 
 def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh", user: dict | None = None) -> str:
+    bio = profile_user.get('bio', '')
+    bio_html = f"<div class='profile-bio'>{escape(bio)}</div>" if bio else ""
     profile = (
         "<div class='profile'>"
         f"<img class='profile-avatar' src='{escape(_avatar_url(dict(profile_user), 48))}' alt=''>"
+        f"<div>"
         f"<div class='profile-name'>{escape(profile_user['display_name'])}</div>"
         f"<div class='profile-username'>@{escape(profile_user['username'])}</div>"
-        f"<div class='profile-bio'>{escape(profile_user.get('bio', ''))}</div>"
-        "<div style='clear:both'></div>"
+        f"{bio_html}"
+        f"</div>"
         "</div>"
     )
 
@@ -630,6 +646,28 @@ def register_page(lang: str = "zh", error: str = "") -> str:
         "</section>"
     )
     return _page_wrap(t(lang, "reg_title"), body, lang)
+
+
+def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", msg: str = "") -> str:
+    if not user:
+        return _page_wrap(t(lang, "settings"), f"<section class='register-section'><p><a href='/login'>{t(lang, 'login')}</a></p></section>", lang)
+    lp = _lang_param(lang)
+    msg_html = f"<div class='msg ok'>{escape(msg)}</div>" if msg else ""
+    body = (
+        "<section class='register-section'>"
+        f"<h2>{t(lang, 'settings')}</h2>"
+        f"{msg_html}"
+        f"<form method='POST' action='/settings{lp}'>"
+        f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
+        f"<div class='form-row'><label>{t(lang, 'reg_display')}</label>"
+        f"<input name='display_name' value='{escape(user.get('display_name', ''))}'></div>"
+        f"<div class='form-row'><label>{t(lang, 'reg_bio')}</label>"
+        f"<input name='bio' value='{escape(user.get('bio', ''))}'></div>"
+        f"<div class='form-row'><label></label><button class='btn' type='submit'>{t(lang, 'settings_save')}</button></div>"
+        "</form>"
+        "</section>"
+    )
+    return _page_wrap(t(lang, "settings"), body, lang, user)
 
 
 def error_page(status: int, message: str, lang: str = "zh", user: dict | None = None) -> str:
