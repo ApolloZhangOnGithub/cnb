@@ -19,7 +19,8 @@ from lib.crypto import (
     unseal_b64,
 )
 
-REGISTRY_DIR = Path(os.environ.get("CNB_REGISTRY_DIR", Path(__file__).resolve().parent.parent / "registry"))
+from lib.paths import REGISTRY_DIR as _DEFAULT_REGISTRY_DIR
+REGISTRY_DIR = Path(os.environ.get("CNB_REGISTRY_DIR", _DEFAULT_REGISTRY_DIR))
 PUBKEYS_FILE = Path(os.environ.get("CNB_PUBKEYS_FILE", REGISTRY_DIR / "pubkeys.json"))
 
 

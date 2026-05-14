@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
-SITE = ROOT / "site"
+SITE = ROOT / "sites" / "home"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 CONTRIBUTING_URL = "https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md"
 LOCAL_ATTRS = {
