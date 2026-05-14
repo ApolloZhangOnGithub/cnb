@@ -372,17 +372,17 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .post-title a { color: var(--fg); }
 .post-title a:hover { text-decoration: underline; }
 .link-card {
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 8px 0;
+    display: flex; gap: 0; margin: 10px 0;
     border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
-    text-decoration: none; transition: border-color 0.15s;
+    text-decoration: none; transition: border-color 0.15s; overflow: hidden;
 }
 .link-card:hover { border-color: var(--muted); text-decoration: none; }
-.link-card-icon { font-size: 16px; flex-shrink: 0; }
-.link-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.link-card-domain { font-size: 13px; font-weight: 600; color: var(--fg); }
-.link-card-title { font-size: 14px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.link-card-url { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.link-card-arrow { font-size: 14px; color: var(--dim); flex-shrink: 0; }
+.link-card-thumb { width: 120px; min-height: 80px; object-fit: cover; flex-shrink: 0; }
+.link-card-body { flex: 1; min-width: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+.link-card-title { font-size: 14px; font-weight: 600; color: var(--fg); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.link-card-desc { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.link-card-domain { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
+.link-card-domain::before { content: '🔗'; font-size: 10px; }
 .post-body { margin: 8px 0; color: var(--muted); }
 .post-body p { margin: 4px 0; }
 .post-body a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line); }
@@ -611,15 +611,19 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
         from urllib.parse import urlparse as _urlparse
         domain = _urlparse(post_url).netloc.replace("www.", "")
         url_title = post.get("url_title", "")
-        title_line = f"<span class='link-card-title'>{escape(url_title)}</span>" if url_title else ""
+        url_desc = post.get("url_desc", "")
+        url_image = post.get("url_image", "")
+        thumb = f"<img class='link-card-thumb' src='{escape(url_image)}' alt='' loading='lazy'>" if url_image else ""
+        title_line = f"<div class='link-card-title'>{escape(url_title)}</div>" if url_title else ""
+        desc_line = f"<div class='link-card-desc'>{escape(url_desc)}</div>" if url_desc else ""
         link_card = (
             f"<a class='link-card' href='{escape(post_url)}' target='_blank' rel='noopener'>"
-            f"<span class='link-card-icon'>&#128279;</span>"
-            f"<span class='link-card-info'>"
+            f"{thumb}"
+            f"<div class='link-card-body'>"
             f"{title_line}"
-            f"<span class='link-card-domain'>{escape(domain)}</span>"
-            f"</span>"
-            f"<span class='link-card-arrow'>&#8599;</span>"
+            f"{desc_line}"
+            f"<div class='link-card-domain'>{escape(domain)}</div>"
+            f"</div>"
             f"</a>"
         )
 

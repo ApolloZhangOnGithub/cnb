@@ -49,15 +49,33 @@ from lib.blog_html import (
 MAX_BODY_BYTES = 1_048_576
 
 
-class _TitleParser(HTMLParser):
+class _MetaParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self._in_title = False
         self.title = ""
+        self.og_title = ""
+        self.og_desc = ""
+        self.og_image = ""
+        self.meta_desc = ""
 
     def handle_starttag(self, tag, attrs):
         if tag.lower() == "title":
             self._in_title = True
+            return
+        if tag.lower() == "meta":
+            d = {k.lower(): v for k, v in attrs}
+            prop = d.get("property", "")
+            name = d.get("name", "")
+            content = d.get("content", "")
+            if prop == "og:title":
+                self.og_title = content
+            elif prop == "og:description":
+                self.og_desc = content
+            elif prop == "og:image":
+                self.og_image = content
+            elif name == "description" and not self.meta_desc:
+                self.meta_desc = content
 
     def handle_endtag(self, tag):
         if tag.lower() == "title":
@@ -88,7 +106,7 @@ def _is_safe_url(url: str) -> bool:
         return False
 
 
-def _fetch_url_title(url: str, db, post_id: int) -> None:
+def _fetch_url_meta(url: str, db, post_id: int) -> None:
     if not _is_safe_url(url):
         return
     try:
@@ -99,12 +117,17 @@ def _fetch_url_title(url: str, db, post_id: int) -> None:
             content_type = resp.headers.get("Content-Type", "")
             if "text/html" not in content_type:
                 return
-            raw = resp.read(64000).decode("utf-8", errors="replace")
-        parser = _TitleParser()
-        parser.feed(raw)
-        title = parser.title.strip()[:200]
+            raw = resp.read(128000).decode("utf-8", errors="replace")
+        p = _MetaParser()
+        p.feed(raw)
+        title = (p.og_title or p.title).strip()[:200]
+        desc = (p.og_desc or p.meta_desc).strip()[:300]
+        image = p.og_image.strip()
+        if image and not image.startswith("http"):
+            from urllib.parse import urljoin
+            image = urljoin(url, image)
         if title:
-            db.set_url_title(post_id, title)
+            db.set_url_meta(post_id, title, desc, image)
     except Exception:
         pass
 DEFAULT_PORT = 8080
@@ -599,7 +622,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             body = ""
         post_id = self.server.db.create_post(user["id"], body, title, url=url)
         if url:
-            threading.Thread(target=_fetch_url_title, args=(url, self.server.db, post_id), daemon=True).start()
+            threading.Thread(target=_fetch_url_meta, args=(url, self.server.db, post_id), daemon=True).start()
         self._redirect(f"/blog/{user['username']}/{post_id}")
 
     def _handle_form_comment(self, post_id: int, lang: str) -> None:
@@ -793,7 +816,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
         post_id = self.server.db.create_post(user["id"], text or "", title, url=url)
         if url:
-            threading.Thread(target=_fetch_url_title, args=(url, self.server.db, post_id), daemon=True).start()
+            threading.Thread(target=_fetch_url_meta, args=(url, self.server.db, post_id), daemon=True).start()
         self._send_json(HTTPStatus.CREATED, {"id": post_id})
 
     def _handle_update_post(self, post_id: int) -> None:

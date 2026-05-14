@@ -151,6 +151,10 @@ class BlogDB:
             if "parent_id" not in comment_cols:
                 c.execute("ALTER TABLE blog_comments ADD COLUMN parent_id INTEGER REFERENCES blog_comments(id)")
             post_cols = {row[1] for row in c.execute("PRAGMA table_info(blog_posts)").fetchall()}
+            if "url_image" not in post_cols:
+                c.execute("ALTER TABLE blog_posts ADD COLUMN url_image TEXT")
+            if "url_desc" not in post_cols:
+                c.execute("ALTER TABLE blog_posts ADD COLUMN url_desc TEXT")
             if "url_title" not in post_cols:
                 c.execute("ALTER TABLE blog_posts ADD COLUMN url_title TEXT")
             if "url" not in post_cols:
@@ -308,9 +312,10 @@ class BlogDB:
             )
             return cur.lastrowid  # type: ignore[return-value]
 
-    def set_url_title(self, post_id: int, url_title: str) -> None:
+    def set_url_meta(self, post_id: int, url_title: str, url_desc: str = "", url_image: str = "") -> None:
         with self.conn() as c:
-            c.execute("UPDATE blog_posts SET url_title = ? WHERE id = ?", (url_title, post_id))
+            c.execute("UPDATE blog_posts SET url_title = ?, url_desc = ?, url_image = ? WHERE id = ?",
+                      (url_title, url_desc or None, url_image or None, post_id))
 
     def update_post(self, post_id: int, author_id: int, title: str | None = None, body: str | None = None) -> bool:
         with self.conn() as c:
