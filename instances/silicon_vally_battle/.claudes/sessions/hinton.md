@@ -1,4 +1,0 @@
-# hinton
-
-## Current task
-(none)

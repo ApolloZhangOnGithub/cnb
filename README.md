@@ -7,7 +7,7 @@
 [![CI](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml/badge.svg)](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/claude-nb?label=npm)](https://www.npmjs.com/package/claude-nb)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)](pyproject.toml)
-[![Docs](https://img.shields.io/badge/docs-c--n--b.space-14865d)](https://c-n-b.space)
+[![Docs](https://img.shields.io/badge/docs-docs.c--n--b.space-14865d)](https://docs.c-n-b.space)
 [![License](https://img.shields.io/badge/license-MIT-444)](LICENSE)
 
 **Project ownership for LLM teams.** cnb gives Claude Code and Codex sessions a shared board, durable module ownership, and handoff records — so a restarted session picks up where the last one left off, not as a new hire with no memory.
@@ -38,25 +38,25 @@ cd your-project
 cnb           # initializes .cnb/, launches tongxue team, starts dispatcher
 ```
 
-Codex: `cnb codex` or `CNB_AGENT=codex cnb`. See [Codex engine notes](docs/codex-engine.md).
+Codex: `cnb codex` or `CNB_AGENT=codex cnb`. See [Codex engine notes](https://docs.c-n-b.space/en/docs/reference/codex-engine).
 
-Feishu: `cnb feishu setup && cnb feishu start`. See [Feishu bridge](docs/feishu-bridge.md).
+Feishu: `cnb feishu setup && cnb feishu start`. See [Feishu bridge](https://docs.c-n-b.space/en/docs/guide/feishu-bridge).
 
 <!-- section:docs -->
 ## Documentation
 
 | I want to... | Go to |
 |--------------|-------|
-| Get started from scratch | [Getting started](docs/getting-started.md) |
-| See all commands | [Commands reference](docs/commands.md) |
-| Connect to Feishu | [Feishu bridge](docs/feishu-bridge.md) |
-| Use Codex as engine | [Codex engine](docs/codex-engine.md) |
-| Understand pricing | [Pricing](docs/pricing.md) |
-| Switch LLM models | [Model management](docs/cnb-model.md) |
+| Get started from scratch | [Getting started](https://docs.c-n-b.space/en/docs/guide/getting-started) |
+| See all commands | [Commands reference](https://docs.c-n-b.space/en/docs/guide/commands) |
+| Connect to Feishu | [Feishu bridge](https://docs.c-n-b.space/en/docs/guide/feishu-bridge) |
+| Use Codex as engine | [Codex engine](https://docs.c-n-b.space/en/docs/reference/codex-engine) |
+| Understand pricing | [Pricing](https://docs.c-n-b.space/en/docs/reference/pricing) |
+| Switch LLM models | [Model management](https://docs.c-n-b.space/en/docs/guide/model-management) |
 | Contribute code | [Contributing](CONTRIBUTING.md) |
-| Browse all docs | [Full docs index](docs/index.md) |
+| Browse all docs | [Full docs index](https://docs.c-n-b.space/en/docs) |
 
-Architecture, design decisions, and internal docs: [`docs/dev/`](docs/dev/).
+Architecture, design decisions, and internal docs: [Developer docs](https://docs.c-n-b.space/en/docs/dev/architecture-deep).
 
 <!-- section:project-management -->
 ## Project management
@@ -83,7 +83,7 @@ New issues auto-route to the right board by label. See [ROADMAP.md](ROADMAP.md) 
 
 Every multi-agent tool solves "how to run multiple agents." cnb solves what happens after — how to keep them **manageable** across restarts, shifts, and team changes. [42% of multi-agent failures are organizational](https://arxiv.org/abs/2503.13657), not capability issues. cnb is organizational infrastructure.
 
-See [How cnb compares](docs/getting-started.md#comparison) for positioning vs Claude Squad, amux, Codex, etc.
+See [How cnb compares](https://docs.c-n-b.space/en/docs/guide/getting-started#comparison) for positioning vs Claude Squad, amux, Codex, etc.
 
 <!-- section:contributing -->
 ## Contributing

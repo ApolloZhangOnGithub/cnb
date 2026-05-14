@@ -49,9 +49,9 @@ deploy_docs() {
   local remote="/opt/cnb-docs/site"
   backup docs "$remote"
   echo "=== build docs ==="
-  (cd docs-site && rm -rf .next && npm run build)
+  (cd sites/docs && rm -rf .next && npm run build)
   echo "=== deploy docs ==="
-  rsync -az --delete docs-site/out/ "$SERVER:${remote}/"
+  rsync -az --delete sites/docs/out/ "$SERVER:${remote}/"
   echo "OK docs deployed"
 }
 
@@ -59,7 +59,7 @@ deploy_site() {
   local remote="/opt/cnb-site"
   backup site "$remote"
   echo "=== deploy site ==="
-  rsync -az site/ "$SERVER:${remote}/"
+  rsync -az sites/home/ "$SERVER:${remote}/"
   echo "OK site deployed"
 }
 

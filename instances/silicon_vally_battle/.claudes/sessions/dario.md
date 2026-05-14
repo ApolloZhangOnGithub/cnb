@@ -1,4 +1,0 @@
-# dario
-
-## Current task
-(none)

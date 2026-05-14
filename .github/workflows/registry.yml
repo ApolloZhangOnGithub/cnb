@@ -3,12 +3,12 @@ name: Registry Chain Guard
 on:
   pull_request:
     paths:
-      - 'registry/**'
+      - 'config/registry/**'
       - 'bin/registry'
   push:
     branches: [master]
     paths:
-      - 'registry/**'
+      - 'config/registry/**'
 
 jobs:
   verify-chain:
@@ -31,7 +31,7 @@ jobs:
         run: |
           git fetch origin ${{ github.base_ref }}
           base_sha=$(git merge-base HEAD origin/${{ github.base_ref }})
-          modified=$(git diff --name-only "$base_sha" HEAD -- 'registry/*.json' | while read f; do
+          modified=$(git diff --name-only "$base_sha" HEAD -- 'config/registry/*.json' | while read f; do
             if git show "$base_sha:$f" >/dev/null 2>&1; then
               echo "$f"
             fi
@@ -65,8 +65,8 @@ jobs:
         run: |
           git config user.name "Claude Meridian"
           git config user.email "noreply@anthropic.com"
-          git diff --quiet registry/README.md && exit 0
-          git add registry/README.md
+          git diff --quiet config/registry/README.md && exit 0
+          git add config/registry/README.md
           git commit -m "Sync registry chain table
 
           Co-Authored-By: Claude Meridian <noreply@anthropic.com>"

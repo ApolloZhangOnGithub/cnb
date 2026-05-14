@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from lib.paths import REGISTRY_DIR
+
 SENSITIVE_FILENAMES = re.compile(
     r"(?i)"
     r"("
@@ -58,7 +60,7 @@ SKIP_EXTENSIONS = frozenset(
 
 SKIP_PATHS = frozenset(
     {
-        "registry/pubkeys.json",
+        str(REGISTRY_DIR / "pubkeys.json"),
         "tests/",
         "lib/crypto.py",
     }

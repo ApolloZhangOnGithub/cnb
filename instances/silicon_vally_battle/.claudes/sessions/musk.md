@@ -1,4 +1,0 @@
-# musk
-
-## Current task
-(none)

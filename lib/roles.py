@@ -98,7 +98,8 @@ _ROLE_MAP: dict[str, str] = {
 
 
 def _roles_dir() -> Path:
-    return Path(__file__).resolve().parent.parent / "roles"
+    from lib.paths import ROLES_DIR
+    return ROLES_DIR
 
 
 def _str_tuple(value: Any) -> tuple[str, ...]:

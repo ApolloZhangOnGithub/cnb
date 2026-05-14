@@ -1,0 +1,275 @@
+# CNB Skill Registry — discoverable, installable, invocable
+#
+# Skills come from three sources:
+#   1. Built-in (shipped with cnb, no install needed)
+#   2. Lark CLI (npm install -g @lark-ai/lark-cli)
+#   3. External (git repos, pip packages, standalone tools)
+#
+# To register a new skill, add an entry below and open a PR.
+
+skills:
+  # ── cnb built-in ──
+  - name: cnb-core
+    display: CNB 核心
+    category: cnb
+    builtin: true
+    desc: 团队总览、状态查看、消息历史、模型切换、配置管理
+    cmds:
+      - /cnb
+      - /cnb-status
+      - /cnb-model
+      - /cnb-watch
+      - /cnb-pending
+      - /cnb-history
+      - /cnb-update
+      - /cnb-config
+      - /cnb-supervisor
+      - /cnb-help
+      - /cnb-skills
+
+  # ── lark (飞书) ──
+  - name: lark-base
+    display: 飞书多维表格
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 飞书 Base 操作 — 搜索、建表、字段、记录、视图
+    cmds:
+      - lark-base
+
+  - name: lark-im
+    display: 飞书即时通讯
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 收发消息、管理群聊、搜索聊天记录、文件传输
+    cmds:
+      - lark-im
+
+  - name: lark-doc
+    display: 飞书云文档
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 创建编辑飞书文档、搜索云空间、上传下载文件
+    cmds:
+      - lark-doc
+
+  - name: lark-calendar
+    display: 飞书日历
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 日程管理、会议室预定、忙闲查询
+    cmds:
+      - lark-calendar
+
+  - name: lark-task
+    display: 飞书任务
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 任务管理、清单、智能体
+    cmds:
+      - lark-task
+
+  - name: lark-drive
+    display: 飞书云空间
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 文件管理、权限、评论、导入导出
+    cmds:
+      - lark-drive
+
+  - name: lark-sheets
+    display: 飞书电子表格
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 电子表格读写、工作表管理、导出
+    cmds:
+      - lark-sheets
+
+  - name: lark-wiki
+    display: 飞书知识库
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 知识空间管理、文档节点、成员权限
+    cmds:
+      - lark-wiki
+
+  - name: lark-mail
+    display: 飞书邮箱
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 邮件起草、收发、搜索、附件管理
+    cmds:
+      - lark-mail
+
+  - name: lark-minutes
+    display: 飞书妙记
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 会议录制转写、纪要、章节、待办
+    cmds:
+      - lark-minutes
+
+  - name: lark-vc
+    display: 飞书视频会议
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 会议记录查询、纪要产物
+    cmds:
+      - lark-vc
+
+  - name: lark-approval
+    display: 飞书审批
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 审批实例与任务管理
+    cmds:
+      - lark-approval
+
+  - name: lark-markdown
+    display: 飞书 Markdown
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: Markdown 文件创建、编辑、上传
+    cmds:
+      - lark-markdown
+
+  - name: lark-slides
+    display: 飞书幻灯片
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 演示文稿创建与编辑
+    cmds:
+      - lark-slides
+
+  - name: lark-whiteboard
+    display: 飞书画板
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 画板查看、导出、DSL/PlantUML 编辑
+    cmds:
+      - lark-whiteboard
+
+  - name: lark-contact
+    display: 飞书通讯录
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 员工查询、open_id 解析
+    cmds:
+      - lark-contact
+
+  - name: lark-okr
+    display: 飞书 OKR
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 目标与关键结果管理
+    cmds:
+      - lark-okr
+
+  - name: lark-attendance
+    display: 飞书考勤
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 考勤打卡记录查询
+    cmds:
+      - lark-attendance
+
+  - name: lark-event
+    display: 飞书事件订阅
+    category: lark
+    install: npm install -g @lark-ai/lark-cli
+    desc: 实时事件流消费（消息、表情、群成员变更）
+    cmds:
+      - lark-event
+
+  # ── breadboard / standalone tools ──
+  - name: fetch-bilibili
+    display: B站下载器
+    category: media
+    repo: https://github.com/ApolloZhangOnGithub/Breadboard
+    path: fetch_bilibili/
+    desc: B站视频与字幕下载
+    cmds:
+      - (python script)
+
+  - name: fetch-youtube
+    display: YouTube下载器
+    category: media
+    repo: https://github.com/ApolloZhangOnGithub/Breadboard
+    path: fetch_youtube/
+    desc: YouTube 视频与字幕下载
+    cmds:
+      - (python script)
+
+  - name: subtitle-extraction
+    display: 字幕提取
+    category: media
+    repo: https://github.com/ApolloZhangOnGithub/Breadboard
+    path: common/generate_artificial_subtitle/
+    desc: Vision/PaddleOCR + Whisper 字幕提取
+    cmds:
+      - (python script)
+
+  - name: markrun
+    display: Markrun
+    category: dev
+    repo: https://github.com/ApolloZhangOnGithub/Breadboard
+    path: Markrun_(language)/
+    desc: 参数化 markdown (.mr → .md)
+    cmds:
+      - (python script)
+
+  - name: disk-optimizer
+    display: 磁盘优化
+    category: infra
+    repo: https://github.com/ApolloZhangOnGithub/disk-optimizer
+    desc: 磁盘空间分析与清理
+    cmds:
+      - (python script)
+
+  # ── Claude Code built-in ──
+  - name: init
+    display: 项目初始化
+    category: builtin
+    builtin: true
+    desc: 为新项目生成 CLAUDE.md
+    cmds:
+      - /init
+
+  - name: review
+    display: PR 评审
+    category: builtin
+    builtin: true
+    desc: 审查 Pull Request
+    cmds:
+      - /review
+
+  - name: security-review
+    display: 安全审查
+    category: builtin
+    builtin: true
+    desc: 对当前分支变更进行安全审查
+    cmds:
+      - /security-review
+
+  - name: claude-api
+    display: Claude API SDK
+    category: builtin
+    builtin: true
+    desc: 构建与调试 Claude API / Anthropic SDK 应用
+    cmds:
+      - (built-in skill)
+
+  - name: simplify
+    display: 代码审查优化
+    category: builtin
+    builtin: true
+    desc: 审查代码复用性、质量与效率
+    cmds:
+      - /simplify
+
+  - name: loop
+    display: 循环任务
+    category: builtin
+    builtin: true
+    desc: 定时重复执行命令
+    cmds:
+      - /loop

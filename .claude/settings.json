@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_BASH_COMMAND=\"$TOOL_INPUT\" bash .claude/hooks/pre-deploy-backup.sh"
+          }
+        ]
+      }
+    ],
     "PostToolBatch": [
       {
         "matcher": "",

@@ -1,4 +1,0 @@
-# sutskever
-
-## Current task
-(none)

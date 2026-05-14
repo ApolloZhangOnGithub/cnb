@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolBatch": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -n \"$CLAUDE_SESSION_NAME\" ]; then unread=$(/Users/zhangkezhen/Desktop/claudes-code/bin/board --as $CLAUDE_SESSION_NAME inbox 2>/dev/null | grep -oE '[0-9]+ 条未读' | head -1); [ -n \"$unread\" ] && echo \"[inbox] $unread\" || true; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

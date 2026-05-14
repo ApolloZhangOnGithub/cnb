@@ -1,4 +1,0 @@
-# lecun
-
-## Current task
-(none)

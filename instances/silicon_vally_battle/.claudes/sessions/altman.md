@@ -1,4 +1,0 @@
-# altman
-
-## Current task
-(none)

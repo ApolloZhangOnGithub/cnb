@@ -6,9 +6,12 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from lib.paths import REGISTRY_DIR
 
 
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -33,7 +36,8 @@ def file_exists_at(ref: str, path: str) -> bool:
 
 
 def changed_registry_json(base_sha: str) -> list[str]:
-    result = git("diff", "--name-only", base_sha, "HEAD", "--", "registry/*.json")
+    rel = REGISTRY_DIR.relative_to(ROOT)
+    result = git("diff", "--name-only", base_sha, "HEAD", "--", f"{rel}/*.json")
     return [line for line in result.stdout.splitlines() if line]
 
 

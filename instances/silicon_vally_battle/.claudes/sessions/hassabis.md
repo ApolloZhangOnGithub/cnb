@@ -1,4 +1,0 @@
-# hassabis
-
-## Current task
-(none)

@@ -7,7 +7,7 @@
 [![CI](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml/badge.svg)](https://github.com/ApolloZhangOnGithub/cnb/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/claude-nb?label=npm)](https://www.npmjs.com/package/claude-nb)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)](pyproject.toml)
-[![Docs](https://img.shields.io/badge/docs-c--n--b.space-14865d)](https://c-n-b.space)
+[![Docs](https://img.shields.io/badge/docs-docs.c--n--b.space-14865d)](https://docs.c-n-b.space)
 [![License](https://img.shields.io/badge/license-MIT-444)](LICENSE)
 
 **LLM 团队的项目 ownership。** cnb 为 Claude Code 和 Codex 会话提供共享看板、持久化模块 ownership 和交接记录——重启后的会话能接续上一个的工作，而不是一个什么都不知道的新人。
@@ -38,25 +38,25 @@ cd your-project
 cnb           # 初始化 .cnb/、启动同学团队、启动 dispatcher
 ```
 
-Codex：`cnb codex` 或 `CNB_AGENT=codex cnb`。详见 [Codex 引擎](docs/codex-engine.md)。
+Codex：`cnb codex` 或 `CNB_AGENT=codex cnb`。详见 [Codex 引擎](https://docs.c-n-b.space/zh/docs/reference/codex-engine)。
 
-飞书：`cnb feishu setup && cnb feishu start`。详见 [飞书 bridge](docs/feishu-bridge.md)。
+飞书：`cnb feishu setup && cnb feishu start`。详见 [飞书 bridge](https://docs.c-n-b.space/zh/docs/guide/feishu-bridge)。
 
 <!-- section:docs -->
 ## 文档
 
 | 我想要... | 去哪里 |
 |-----------|--------|
-| 从零开始 | [快速上手](docs/getting-started.md) |
-| 查看所有命令 | [命令参考](docs/commands.md) |
-| 连接飞书 | [飞书 bridge](docs/feishu-bridge.md) |
-| 使用 Codex 引擎 | [Codex 引擎](docs/codex-engine.md) |
-| 了解定价 | [定价](docs/pricing.md) |
-| 切换 LLM 模型 | [模型管理](docs/cnb-model.md) |
+| 从零开始 | [快速上手](https://docs.c-n-b.space/zh/docs/guide/getting-started) |
+| 查看所有命令 | [命令参考](https://docs.c-n-b.space/zh/docs/guide/commands) |
+| 连接飞书 | [飞书 bridge](https://docs.c-n-b.space/zh/docs/guide/feishu-bridge) |
+| 使用 Codex 引擎 | [Codex 引擎](https://docs.c-n-b.space/zh/docs/reference/codex-engine) |
+| 了解定价 | [定价](https://docs.c-n-b.space/zh/docs/reference/pricing) |
+| 切换 LLM 模型 | [模型管理](https://docs.c-n-b.space/zh/docs/guide/model-management) |
 | 贡献代码 | [贡献指南](CONTRIBUTING.md) |
-| 浏览全部文档 | [完整文档索引](docs/index.md) |
+| 浏览全部文档 | [完整文档索引](https://docs.c-n-b.space/zh/docs) |
 
-架构、设计决策和内部文档：[`docs/dev/`](docs/dev/)。
+架构、设计决策和内部文档：[开发者文档](https://docs.c-n-b.space/zh/docs/dev/architecture-deep)。
 
 <!-- section:project-management -->
 ## 项目管理
@@ -83,7 +83,7 @@ GitHub Issues 是所有工作的唯一真相源。5 个 Project Board 按模块�
 
 所有多 agent 工具都在解决"怎么跑多个 agent"。cnb 解决的是之后的事——怎么让它们跨重启、跨班次、跨团队变动保持**可管理**。[42% 的多 agent 失败是组织问题](https://arxiv.org/abs/2503.13657)，不是能力问题。cnb 是组织基础设施。
 
-与 Claude Squad、amux、Codex 等的对比见 [快速上手](docs/getting-started.md#comparison)。
+与 Claude Squad、amux、Codex 等的对比见 [快速上手](https://docs.c-n-b.space/zh/docs/guide/getting-started#comparison)。
 
 <!-- section:contributing -->
 ## 贡献

@@ -10,7 +10,8 @@ from pathlib import Path
 
 
 def _migrations_dir(claudes_home: Path) -> Path:
-    d = claudes_home / "migrations"
+    from lib.paths import MIGRATIONS_DIR
+    d = MIGRATIONS_DIR
     if not d.is_dir():
         print(f"FATAL: migrations directory not found: {d}", file=sys.stderr)
         raise SystemExit(1)
