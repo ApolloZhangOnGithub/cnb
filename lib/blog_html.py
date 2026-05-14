@@ -371,8 +371,18 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .post-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
 .post-title a { color: var(--fg); }
 .post-title a:hover { text-decoration: underline; }
-.post-domain { font-size: 12px; color: var(--dim); font-weight: 400; margin-left: 6px; }
-.post-domain:hover { color: var(--muted); }
+.link-card {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 8px 0;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+    text-decoration: none; transition: border-color 0.15s;
+}
+.link-card:hover { border-color: var(--muted); text-decoration: none; }
+.link-card-icon { font-size: 16px; flex-shrink: 0; }
+.link-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.link-card-domain { font-size: 13px; font-weight: 600; color: var(--fg); }
+.link-card-title { font-size: 14px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-card-url { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-card-arrow { font-size: 14px; color: var(--dim); flex-shrink: 0; }
 .post-body { margin: 8px 0; color: var(--muted); }
 .post-body p { margin: 4px 0; }
 .post-body a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line); }
@@ -585,30 +595,33 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
 
     title_html = ""
     post_url = post.get("url", "")
-    if post_url:
-        from urllib.parse import urlparse as _urlparse
-        domain = _urlparse(post_url).netloc.replace("www.", "")
-        domain_html = f"<a class='post-domain' href='{escape(post_url)}'>({escape(domain)})</a>"
-    else:
-        domain_html = ""
 
     if post.get("title"):
+        post_id = post.get("id", "")
+        local_href = f"/blog/{escape(post['username'])}/{post_id}" if post_id else ""
         if full:
-            if post_url:
-                title_html = f"<div class='post-title'><a href='{escape(post_url)}'>{escape(post['title'])}</a>{domain_html}</div>"
-            else:
-                title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
+            title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
+        elif local_href:
+            title_html = f"<div class='post-title'><a href='{local_href}'>{escape(post['title'])}</a></div>"
         else:
-            post_id = post.get("id", "")
-            local_href = f"/blog/{escape(post['username'])}/{post_id}" if post_id else ""
-            if post_url:
-                title_html = f"<div class='post-title'><a href='{escape(post_url)}'>{escape(post['title'])}</a>{domain_html}</div>"
-                if local_href:
-                    title_html += f"<div style='font-size:12px'><a href='{local_href}' style='color:var(--dim)'>{t(lang, 'comments')}</a></div>"
-            elif local_href:
-                title_html = f"<div class='post-title'><a href='{local_href}'>{escape(post['title'])}</a></div>"
-            else:
-                title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
+            title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
+
+    link_card = ""
+    if post_url and full:
+        from urllib.parse import urlparse as _urlparse
+        domain = _urlparse(post_url).netloc.replace("www.", "")
+        url_title = post.get("url_title", "")
+        title_line = f"<span class='link-card-title'>{escape(url_title)}</span>" if url_title else ""
+        link_card = (
+            f"<a class='link-card' href='{escape(post_url)}' target='_blank' rel='noopener'>"
+            f"<span class='link-card-icon'>&#128279;</span>"
+            f"<span class='link-card-info'>"
+            f"{title_line}"
+            f"<span class='link-card-domain'>{escape(domain)}</span>"
+            f"</span>"
+            f"<span class='link-card-arrow'>&#8599;</span>"
+            f"</a>"
+        )
 
     body_text = post["body"]
     if full:
@@ -638,11 +651,11 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
     if thumb_html:
         return (
             f"<div class='post post-with-thumb'>"
-            f"<div class='post-content'>{meta}{title_html}{body_html}{stats}</div>"
+            f"<div class='post-content'>{meta}{title_html}{link_card}{body_html}{stats}</div>"
             f"{thumb_html}"
             f"</div>"
         )
-    return f"<div class='post'>{meta}{title_html}{body_html}{stats}</div>"
+    return f"<div class='post'>{meta}{title_html}{link_card}{body_html}{stats}</div>"
 
 
 # ── pages ──

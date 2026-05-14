@@ -25,6 +25,10 @@ import urllib.request
 
 from lib.blog_db import BlogDB
 
+import ipaddress
+import threading
+from html.parser import HTMLParser
+
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 from lib.blog_html import (
@@ -43,6 +47,66 @@ from lib.blog_html import (
 )
 
 MAX_BODY_BYTES = 1_048_576
+
+
+class _TitleParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self._in_title = False
+        self.title = ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "title":
+            self._in_title = True
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "title":
+            self._in_title = False
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.title += data
+
+
+def _is_safe_url(url: str) -> bool:
+    try:
+        from urllib.parse import urlparse as _up
+        parsed = _up(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = parsed.hostname or ""
+        if not host:
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+            return ip.is_global
+        except ValueError:
+            pass
+        blocked = ("localhost", "127.", "10.", "192.168.", "169.254.", "0.")
+        return not any(host.startswith(b) or host == "localhost" for b in blocked)
+    except Exception:
+        return False
+
+
+def _fetch_url_title(url: str, db, post_id: int) -> None:
+    if not _is_safe_url(url):
+        return
+    try:
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("User-Agent", "CnbBot/1.0")
+        req.add_header("Accept", "text/html")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            if "text/html" not in content_type:
+                return
+            raw = resp.read(64000).decode("utf-8", errors="replace")
+        parser = _TitleParser()
+        parser.feed(raw)
+        title = parser.title.strip()[:200]
+        if title:
+            db.set_url_title(post_id, title)
+    except Exception:
+        pass
 DEFAULT_PORT = 8080
 
 
@@ -117,7 +181,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._handle_github_callback(params, lang)
             return
         if route == "/logout":
-            self._send_html_with_headers(landing_page(lang), [("Set-Cookie", "token=; Path=/; Max-Age=0")])
+            self._send_html_with_headers(landing_page(lang), [("Set-Cookie", "token=; Path=/; Domain=.c-n-b.space; Max-Age=0")])
             return
         if route == "/submit":
             csrf = self._make_csrf(user) if user else ""
@@ -487,7 +551,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             lp = "?lang=en" if lang == "en" else ""
             dest = f"/posts{lp}"
         self._redirect(dest, [
-            ("Set-Cookie", f"token={user['token']}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000"),
+            ("Set-Cookie", f"token={user['token']}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000"),
             ("Set-Cookie", "oauth_state=; Path=/; Max-Age=0"),
             ("Set-Cookie", "oauth_redirect=; Path=/; Max-Age=0"),
         ])
@@ -513,7 +577,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         token = user["token"]
         lp = "?lang=en" if lang == "en" else ""
-        self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000")])
+        self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={token}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000")])
 
     def _handle_form_submit(self, lang: str) -> None:
         user = self._get_cookie_user()
@@ -534,8 +598,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if not body:
             body = ""
         post_id = self.server.db.create_post(user["id"], body, title, url=url)
-        post_path = str(post_id)
-        self._redirect(f"/blog/{user['username']}/{post_path}")
+        if url:
+            threading.Thread(target=_fetch_url_title, args=(url, self.server.db, post_id), daemon=True).start()
+        self._redirect(f"/blog/{user['username']}/{post_id}")
 
     def _handle_form_comment(self, post_id: int, lang: str) -> None:
         user = self._get_cookie_user()
@@ -666,7 +731,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         user = self.server.db.verify_login(username, password)
         if user:
             lp = "?lang=en" if lang == "en" else ""
-            self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={user['token']}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000")])
+            self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={user['token']}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000")])
         else:
             self._redirect(f"/login")
 
@@ -727,6 +792,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
 
         post_id = self.server.db.create_post(user["id"], text or "", title, url=url)
+        if url:
+            threading.Thread(target=_fetch_url_title, args=(url, self.server.db, post_id), daemon=True).start()
         self._send_json(HTTPStatus.CREATED, {"id": post_id})
 
     def _handle_update_post(self, post_id: int) -> None:
