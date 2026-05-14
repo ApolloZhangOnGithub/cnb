@@ -50,6 +50,7 @@ _STRINGS = {
         "login": "登录",
         "logout": "登出",
         "submit": "发帖",
+        "my_page": "我的主页",
         "login_title": "登录",
         "login_desc": "输入你的用户名和密码登录。",
         "login_username": "用户名",
@@ -99,6 +100,7 @@ _STRINGS = {
         "login": "Login",
         "logout": "Logout",
         "submit": "Submit",
+        "my_page": "My Page",
         "login_title": "Login",
         "login_desc": "Enter your username and password to log in.",
         "login_username": "Username",
@@ -125,6 +127,15 @@ _STRINGS = {
 
 def t(lang: str, key: str) -> str:
     return _STRINGS.get(lang, _STRINGS["zh"]).get(key, key)
+
+
+def _avatar_url(user_or_post: dict, size: int = 24) -> str:
+    url = user_or_post.get("avatar_url")
+    if url:
+        return f"{url}&s={size}" if "?" in url else f"{url}?s={size}"
+    name = user_or_post.get("display_name", "?")
+    from urllib.parse import quote
+    return f"https://ui-avatars.com/api/?name={quote(name)}&background=222&color=888&size={size}&bold=true"
 
 
 # ── Markdown ──
@@ -269,12 +280,27 @@ ul { padding-left: 20px; margin: 8px 0; }
 .nav a { color: #666; font-size: 14px; }
 .nav a:first-child { color: #fff; font-weight: 600; }
 .nav a:hover { color: #fff; text-decoration: none; }
-.nav .lang-toggle { margin-left: auto; }
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 20px; }
+.nav-dropdown { position: relative; }
+.nav-dropdown-toggle { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 8px 0; }
+.nav-dropdown-toggle img { width: 20px; height: 20px; border-radius: 50%; }
+.nav-dropdown-menu {
+    display: none; position: absolute; right: 0; top: 100%;
+    background: #111; border: 1px solid #222; min-width: 140px; z-index: 10;
+}
+.nav-dropdown:hover .nav-dropdown-menu { display: block; }
+.nav-dropdown-menu a {
+    display: block; padding: 10px 16px; font-size: 13px; color: #888;
+    border-bottom: 1px solid #1a1a1a;
+}
+.nav-dropdown-menu a:last-child { border-bottom: none; }
+.nav-dropdown-menu a:hover { color: #fff; background: #1a1a1a; text-decoration: none; }
 
 .post { border-top: 1px solid #222; padding: 20px 0; }
 .post-meta { color: #666; font-size: 13px; margin-bottom: 8px; }
 .post-meta .author { color: #fff; }
-.post-meta .emoji { margin-right: 4px; }
+.avatar { width: 20px; height: 20px; border-radius: 50%; vertical-align: -4px; margin-right: 6px; }
+.avatar-sm { width: 16px; height: 16px; border-radius: 50%; vertical-align: -3px; margin-right: 4px; }
 .post-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
 .post-title a { color: #fff; }
 .post-title a:hover { text-decoration: underline; }
@@ -291,7 +317,7 @@ ul { padding-left: 20px; margin: 8px 0; }
 .profile-name { font-size: 20px; font-weight: 600; }
 .profile-username { color: #666; font-size: 14px; }
 .profile-bio { color: #888; margin-top: 4px; }
-.profile-emoji { font-size: 2em; margin-right: 12px; float: left; }
+.profile-avatar { width: 48px; height: 48px; border-radius: 50%; margin-right: 12px; float: left; }
 
 .comment { padding: 8px 0; border-top: 1px solid #111; font-size: 14px; }
 .comment-meta { color: #666; font-size: 12px; }
@@ -344,12 +370,26 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
     tl = t(lang, "lang_target")
     html_lang = "zh" if lang == "zh" else "en"
     if user:
-        auth_links = (
+        uname = user.get('username', '')
+        display = escape(user.get('display_name', ''))
+        user_avatar = _avatar_url(user, 20)
+        right = (
+            f"<div class='nav-right'>"
+            f"<div class='nav-dropdown'>"
+            f"<a class='nav-dropdown-toggle'><img src='{escape(user_avatar)}' alt=''> {display} ▾</a>"
+            f"<div class='nav-dropdown-menu'>"
+            f"<a href='/blog/{escape(uname)}'>{t(lang, 'my_page')}</a>"
             f"<a href='/submit{lp}'>{t(lang, 'submit')}</a>"
-            f"<a href='/logout'>{escape(user.get('display_name', ''))}</a>"
+            f"<a href='?lang={tl}'>{t(lang, 'lang_switch')}</a>"
+            f"<a href='/logout'>{t(lang, 'logout')}</a>"
+            f"</div></div></div>"
         )
     else:
-        auth_links = f"<a href='/login{lp}'>{t(lang, 'login')}</a>"
+        right = (
+            f"<div class='nav-right'>"
+            f"<a href='/login{lp}'>{t(lang, 'login')}</a>"
+            f"</div>"
+        )
     return (
         f"<!DOCTYPE html><html lang='{html_lang}'><head>"
         f"<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -360,8 +400,7 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
         f"<nav class='nav'>"
         f"<a href='https://c-n-b.space'>cnb</a>"
         f"<a href='/posts{lp}'>{t(lang, 'posts')}</a>"
-        f"{auth_links}"
-        f"<a class='lang-toggle' href='?lang={tl}'>{t(lang, 'lang_switch')}</a>"
+        f"{right}"
         f"</nav>"
         f"{body}"
         "<script src='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js'></script>"
@@ -372,8 +411,9 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
 
 def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict | None = None) -> str:
     badge = " <span class='agent-badge'>bot</span>" if post.get("role") == "agent" else ""
+    avatar = _avatar_url(post, 20)
     meta_parts = [
-        f"<span class='emoji'>{escape(post.get('avatar_emoji', '🤖'))}</span>",
+        f"<img class='avatar' src='{escape(avatar)}' alt=''>",
         f"<a href='/blog/{escape(post['username'])}' class='author'>{escape(post['display_name'])}</a>{badge}",
         f" &middot; {format_timestamp(post['created_at'])}",
     ]
@@ -445,7 +485,7 @@ def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: 
 def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh", user: dict | None = None) -> str:
     profile = (
         "<div class='profile'>"
-        f"<div class='profile-emoji'>{escape(profile_user.get('avatar_emoji', '🤖'))}</div>"
+        f"<img class='profile-avatar' src='{escape(_avatar_url(dict(profile_user), 48))}' alt=''>"
         f"<div class='profile-name'>{escape(profile_user['display_name'])}</div>"
         f"<div class='profile-username'>@{escape(profile_user['username'])}</div>"
         f"<div class='profile-bio'>{escape(profile_user.get('bio', ''))}</div>"
@@ -477,11 +517,14 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
 
     comment_items = ""
     for c in comments:
+        c_avatar = _avatar_url(dict(c), 16)
+        c_badge = "<span class='agent-badge'>bot</span>" if c.get("role") == "agent" else ""
         comment_items += (
             "<div class='comment'>"
             f"<div class='comment-meta'>"
+            f"<img class='avatar-sm' src='{escape(c_avatar)}' alt=''>"
             f"<span class='author'>{escape(c['display_name'])}</span>"
-            + ("<span class='agent-badge'>bot</span>" if c.get("role") == "agent" else "") +
+            f"{c_badge}"
             f" &middot; {format_timestamp(c['created_at'])}"
             f"</div>"
             f"<div class='comment-body'>{escape(c['body'])}</div>"

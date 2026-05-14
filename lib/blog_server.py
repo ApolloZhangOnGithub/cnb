@@ -58,8 +58,15 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
     # ── GET ──
 
     def _get_lang(self, params: dict) -> str:
-        lang = (params.get("lang") or [""])[0]
-        return "en" if lang == "en" else "zh"
+        explicit = (params.get("lang") or [""])[0]
+        if explicit:
+            return "en" if explicit == "en" else "zh"
+        accept = self.headers.get("Accept-Language", "")
+        if accept.startswith("zh") or ",zh" in accept:
+            return "zh"
+        if accept.startswith("en") or ",en" in accept:
+            return "en"
+        return "zh"
 
     def _get_cookie_user(self) -> dict | None:
         from http.cookies import SimpleCookie

@@ -122,6 +122,8 @@ class BlogDB:
                 c.execute("ALTER TABLE blog_users ADD COLUMN role TEXT NOT NULL DEFAULT 'human'")
             if "password_hash" not in cols:
                 c.execute("ALTER TABLE blog_users ADD COLUMN password_hash TEXT")
+            if "avatar_url" not in cols:
+                c.execute("ALTER TABLE blog_users ADD COLUMN avatar_url TEXT")
             if "github_id" not in cols:
                 c.execute("ALTER TABLE blog_users ADD COLUMN github_id INTEGER")
                 c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_users_github ON blog_users(github_id) WHERE github_id IS NOT NULL")
@@ -198,6 +200,8 @@ class BlogDB:
         with self.conn() as c:
             row = c.execute("SELECT * FROM blog_users WHERE github_id = ?", (github_id,)).fetchone()
             if row:
+                if avatar_url and row["avatar_url"] != avatar_url:
+                    c.execute("UPDATE blog_users SET avatar_url = ? WHERE id = ?", (avatar_url, row["id"]))
                 return dict(row)
             token = secrets.token_urlsafe(32)
             now = _utc_now()
@@ -209,13 +213,13 @@ class BlogDB:
             if existing:
                 username = f"{login.lower()[:14]}{github_id % 100000}"
             cur = c.execute(
-                "INSERT INTO blog_users (username, display_name, avatar_emoji, bio, role, token, github_id, created_at)"
-                " VALUES (?, ?, '👤', '', 'human', ?, ?, ?)",
-                (username, display, token, github_id, now),
+                "INSERT INTO blog_users (username, display_name, avatar_emoji, bio, role, token, github_id, avatar_url, created_at)"
+                " VALUES (?, ?, '👤', '', 'human', ?, ?, ?, ?)",
+                (username, display, token, github_id, avatar_url, now),
             )
             return {
                 "id": cur.lastrowid, "username": username, "display_name": display,
-                "role": "human", "token": token, "github_id": github_id,
+                "role": "human", "token": token, "github_id": github_id, "avatar_url": avatar_url,
             }
 
     def delete_comment(self, comment_id: int) -> bool:
@@ -273,7 +277,7 @@ class BlogDB:
     def get_post(self, post_id: int) -> sqlite3.Row | None:
         with self.conn() as c:
             return c.execute(
-                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -284,7 +288,7 @@ class BlogDB:
     def get_post_by_slug(self, author_id: int, slug: str) -> sqlite3.Row | None:
         with self.conn() as c:
             return c.execute(
-                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -296,7 +300,7 @@ class BlogDB:
         with self.conn() as c:
             if before is not None:
                 return c.execute(
-                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
+                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                     " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                     " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                     " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -304,7 +308,7 @@ class BlogDB:
                     (before, limit),
                 ).fetchall()
             return c.execute(
-                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -316,7 +320,7 @@ class BlogDB:
         with self.conn() as c:
             if before is not None:
                 return c.execute(
-                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
+                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                     " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                     " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                     " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -324,7 +328,7 @@ class BlogDB:
                     (author_id, before, limit),
                 ).fetchall()
             return c.execute(
-                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
