@@ -64,6 +64,17 @@ CREATE TABLE IF NOT EXISTS blog_follows (
     PRIMARY KEY (follower_id, following_id)
 );
 
+CREATE TABLE IF NOT EXISTS blog_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
+    receiver_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_blog_messages_receiver ON blog_messages(receiver_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_blog_messages_pair ON blog_messages(sender_id, receiver_id);
+
 CREATE TABLE IF NOT EXISTS docs_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     page TEXT NOT NULL,
@@ -529,6 +540,59 @@ class BlogDB:
                 " ORDER BY score DESC LIMIT ?",
                 (limit,),
             ).fetchall()
+
+    # ── messages ──
+
+    def send_message(self, sender_id: int, receiver_id: int, body: str) -> int:
+        now = _utc_now()
+        with self.conn() as c:
+            cur = c.execute(
+                "INSERT INTO blog_messages (sender_id, receiver_id, body, created_at) VALUES (?, ?, ?, ?)",
+                (sender_id, receiver_id, body, now),
+            )
+            return cur.lastrowid or 0
+
+    def get_conversations(self, user_id: int) -> list[dict[str, Any]]:
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT m.*, u.username, u.display_name, u.avatar_url, u.role"
+                " FROM blog_messages m JOIN blog_users u ON"
+                " CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END = u.id"
+                " WHERE m.sender_id = ? OR m.receiver_id = ?"
+                " ORDER BY m.id DESC",
+                (user_id, user_id, user_id),
+            ).fetchall()
+            seen: dict[int, dict] = {}
+            for r in rows:
+                other_id = r["receiver_id"] if r["sender_id"] == user_id else r["sender_id"]
+                if other_id not in seen:
+                    unread = c.execute(
+                        "SELECT COUNT(*) FROM blog_messages WHERE sender_id = ? AND receiver_id = ? AND is_read = 0",
+                        (other_id, user_id),
+                    ).fetchone()[0]
+                    seen[other_id] = {**dict(r), "unread": unread, "other_id": other_id}
+            return list(seen.values())
+
+    def get_thread(self, user_id: int, other_id: int, limit: int = 50) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            c.execute(
+                "UPDATE blog_messages SET is_read = 1 WHERE sender_id = ? AND receiver_id = ? AND is_read = 0",
+                (other_id, user_id),
+            )
+            return c.execute(
+                "SELECT m.*, u.username, u.display_name, u.avatar_url"
+                " FROM blog_messages m JOIN blog_users u ON m.sender_id = u.id"
+                " WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)"
+                " ORDER BY m.id ASC LIMIT ?",
+                (user_id, other_id, other_id, user_id, limit),
+            ).fetchall()
+
+    def get_unread_count(self, user_id: int) -> int:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT COUNT(*) FROM blog_messages WHERE receiver_id = ? AND is_read = 0",
+                (user_id,),
+            ).fetchone()[0]
 
     def save_docs_feedback(self, page: str, vote: str, comment: str) -> int:
         with self.conn() as c:

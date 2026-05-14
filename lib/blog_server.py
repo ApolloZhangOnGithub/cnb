@@ -31,12 +31,14 @@ from lib.blog_html import (
     error_page,
     feed_page,
     follow_list_page,
+    inbox_page,
     landing_page,
     login_page,
     post_page,
     register_page,
     settings_page,
     submit_page,
+    thread_page,
     user_page,
 )
 
@@ -97,6 +99,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         lang = self._get_lang(params)
         user = self._get_cookie_user()
 
+        unread = self.server.db.get_unread_count(user["id"]) if user else 0
+
         if route == "/":
             self._send_html(landing_page(lang, user))
             return
@@ -119,6 +123,28 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             csrf = self._make_csrf(user) if user else ""
             self._send_html(submit_page(lang, user, csrf))
             return
+        if route == "/messages":
+            if not user:
+                self._redirect("/login")
+                return
+            convos = self.server.db.get_conversations(user["id"])
+            self._send_html(inbox_page(convos, lang, user, unread))
+            return
+
+        m = re.match(r"^/messages/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            if not user:
+                self._redirect("/login")
+                return
+            other = self.server.db.get_user_by_username(m.group(1))
+            if not other:
+                self._send_html(error_page(404, "user not found", lang, user), status=HTTPStatus.NOT_FOUND)
+                return
+            msgs = [dict(r) for r in self.server.db.get_thread(user["id"], other["id"])]
+            csrf = self._make_csrf(user)
+            self._send_html(thread_page(msgs, dict(other), lang, user, csrf, unread))
+            return
+
         if route == "/settings":
             csrf = self._make_csrf(user) if user else ""
             self._send_html(settings_page(lang, user, csrf))
@@ -191,6 +217,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         m = re.match(r"^/comment/(\d+)$", route)
         if m:
             self._handle_form_comment(int(m.group(1)), lang)
+            return
+
+        m = re.match(r"^/messages/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            self._handle_form_message(m.group(1), lang)
             return
 
         if route == "/settings":
@@ -513,6 +544,23 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self.server.db.toggle_like(post_id, user["id"])
         referer = self.headers.get("Referer", "/posts")
         self._redirect(referer)
+
+    def _handle_form_message(self, username: str, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
+        body = form.get("body", "").strip()
+        other = self.server.db.get_user_by_username(username)
+        if not other or not body:
+            self._redirect(f"/messages/{username}")
+            return
+        self.server.db.send_message(user["id"], other["id"], body)
+        self._redirect(f"/messages/{username}")
 
     def _handle_form_settings(self, lang: str) -> None:
         user = self._get_cookie_user()

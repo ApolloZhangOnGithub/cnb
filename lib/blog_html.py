@@ -64,6 +64,12 @@ _STRINGS = {
         "following": "关注中",
         "feed_empty": "关注更多用户来填充你的动态",
         "back": "← 返回",
+        "messages": "私信",
+        "inbox": "收件箱",
+        "send_msg": "发私信",
+        "send_msg_ph": "写私信…",
+        "send_btn": "发送",
+        "no_messages": "暂无私信",
         "login_title": "登录",
         "login_desc": "输入你的用户名和密码登录。",
         "login_username": "用户名",
@@ -127,6 +133,12 @@ _STRINGS = {
         "following": "following",
         "feed_empty": "Follow users to fill your feed",
         "back": "← Back",
+        "messages": "Messages",
+        "inbox": "Inbox",
+        "send_msg": "Send Message",
+        "send_msg_ph": "Write a message…",
+        "send_btn": "Send",
+        "no_messages": "No messages yet",
         "login_title": "Login",
         "login_desc": "Enter your username and password to log in.",
         "login_username": "Username",
@@ -435,6 +447,19 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .back { display: block; padding: 12px 0; font-size: 13px; color: var(--muted); }
 .back:hover { color: var(--fg); text-decoration: none; }
 
+.conv-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.conv-item:hover { text-decoration: none; }
+.conv-info { flex: 1; min-width: 0; }
+.conv-name { font-size: 14px; font-weight: 600; }
+.conv-preview { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-time { font-size: 11px; color: var(--dim); }
+.conv-unread { background: var(--fg); color: var(--bg); font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+.msg-bubble { padding: 10px 0; }
+.msg-bubble-header { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.msg-bubble-header .author { color: var(--fg); }
+.msg-bubble-body { font-size: 14px; color: var(--fg); }
+.unread-badge { background: var(--fg); color: var(--bg); font-size: 9px; padding: 1px 5px; border-radius: 8px; margin-left: 4px; font-weight: 600; }
+
 @media (max-width: 700px) { .wrap { width: auto; min-width: 0; } }
 """
 
@@ -443,7 +468,7 @@ def _lang_param(lang: str) -> str:
     return f"?lang={lang}" if lang != "zh" else ""
 
 
-def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None) -> str:
+def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None, unread: int = 0) -> str:
     lp = _lang_param(lang)
     tl = t(lang, "lang_target")
     html_lang = "zh" if lang == "zh" else "en"
@@ -459,6 +484,9 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
             f"<div class='nav-dropdown-menu'>"
             f"<a href='/blog/{escape(uname)}'>{t(lang, 'my_page')}</a>"
             f"<a href='/submit{lp}'>{t(lang, 'submit')}</a>"
+            f"<a href='/messages{lp}'>{t(lang, 'messages')}"
+            + (f" <span class='unread-badge'>{unread}</span>" if unread else "") +
+            f"</a>"
             f"<a href='/settings{lp}'>{t(lang, 'settings')}</a>"
             f"<a href='?lang={tl}'>{t(lang, 'lang_switch')}</a>"
             f"<a href='/logout'>{t(lang, 'logout')}</a>"
@@ -664,6 +692,7 @@ def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor
             follow_html = f"<a href='/follow/{pu}' class='follow-btn following'>{t(lang, 'unfollow')}</a>"
         else:
             follow_html = f"<a href='/follow/{pu}' class='follow-btn'>{t(lang, 'follow')}</a>"
+        follow_html += f" <a href='/messages/{pu}' class='follow-btn'>{t(lang, 'send_msg')}</a>"
 
     pu = escape(profile_user['username'])
     stats_html = (
@@ -688,7 +717,7 @@ def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor
     if not posts:
         items = f"<div class='post' style='color:var(--dim)'>{t(lang, 'no_posts')}</div>"
     else:
-        items = "".join(_post_card(p, lang, user=user, following_ids=following_ids) for p in posts)
+        items = "".join(_post_card(p, lang, user=user) for p in posts)
 
     pagination = ""
     if has_more and next_cursor is not None:
@@ -846,6 +875,56 @@ def follow_list_page(profile_user: dict, users: list[dict], kind: str, lang: str
     back = f"<a class='back' href='/blog/{pu}'>{t(lang, 'back')}</a>"
     heading = f"<h2>{escape(profile_user['display_name'])} — {title}</h2>"
     return _page_wrap(title, f"{back}<section style='padding:24px 0'>{heading}{items}</section>", lang, user)
+
+
+def inbox_page(conversations: list[dict], lang: str = "zh", user: dict | None = None, unread: int = 0) -> str:
+    back = f"<a class='back' href='/posts{_lang_param(lang)}'>{t(lang, 'back')}</a>"
+    items = ""
+    for c in conversations:
+        av = _avatar_url(c, 32)
+        badge = f"<span class='conv-unread'>{c['unread']}</span>" if c.get("unread") else ""
+        preview = escape(c.get("body", ""))[:80]
+        items += (
+            f"<a class='conv-item' href='/messages/{escape(c['username'])}'>"
+            f"<img class='avatar' style='width:32px;height:32px' src='{escape(av)}' alt=''>"
+            f"<div class='conv-info'>"
+            f"<div class='conv-name'>{escape(c['display_name'])} {badge}</div>"
+            f"<div class='conv-preview'>{preview}</div>"
+            f"</div>"
+            f"<div class='conv-time'>{format_timestamp(c['created_at'])}</div>"
+            f"</a>"
+        )
+    if not items:
+        items = f"<div style='padding:24px 0;color:var(--dim)'>{t(lang, 'no_messages')}</div>"
+    return _page_wrap(t(lang, "inbox"), f"{back}<h2>{t(lang, 'inbox')}</h2>{items}", lang, user, unread)
+
+
+def thread_page(messages: list[dict], other_user: dict, lang: str = "zh", user: dict | None = None, csrf: str = "", unread: int = 0) -> str:
+    lp = _lang_param(lang)
+    back = f"<a class='back' href='/messages{lp}'>{t(lang, 'back')}</a>"
+    items = ""
+    for m in messages:
+        av = _avatar_url(dict(m), 16)
+        items += (
+            f"<div class='msg-bubble'>"
+            f"<div class='msg-bubble-header'>"
+            f"<img class='avatar-sm' src='{escape(av)}' alt=''>"
+            f"<span class='author'>{escape(m['display_name'])}</span>"
+            f" &middot; {format_timestamp(m['created_at'])}"
+            f"</div>"
+            f"<div class='msg-bubble-body'>{escape(m['body'])}</div>"
+            f"</div>"
+        )
+    form = (
+        f"<form method='POST' action='/messages/{escape(other_user['username'])}{lp}' style='margin-top:16px'>"
+        f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
+        f"<textarea name='body' rows='3' class='form-input' style='width:100%;resize:vertical' "
+        f"placeholder='{t(lang, 'send_msg_ph')}' required></textarea>"
+        f"<button class='btn' type='submit' style='margin-top:8px'>{t(lang, 'send_btn')}</button>"
+        f"</form>"
+    )
+    title = escape(other_user.get("display_name", ""))
+    return _page_wrap(title, f"{back}<h2>{title}</h2>{items}{form}", lang, user, unread)
 
 
 def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", msg: str = "") -> str:
