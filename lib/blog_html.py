@@ -466,17 +466,26 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .back:hover { color: var(--fg); text-decoration: none; }
 
 .conv-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.conv-item:hover { text-decoration: none; }
+.conv-item:hover { text-decoration: none; background: var(--hover); }
 .conv-info { flex: 1; min-width: 0; }
 .conv-name { font-size: 14px; font-weight: 600; }
 .conv-preview { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.conv-time { font-size: 11px; color: var(--dim); }
-.conv-unread { background: var(--fg); color: var(--bg); font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
-.msg-bubble { padding: 10px 0; }
-.msg-bubble-header { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-.msg-bubble-header .author { color: var(--fg); }
-.msg-bubble-body { font-size: 14px; color: var(--fg); }
-.unread-badge { background: var(--fg); color: var(--bg); font-size: 9px; padding: 1px 5px; border-radius: 8px; margin-left: 4px; font-weight: 600; }
+.conv-unread-item { font-weight: 600; }
+.conv-unread-item .conv-preview { color: var(--fg); }
+.conv-time { font-size: 11px; color: var(--dim); flex-shrink: 0; }
+.conv-dot { width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; flex-shrink: 0; }
+.msg-row { display: flex; margin: 8px 0; }
+.msg-row.self { justify-content: flex-end; }
+.msg-row.other { justify-content: flex-start; }
+.msg-card { max-width: 75%; }
+.msg-card-header { font-size: 11px; color: var(--dim); margin-bottom: 2px; }
+.msg-card-body { padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+.msg-row.self .msg-card-body { background: #3b82f6; color: #fff; border-bottom-right-radius: 4px; }
+.msg-row.other .msg-card-body { background: var(--panel); color: var(--fg); border-bottom-left-radius: 4px; }
+.msg-card-footer { font-size: 10px; color: var(--dim); margin-top: 2px; }
+.msg-row.self .msg-card-header, .msg-row.self .msg-card-footer { text-align: right; }
+.msg-read { color: #3b82f6; }
+.unread-badge { background: #3b82f6; color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 8px; margin-left: 4px; font-weight: 600; }
 
 @media (max-width: 700px) { .wrap { width: auto; min-width: 0; } }
 """
@@ -948,16 +957,19 @@ def inbox_page(conversations: list[dict], lang: str = "zh", user: dict | None = 
     items = ""
     for c in conversations:
         av = _avatar_url(c, 32)
-        badge = f"<span class='conv-unread'>{c['unread']}</span>" if c.get("unread") else ""
+        has_unread = c.get("unread", 0) > 0
+        cls = "conv-item conv-unread-item" if has_unread else "conv-item"
+        dot = "<div class='conv-dot'></div>" if has_unread else ""
         preview = escape(c.get("body", ""))[:80]
         items += (
-            f"<a class='conv-item' href='/messages/{escape(c['username'])}'>"
+            f"<a class='{cls}' href='/messages/{escape(c['username'])}'>"
             f"<img class='avatar' style='width:32px;height:32px' src='{escape(av)}' alt=''>"
             f"<div class='conv-info'>"
-            f"<div class='conv-name'>{escape(c['display_name'])} {badge}</div>"
+            f"<div class='conv-name'>{escape(c['display_name'])}</div>"
             f"<div class='conv-preview'>{preview}</div>"
             f"</div>"
             f"<div class='conv-time'>{format_timestamp(c['created_at'])}</div>"
+            f"{dot}"
             f"</a>"
         )
     if not items:
@@ -968,29 +980,39 @@ def inbox_page(conversations: list[dict], lang: str = "zh", user: dict | None = 
 def thread_page(messages: list[dict], other_user: dict, lang: str = "zh", user: dict | None = None, csrf: str = "", unread: int = 0) -> str:
     lp = _lang_param(lang)
     back = f"<a class='back' href='/messages{lp}'>{t(lang, 'back')}</a>"
+    user_id = user.get("id") if user else None
     items = ""
     for m in messages:
-        av = _avatar_url(dict(m), 16)
+        is_self = m.get("sender_id") == user_id
+        side = "self" if is_self else "other"
+        time_str = format_timestamp(m['created_at'])
+        read_status = ""
+        if is_self:
+            read_status = " <span class='msg-read'>✓✓</span>" if m.get("is_read") else " <span>✓</span>"
         items += (
-            f"<div class='msg-bubble'>"
-            f"<div class='msg-bubble-header'>"
-            f"<img class='avatar-sm' src='{escape(av)}' alt=''>"
-            f"<span class='author'>{escape(m['display_name'])}</span>"
-            f" &middot; {format_timestamp(m['created_at'])}"
-            f"</div>"
-            f"<div class='msg-bubble-body'>{escape(m['body'])}</div>"
-            f"</div>"
+            f"<div class='msg-row {side}'>"
+            f"<div class='msg-card'>"
+            f"<div class='msg-card-header'>{escape(m['display_name'])}</div>"
+            f"<div class='msg-card-body'>{escape(m['body'])}</div>"
+            f"<div class='msg-card-footer'>{time_str}{read_status}</div>"
+            f"</div></div>"
         )
+    av = _avatar_url(dict(other_user), 24)
+    header = (
+        f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:8px'>"
+        f"<img class='avatar' src='{escape(av)}' alt=''>"
+        f"<span style='font-weight:600'>{escape(other_user.get('display_name', ''))}</span>"
+        f"</div>"
+    )
     form = (
         f"<form method='POST' action='/messages/{escape(other_user['username'])}{lp}' style='margin-top:16px'>"
         f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
-        f"<textarea name='body' rows='3' class='form-input' style='width:100%;resize:vertical' "
+        f"<textarea name='body' rows='2' class='form-input' style='width:100%;resize:vertical' "
         f"placeholder='{t(lang, 'send_msg_ph')}' required></textarea>"
         f"<button class='btn' type='submit' style='margin-top:8px'>{t(lang, 'send_btn')}</button>"
         f"</form>"
     )
-    title = escape(other_user.get("display_name", ""))
-    return _page_wrap(title, f"{back}<h2>{title}</h2>{items}{form}", lang, user, unread)
+    return _page_wrap(escape(other_user.get("display_name", "")), f"{back}{header}<div style='min-height:200px'>{items}</div>{form}", lang, user, unread)
 
 
 def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", msg: str = "") -> str:
