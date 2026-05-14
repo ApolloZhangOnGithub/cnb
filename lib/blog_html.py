@@ -70,6 +70,10 @@ _STRINGS = {
         "send_msg_ph": "写私信…",
         "send_btn": "发送",
         "no_messages": "暂无私信",
+        "reply": "回复",
+        "pin": "置顶",
+        "unpin": "取消置顶",
+        "pinned": "已置顶",
         "login_title": "登录",
         "login_desc": "输入你的用户名和密码登录。",
         "login_username": "用户名",
@@ -139,6 +143,10 @@ _STRINGS = {
         "send_msg_ph": "Write a message…",
         "send_btn": "Send",
         "no_messages": "No messages yet",
+        "reply": "Reply",
+        "pin": "Pin",
+        "unpin": "Unpin",
+        "pinned": "Pinned",
         "login_title": "Login",
         "login_desc": "Enter your username and password to log in.",
         "login_username": "Username",
@@ -381,10 +389,20 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .profile-username { color: var(--muted); font-size: 14px; }
 .profile-bio { color: var(--muted); margin-top: 4px; }
 
-.comment { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
-.comment-meta { color: var(--muted); font-size: 12px; }
+.comment { padding: 10px 0; font-size: 14px; }
+.comment-thread { border-left: 2px solid var(--line); margin-left: 16px; padding-left: 12px; }
+.comment-meta { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .comment-meta .author { color: var(--fg); }
-.comment-body { margin-top: 2px; color: var(--muted); }
+.comment-body { margin: 4px 0; }
+.comment-body a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line); }
+.comment-body a:hover { text-decoration-color: var(--fg); }
+.comment-actions { font-size: 12px; color: var(--dim); display: flex; gap: 12px; margin-top: 4px; }
+.comment-actions a { color: var(--dim); }
+.comment-actions a:hover { color: var(--fg); text-decoration: none; }
+.comment-pinned { font-size: 10px; color: var(--muted); border: 1px solid var(--line); padding: 1px 4px; border-radius: 3px; }
+.reply-form { margin: 8px 0 8px 0; }
+.reply-form textarea { width: 100%; }
+.reply-form .btn { margin-top: 4px; font-size: 12px; padding: 4px 12px; }
 
 .pagination { margin: 24px 0; text-align: center; }
 .pagination a { color: var(--fg); padding: 6px 16px; border: 1px solid var(--line); font-size: 14px; }
@@ -733,39 +751,87 @@ def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor
     return _page_wrap(profile_user["display_name"], f"{back}{profile}{items}{pagination}", lang, user)
 
 
+def _render_comment_tree(comments: list[dict], parent_id: int | None, post_id: int, lang: str, user: dict | None, csrf: str, depth: int = 0) -> str:
+    children = [c for c in comments if c.get("parent_id") == parent_id]
+    children.sort(key=lambda c: (-c.get("is_pinned", 0), -c.get("like_count", 0), c["id"]))
+    if not children:
+        return ""
+    html_parts = []
+    lp = _lang_param(lang)
+    for c in children:
+        c_avatar = _avatar_url(c, 16)
+        c_badge = "<span class='agent-badge'>bot</span>" if c.get("role") == "agent" else ""
+        pinned = f" <span class='comment-pinned'>{t(lang, 'pinned')}</span>" if c.get("is_pinned") else ""
+        likes = c.get("like_count", 0)
+        cid = c["id"]
+
+        actions = []
+        if user:
+            actions.append(f"<a href='/vote-comment/{cid}'>&#9650; {likes}</a>")
+            actions.append(
+                f"<a onclick=\"document.getElementById('rf{cid}').style.display='block';this.style.display='none'\" "
+                f"style='cursor:pointer'>{t(lang, 'reply')}</a>"
+            )
+            if user.get("role") == "admin":
+                act = "unpin" if c.get("is_pinned") else "pin"
+                actions.append(f"<a href='/pin-comment/{cid}?action={act}'>{t(lang, act)}</a>")
+        else:
+            actions.append(f"<span>&#9650; {likes}</span>")
+        actions_html = "<div class='comment-actions'>" + "".join(actions) + "</div>"
+
+        reply_form = ""
+        if user:
+            reply_form = (
+                f"<div id='rf{cid}' class='reply-form' style='display:none'>"
+                f"<form method='POST' action='/comment/{post_id}{lp}'>"
+                f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
+                f"<input type='hidden' name='parent_id' value='{cid}'>"
+                f"<textarea name='body' rows='2' class='form-input' style='width:100%;resize:vertical;font-size:13px' "
+                f"placeholder='{t(lang, 'reply')}...'></textarea>"
+                f"<button class='btn' type='submit'>{t(lang, 'reply')}</button>"
+                f"</form></div>"
+            )
+
+        nested = ""
+        if depth < 6:
+            sub = _render_comment_tree(comments, cid, post_id, lang, user, csrf, depth + 1)
+            if sub:
+                nested = f"<div class='comment-thread'>{sub}</div>"
+
+        html_parts.append(
+            f"<div class='comment'>"
+            f"<div class='comment-meta'>"
+            f"<img class='avatar-sm' src='{escape(c_avatar)}' alt=''>"
+            f"<span class='author'>{escape(c['display_name'])}</span>"
+            f"{c_badge}{pinned}"
+            f"<span>&middot; {format_timestamp(c['created_at'])}</span>"
+            f"</div>"
+            f"<div class='comment-body'>{escape(c['body'])}</div>"
+            f"{actions_html}{reply_form}{nested}"
+            f"</div>"
+        )
+    return "".join(html_parts)
+
+
 def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", user: dict | None = None, csrf: str = "") -> str:
     lp = _lang_param(lang)
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     card = _post_card(post, lang, full=True, user=user)
+    post_id = post.get("id", "")
+    count = len(comments)
 
-    comment_items = ""
-    for c in comments:
-        c_avatar = _avatar_url(dict(c), 16)
-        c_badge = "<span class='agent-badge'>bot</span>" if c.get("role") == "agent" else ""
-        comment_items += (
-            "<div class='comment'>"
-            f"<div class='comment-meta'>"
-            f"<img class='avatar-sm' src='{escape(c_avatar)}' alt=''>"
-            f"<span class='author'>{escape(c['display_name'])}</span>"
-            f"{c_badge}"
-            f" &middot; {format_timestamp(c['created_at'])}"
-            f"</div>"
-            f"<div class='comment-body'>{escape(c['body'])}</div>"
-            "</div>"
-        )
-
-    comments_section = f"<div style='margin-top:16px'><h3>{t(lang, 'comments_title')} ({len(comments)})</h3>{comment_items}</div>"
-    if not comments:
+    comment_tree = _render_comment_tree(comments, None, post_id, lang, user, csrf)
+    if comment_tree:
+        comments_section = f"<div style='margin-top:16px'><h3>{t(lang, 'comments_title')} ({count})</h3>{comment_tree}</div>"
+    else:
         comments_section = f"<div style='margin-top:16px;color:var(--dim)'>{t(lang, 'no_comments')}</div>"
 
-    post_id = post.get("id", "")
-    lp = _lang_param(lang)
     if user:
         comment_form = (
             f"<form method='POST' action='/comment/{post_id}{lp}' style='margin-top:16px'>"
             f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
-            f"<textarea name='body' rows='3' placeholder='{t(lang, 'comment_ph')}' "
-            "class='form-input' style='width:100%;resize:vertical'></textarea>"
+            f"<textarea name='body' rows='3' class='form-input' style='width:100%;resize:vertical' "
+            f"placeholder='{t(lang, 'comment_ph')}'></textarea>"
             f"<button class='btn' type='submit' style='margin-top:8px'>{t(lang, 'comment_btn')}</button>"
             "</form>"
         )

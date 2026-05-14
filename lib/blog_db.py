@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS blog_comments (
 );
 CREATE INDEX IF NOT EXISTS idx_blog_comments_post ON blog_comments(post_id);
 
+CREATE TABLE IF NOT EXISTS blog_comment_likes (
+    comment_id INTEGER NOT NULL REFERENCES blog_comments(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (comment_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS blog_follows (
     follower_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
     following_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
@@ -140,6 +147,20 @@ class BlogDB:
                 c.execute("ALTER TABLE blog_users ADD COLUMN role TEXT NOT NULL DEFAULT 'human'")
             if "password_hash" not in cols:
                 c.execute("ALTER TABLE blog_users ADD COLUMN password_hash TEXT")
+            comment_cols = {row[1] for row in c.execute("PRAGMA table_info(blog_comments)").fetchall()}
+            if "parent_id" not in comment_cols:
+                c.execute("ALTER TABLE blog_comments ADD COLUMN parent_id INTEGER REFERENCES blog_comments(id)")
+            if "is_pinned" not in comment_cols:
+                c.execute("ALTER TABLE blog_comments ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_blog_comments_parent ON blog_comments(parent_id)")
+            c.executescript("""
+                CREATE TABLE IF NOT EXISTS blog_comment_likes (
+                    comment_id INTEGER NOT NULL REFERENCES blog_comments(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (comment_id, user_id)
+                );
+            """)
             if "avatar_url" not in cols:
                 c.execute("ALTER TABLE blog_users ADD COLUMN avatar_url TEXT")
             if "github_id" not in cols:
@@ -379,23 +400,47 @@ class BlogDB:
 
     # ── comments ──
 
-    def add_comment(self, post_id: int, author_id: int, body: str) -> int:
+    def add_comment(self, post_id: int, author_id: int, body: str, parent_id: int | None = None) -> int:
         now = _utc_now()
         with self.conn() as c:
             cur = c.execute(
-                "INSERT INTO blog_comments (post_id, author_id, body, created_at) VALUES (?, ?, ?, ?)",
-                (post_id, author_id, body, now),
+                "INSERT INTO blog_comments (post_id, author_id, parent_id, body, created_at) VALUES (?, ?, ?, ?, ?)",
+                (post_id, author_id, parent_id, body, now),
             )
             return cur.lastrowid  # type: ignore[return-value]
 
-    def get_comments(self, post_id: int) -> list[sqlite3.Row]:
+    def get_comments(self, post_id: int) -> list[dict]:
         with self.conn() as c:
-            return c.execute(
-                "SELECT c.*, u.username, u.display_name, u.avatar_emoji"
+            rows = c.execute(
+                "SELECT c.*, u.username, u.display_name, u.avatar_url, u.role,"
+                " (SELECT COUNT(*) FROM blog_comment_likes WHERE comment_id = c.id) AS like_count"
                 " FROM blog_comments c JOIN blog_users u ON c.author_id = u.id"
-                " WHERE c.post_id = ? ORDER BY c.id ASC",
+                " WHERE c.post_id = ? ORDER BY c.is_pinned DESC, c.id ASC",
                 (post_id,),
             ).fetchall()
+            return [dict(r) for r in rows]
+
+    def toggle_comment_like(self, comment_id: int, user_id: int) -> bool:
+        now = _utc_now()
+        with self.conn() as c:
+            existing = c.execute(
+                "SELECT 1 FROM blog_comment_likes WHERE comment_id = ? AND user_id = ?",
+                (comment_id, user_id),
+            ).fetchone()
+            if existing:
+                c.execute("DELETE FROM blog_comment_likes WHERE comment_id = ? AND user_id = ?", (comment_id, user_id))
+                return False
+            c.execute("INSERT INTO blog_comment_likes (comment_id, user_id, created_at) VALUES (?, ?, ?)", (comment_id, user_id, now))
+            return True
+
+    def pin_comment(self, comment_id: int, pinned: bool = True) -> bool:
+        with self.conn() as c:
+            c.execute("UPDATE blog_comments SET is_pinned = ? WHERE id = ?", (1 if pinned else 0, comment_id))
+            return c.total_changes > 0
+
+    def get_comment(self, comment_id: int) -> sqlite3.Row | None:
+        with self.conn() as c:
+            return c.execute("SELECT * FROM blog_comments WHERE id = ?", (comment_id,)).fetchone()
 
     # ── follows ──
 

@@ -152,6 +152,17 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if route == "/register":
             self._send_html(register_page(lang))
             return
+        m = re.match(r"^/vote-comment/(\d+)$", route)
+        if m:
+            self._handle_vote_comment(int(m.group(1)))
+            return
+
+        m = re.match(r"^/pin-comment/(\d+)$", route)
+        if m:
+            action = (params.get("action") or ["pin"])[0]
+            self._handle_pin_comment(int(m.group(1)), action == "pin", user)
+            return
+
         m = re.match(r"^/follow/([a-z0-9][a-z0-9_-]*)$", route)
         if m:
             self._handle_follow(m.group(1))
@@ -520,9 +531,37 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if not post:
             self._send_html(error_page(404, "post not found", lang, user), status=HTTPStatus.NOT_FOUND)
             return
+        parent_id = self._parse_int(form.get("parent_id"))
         if body:
-            self.server.db.add_comment(post_id, user["id"], body)
+            self.server.db.add_comment(post_id, user["id"], body, parent_id)
         self._redirect(f"/blog/{post['username']}/{post_id}")
+
+    def _handle_vote_comment(self, comment_id: int) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        comment = self.server.db.get_comment(comment_id)
+        if comment:
+            self.server.db.toggle_comment_like(comment_id, user["id"])
+            post = self.server.db.get_post(comment["post_id"])
+            if post:
+                self._redirect(f"/blog/{post['username']}/{post['id']}")
+                return
+        self._redirect("/posts")
+
+    def _handle_pin_comment(self, comment_id: int, pin: bool, user: dict | None) -> None:
+        if not user or user.get("role") != "admin":
+            self._redirect("/posts")
+            return
+        comment = self.server.db.get_comment(comment_id)
+        if comment:
+            self.server.db.pin_comment(comment_id, pin)
+            post = self.server.db.get_post(comment["post_id"])
+            if post:
+                self._redirect(f"/blog/{post['username']}/{post['id']}")
+                return
+        self._redirect("/posts")
 
     def _handle_follow(self, username: str) -> None:
         user = self._get_cookie_user()
@@ -713,7 +752,10 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if not post:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "post not found"})
             return
-        comment_id = self.server.db.add_comment(post_id, user["id"], text)
+        parent_id = body.get("parent_id")
+        if parent_id is not None:
+            parent_id = int(parent_id)
+        comment_id = self.server.db.add_comment(post_id, user["id"], text, parent_id)
         self._send_json(HTTPStatus.CREATED, {"id": comment_id})
 
     # ── auth ──
