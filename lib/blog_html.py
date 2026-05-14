@@ -51,9 +51,9 @@ _STRINGS = {
         "logout": "登出",
         "submit": "发帖",
         "login_title": "登录",
-        "login_desc": "输入你的用户名和 token 登录。",
+        "login_desc": "输入你的用户名和密码登录。",
         "login_username": "用户名",
-        "login_token": "Token",
+        "login_password": "密码",
         "login_submit": "登录",
         "login_fail": "用户名或 token 错误",
         "submit_title": "发帖",
@@ -98,9 +98,9 @@ _STRINGS = {
         "logout": "Logout",
         "submit": "Submit",
         "login_title": "Login",
-        "login_desc": "Enter your username and token to log in.",
+        "login_desc": "Enter your username and password to log in.",
         "login_username": "Username",
-        "login_token": "Token",
+        "login_password": "Password",
         "login_submit": "Login",
         "login_fail": "Invalid username or token",
         "submit_title": "Submit",
@@ -281,6 +281,7 @@ ul { padding-left: 20px; margin: 8px 0; }
 .post-stats a:hover { color: #fff; }
 .vote-link { cursor: pointer; margin-right: 4px; }
 .vote-link.dim { color: #333; cursor: default; }
+.agent-badge { font-size: 10px; color: #555; border: 1px solid #333; padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
 
 .profile { padding: 24px 0; border-bottom: 1px solid #222; margin-bottom: 16px; }
 .profile-name { font-size: 20px; font-weight: 600; }
@@ -365,9 +366,10 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
 
 
 def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict | None = None) -> str:
+    badge = " <span class='agent-badge'>bot</span>" if post.get("role") == "agent" else ""
     meta_parts = [
         f"<span class='emoji'>{escape(post.get('avatar_emoji', '🤖'))}</span>",
-        f"<a href='/blog/{escape(post['username'])}' class='author'>{escape(post['display_name'])}</a>",
+        f"<a href='/blog/{escape(post['username'])}' class='author'>{escape(post['display_name'])}</a>{badge}",
         f" &middot; {format_timestamp(post['created_at'])}",
     ]
     meta = f"<div class='post-meta'>{''.join(meta_parts)}</div>"
@@ -474,6 +476,7 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
             "<div class='comment'>"
             f"<div class='comment-meta'>"
             f"<span class='author'>{escape(c['display_name'])}</span>"
+            + ("<span class='agent-badge'>bot</span>" if c.get("role") == "agent" else "") +
             f" &middot; {format_timestamp(c['created_at'])}"
             f"</div>"
             f"<div class='comment-body'>{escape(c['body'])}</div>"
@@ -516,8 +519,8 @@ def login_page(lang: str = "zh", error: bool = False) -> str:
         f"<form method='POST' action='/login{lp}'>"
         f"<div class='form-row'><label>{t(lang, 'login_username')}</label>"
         "<input name='username' required></div>"
-        f"<div class='form-row'><label>{t(lang, 'login_token')}</label>"
-        "<input name='token' type='password' required></div>"
+        f"<div class='form-row'><label>{t(lang, 'login_password')}</label>"
+        "<input name='password' type='password' required></div>"
         f"<div class='form-row'><label></label><button class='btn' type='submit'>{t(lang, 'login_submit')}</button></div>"
         "</form>"
         "</section>"
@@ -548,38 +551,24 @@ def submit_page(lang: str = "zh", user: dict | None = None) -> str:
     return _page_wrap(t(lang, "submit_title"), body, lang, user)
 
 
-def register_page(lang: str = "zh") -> str:
+def register_page(lang: str = "zh", error: str = "") -> str:
+    lp = _lang_param(lang)
+    err_html = f"<div class='msg err'>{escape(error)}</div>" if error else ""
     body = (
         "<section class='register-section'>"
         f"<h2>{t(lang, 'reg_title')}</h2>"
         f"<p class='register-desc'>{t(lang, 'reg_desc')}</p>"
-        "<div id='reg-form'>"
+        f"{err_html}"
+        f"<form method='POST' action='/register{lp}'>"
         f"<div class='form-row'><label>{t(lang, 'reg_username')}</label>"
-        f"<input id='r-user' placeholder='{t(lang, 'reg_username_ph')}'></div>"
+        f"<input name='username' placeholder='{t(lang, 'reg_username_ph')}' required></div>"
         f"<div class='form-row'><label>{t(lang, 'reg_display')}</label>"
-        f"<input id='r-name' placeholder='{t(lang, 'reg_display_ph')}'></div>"
-        f"<div class='form-row'><label>{t(lang, 'reg_avatar')}</label>"
-        "<input id='r-emoji' placeholder='🤖' maxlength='4' style='width:60px;flex:none'></div>"
-        f"<div class='form-row'><label>{t(lang, 'reg_bio')}</label>"
-        f"<input id='r-bio' placeholder='{t(lang, 'reg_bio_ph')}'></div>"
-        f"<div class='form-row'><label></label><button class='btn' onclick='doRegister()'>{t(lang, 'reg_submit')}</button></div>"
-        "<div id='reg-result'></div>"
-        "</div>"
+        f"<input name='display_name' placeholder='{t(lang, 'reg_display_ph')}' required></div>"
+        f"<div class='form-row'><label>{t(lang, 'login_password')}</label>"
+        "<input name='password' type='password' required></div>"
+        f"<div class='form-row'><label></label><button class='btn' type='submit'>{t(lang, 'reg_submit')}</button></div>"
+        "</form>"
         "</section>"
-        "<script>"
-        "async function doRegister(){"
-        "const b={username:document.getElementById('r-user').value,"
-        "display_name:document.getElementById('r-name').value,"
-        "avatar_emoji:document.getElementById('r-emoji').value||undefined,"
-        "bio:document.getElementById('r-bio').value||undefined};"
-        "const r=await fetch('/api/register',{method:'POST',"
-        "headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});"
-        "const d=await r.json();"
-        "const el=document.getElementById('reg-result');"
-        f"if(r.ok){{el.innerHTML='<div class=\"msg ok\">{t(lang, 'reg_ok')}<br><code>'+d.token+'</code>"
-        f"<br>{t(lang, 'reg_save')}</div>'}}"
-        f"else{{el.innerHTML='<div class=\"msg err\">{t(lang, 'reg_fail')}'+d.error+'</div>'}}}}"
-        "</script>"
     )
     return _page_wrap(t(lang, "reg_title"), body, lang)
 

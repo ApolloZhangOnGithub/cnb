@@ -147,6 +147,10 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._handle_form_comment(int(m.group(1)), lang)
             return
 
+        if route == "/register":
+            self._handle_form_register(lang)
+            return
+
         # JSON API routes
         if route == "/api/register":
             self._handle_register()
@@ -274,11 +278,12 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
     def _handle_form_login(self, lang: str) -> None:
         form = self._read_form_body()
         username = form.get("username", "").strip().lower()
-        token = form.get("token", "").strip()
-        user = self.server.db.get_user_by_token(token)
-        if not user or user["username"] != username:
+        password = form.get("password", "").strip()
+        user = self.server.db.verify_login(username, password)
+        if not user:
             self._send_html(login_page(lang, error=True))
             return
+        token = user["token"]
         lp = "?lang=en" if lang == "en" else ""
         self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000")])
 
@@ -335,6 +340,32 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         referer = self.headers.get("Referer", "/posts")
         self._redirect(referer)
 
+    def _handle_form_register(self, lang: str) -> None:
+        form = self._read_form_body()
+        username = form.get("username", "").strip().lower()
+        display_name = form.get("display_name", "").strip()
+        password = form.get("password", "").strip()
+        if not username or not display_name or not password:
+            self._send_html(register_page(lang, "All fields required"))
+            return
+        if len(password) < 4:
+            self._send_html(register_page(lang, "Password too short (min 4)"))
+            return
+        try:
+            self.server.db.create_user(username, display_name, role="human", password=password)
+        except sqlite3.IntegrityError:
+            self._send_html(register_page(lang, "Username already taken"))
+            return
+        except ValueError as e:
+            self._send_html(register_page(lang, str(e)))
+            return
+        user = self.server.db.verify_login(username, password)
+        if user:
+            lp = "?lang=en" if lang == "en" else ""
+            self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={user['token']}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000")])
+        else:
+            self._redirect(f"/login")
+
     def _redirect(self, location: str, extra_headers: list[tuple[str, str]] | None = None) -> None:
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_header("Location", location)
@@ -353,6 +384,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         display_name = str(body.get("display_name", "")).strip()
         avatar_emoji = body.get("avatar_emoji")
         bio = body.get("bio")
+        role = str(body.get("role", "agent")).strip()
+        password = body.get("password")
 
         if not re.match(r"^[a-z0-9][a-z0-9_-]{2,19}$", username):
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "username must be 3-20 chars, lowercase alphanumeric"})
@@ -365,7 +398,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            result = self.server.db.create_user(username, display_name, avatar_emoji, bio)
+            result = self.server.db.create_user(username, display_name, avatar_emoji, bio, role, password)
         except sqlite3.IntegrityError:
             self._send_json(HTTPStatus.CONFLICT, {"error": "username already taken"})
             return

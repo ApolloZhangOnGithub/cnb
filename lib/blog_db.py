@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import secrets
 import sqlite3
@@ -20,6 +21,8 @@ CREATE TABLE IF NOT EXISTS blog_users (
     display_name TEXT NOT NULL,
     avatar_emoji TEXT NOT NULL DEFAULT '🤖',
     bio TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'human',
+    password_hash TEXT,
     token TEXT UNIQUE NOT NULL,
     created_at TEXT NOT NULL
 );
@@ -70,6 +73,19 @@ def _utc_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def _hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    h = hashlib.sha256((salt + password).encode()).hexdigest()
+    return f"{salt}:{h}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    if ":" not in stored:
+        return False
+    salt, h = stored.split(":", 1)
+    return hashlib.sha256((salt + password).encode()).hexdigest() == h
+
+
 class BlogDB:
     """SQLite wrapper for blog data. New connection per call, WAL mode."""
 
@@ -101,6 +117,11 @@ class BlogDB:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self.conn() as c:
             c.executescript(BLOG_SCHEMA)
+            cols = {row[1] for row in c.execute("PRAGMA table_info(blog_users)").fetchall()}
+            if "role" not in cols:
+                c.execute("ALTER TABLE blog_users ADD COLUMN role TEXT NOT NULL DEFAULT 'human'")
+            if "password_hash" not in cols:
+                c.execute("ALTER TABLE blog_users ADD COLUMN password_hash TEXT")
 
     # ── users ──
 
@@ -110,6 +131,8 @@ class BlogDB:
         display_name: str,
         avatar_emoji: str | None = None,
         bio: str | None = None,
+        role: str = "human",
+        password: str | None = None,
     ) -> dict[str, Any]:
         if not USERNAME_RE.match(username):
             raise ValueError("username must be 3-20 chars, lowercase alphanumeric/underscore/hyphen")
@@ -117,27 +140,61 @@ class BlogDB:
             raise ValueError("username must contain at least one digit")
         if not display_name.strip():
             raise ValueError("display_name required")
+        if role not in ("admin", "human", "agent"):
+            raise ValueError("role must be admin, human, or agent")
+        if role in ("human", "admin") and not password:
+            raise ValueError("password required for human/admin accounts")
 
         token = secrets.token_urlsafe(32)
+        pw_hash = _hash_password(password) if password else None
         now = _utc_now()
-        emoji = avatar_emoji or "🤖"
+        emoji = avatar_emoji or ("👤" if role != "agent" else "🤖")
         user_bio = bio or ""
 
         with self.conn() as c:
             cur = c.execute(
-                "INSERT INTO blog_users (username, display_name, avatar_emoji, bio, token, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (username, display_name.strip(), emoji, user_bio, token, now),
+                "INSERT INTO blog_users (username, display_name, avatar_emoji, bio, role, password_hash, token, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (username, display_name.strip(), emoji, user_bio, role, pw_hash, token, now),
             )
-            return {
+            result: dict[str, Any] = {
                 "id": cur.lastrowid,
                 "username": username,
                 "display_name": display_name.strip(),
                 "avatar_emoji": emoji,
                 "bio": user_bio,
-                "token": token,
+                "role": role,
                 "created_at": now,
             }
+            if role == "agent":
+                result["token"] = token
+            return result
+
+    def verify_login(self, username: str, password: str) -> sqlite3.Row | None:
+        with self.conn() as c:
+            user = c.execute("SELECT * FROM blog_users WHERE username = ?", (username,)).fetchone()
+            if not user or not user["password_hash"]:
+                return None
+            if not _verify_password(password, user["password_hash"]):
+                return None
+            return user
+
+    def set_role(self, user_id: int, role: str) -> bool:
+        if role not in ("admin", "human", "agent"):
+            return False
+        with self.conn() as c:
+            c.execute("UPDATE blog_users SET role = ? WHERE id = ?", (role, user_id))
+            return c.total_changes > 0
+
+    def delete_post(self, post_id: int) -> bool:
+        with self.conn() as c:
+            c.execute("DELETE FROM blog_posts WHERE id = ?", (post_id,))
+            return c.total_changes > 0
+
+    def delete_comment(self, comment_id: int) -> bool:
+        with self.conn() as c:
+            c.execute("DELETE FROM blog_comments WHERE id = ?", (comment_id,))
+            return c.total_changes > 0
 
     def get_user_by_token(self, token: str) -> sqlite3.Row | None:
         with self.conn() as c:
@@ -189,7 +246,7 @@ class BlogDB:
     def get_post(self, post_id: int) -> sqlite3.Row | None:
         with self.conn() as c:
             return c.execute(
-                "SELECT p.*, u.username, u.display_name, u.avatar_emoji,"
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -200,7 +257,7 @@ class BlogDB:
     def get_post_by_slug(self, author_id: int, slug: str) -> sqlite3.Row | None:
         with self.conn() as c:
             return c.execute(
-                "SELECT p.*, u.username, u.display_name, u.avatar_emoji,"
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -212,7 +269,7 @@ class BlogDB:
         with self.conn() as c:
             if before is not None:
                 return c.execute(
-                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji,"
+                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
                     " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                     " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                     " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -220,7 +277,7 @@ class BlogDB:
                     (before, limit),
                 ).fetchall()
             return c.execute(
-                "SELECT p.*, u.username, u.display_name, u.avatar_emoji,"
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -232,7 +289,7 @@ class BlogDB:
         with self.conn() as c:
             if before is not None:
                 return c.execute(
-                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji,"
+                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
                     " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                     " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                     " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
@@ -240,7 +297,7 @@ class BlogDB:
                     (author_id, before, limit),
                 ).fetchall()
             return c.execute(
-                "SELECT p.*, u.username, u.display_name, u.avatar_emoji,"
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
