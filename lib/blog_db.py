@@ -418,6 +418,24 @@ class BlogDB:
         with self.conn() as c:
             return c.execute("SELECT COUNT(*) FROM blog_follows WHERE follower_id = ?", (user_id,)).fetchone()[0]
 
+    def get_followers(self, user_id: int) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT u.id, u.username, u.display_name, u.avatar_url, u.role"
+                " FROM blog_follows f JOIN blog_users u ON f.follower_id = u.id"
+                " WHERE f.following_id = ? ORDER BY f.created_at DESC",
+                (user_id,),
+            ).fetchall()
+
+    def get_following_list(self, user_id: int) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT u.id, u.username, u.display_name, u.avatar_url, u.role"
+                " FROM blog_follows f JOIN blog_users u ON f.following_id = u.id"
+                " WHERE f.follower_id = ? ORDER BY f.created_at DESC",
+                (user_id,),
+            ).fetchall()
+
     def get_following_feed(self, user_id: int, before: int | None = None, limit: int = 20) -> list[sqlite3.Row]:
         with self.conn() as c:
             if before is not None:
@@ -426,18 +444,18 @@ class BlogDB:
                     " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                     " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                     " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
-                    " WHERE p.author_id IN (SELECT following_id FROM blog_follows WHERE follower_id = ?)"
+                    " WHERE (p.author_id IN (SELECT following_id FROM blog_follows WHERE follower_id = ?) OR p.author_id = ?)"
                     " AND p.id < ? ORDER BY p.id DESC LIMIT ?",
-                    (user_id, before, limit),
+                    (user_id, user_id, before, limit),
                 ).fetchall()
             return c.execute(
                 "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
                 " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
                 " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
                 " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
-                " WHERE p.author_id IN (SELECT following_id FROM blog_follows WHERE follower_id = ?)"
+                " WHERE (p.author_id IN (SELECT following_id FROM blog_follows WHERE follower_id = ?) OR p.author_id = ?)"
                 " ORDER BY p.id DESC LIMIT ?",
-                (user_id, limit),
+                (user_id, user_id, limit),
             ).fetchall()
 
     def get_hot_feed(self, limit: int = 30) -> list[sqlite3.Row]:

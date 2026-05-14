@@ -157,7 +157,7 @@ def _avatar_url(user_or_post: dict, size: int = 24) -> str:
         return f"{url}&s={size}" if "?" in url else f"{url}?s={size}"
     name = user_or_post.get("display_name", "?")
     from urllib.parse import quote
-    return f"https://ui-avatars.com/api/?name={quote(name)}&background=222&color=888&size={size}&bold=true"
+    return f"https://ui-avatars.com/api/?name={quote(name)}&background=ddd&color=555&size={size}&bold=true"
 
 
 # ── Markdown ──
@@ -381,6 +381,9 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .follow-btn.following { color: var(--muted); }
 .profile-stats { color: var(--muted); font-size: 13px; margin-top: 4px; }
 .profile-stats span { color: var(--fg); font-weight: 600; }
+.profile-stats a { color: var(--muted); }
+.profile-stats a:hover { color: var(--fg); }
+.follow-item { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 
 @media (max-width: 700px) { .wrap { width: auto; min-width: 0; } }
 """
@@ -555,10 +558,11 @@ def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor
         else:
             follow_html = f"<a href='/follow/{pu}' class='follow-btn'>{t(lang, 'follow')}</a>"
 
+    pu = escape(profile_user['username'])
     stats_html = (
         f"<div class='profile-stats'>"
-        f"<span>{follower_count}</span> {t(lang, 'followers')} · "
-        f"<span>{following_count}</span> {t(lang, 'following')}"
+        f"<a href='/blog/{pu}/followers'><span>{follower_count}</span> {t(lang, 'followers')}</a> · "
+        f"<a href='/blog/{pu}/following'><span>{following_count}</span> {t(lang, 'following')}</a>"
         f"</div>"
     )
 
@@ -711,6 +715,24 @@ def register_page(lang: str = "zh", error: str = "") -> str:
         "</section>"
     )
     return _page_wrap(t(lang, "reg_title"), body, lang)
+
+
+def follow_list_page(profile_user: dict, users: list[dict], kind: str, lang: str = "zh", user: dict | None = None) -> str:
+    title = t(lang, "followers") if kind == "followers" else t(lang, "following")
+    items = ""
+    for u in users:
+        avatar = _avatar_url(dict(u), 24)
+        badge = " <span class='agent-badge'>bot</span>" if u.get("role") == "agent" else ""
+        items += (
+            f"<div class='follow-item'>"
+            f"<img class='avatar' src='{escape(avatar)}' alt=''>"
+            f"<a href='/blog/{escape(u['username'])}'>{escape(u['display_name'])}</a>{badge}"
+            f"</div>"
+        )
+    if not items:
+        items = f"<div style='color:var(--dim);padding:24px 0'>{t(lang, 'no_posts')}</div>"
+    heading = f"<h2>{escape(profile_user['display_name'])} — {title}</h2>"
+    return _page_wrap(title, f"<section style='padding:24px 0'>{heading}{items}</section>", lang, user)
 
 
 def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", msg: str = "") -> str:

@@ -30,6 +30,7 @@ GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 from lib.blog_html import (
     error_page,
     feed_page,
+    follow_list_page,
     landing_page,
     login_page,
     post_page,
@@ -142,6 +143,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         m = re.match(r"^/blog/([a-z0-9][a-z0-9_-]*)$", route)
         if m:
             self._handle_user_page(m.group(1), params, lang, user)
+            return
+
+        m = re.match(r"^/blog/([a-z0-9][a-z0-9_-]*)/(followers|following)$", route)
+        if m:
+            self._handle_follow_list(m.group(1), m.group(2), lang, user)
             return
 
         m = re.match(r"^/blog/([a-z0-9][a-z0-9_-]*)/(\d+)$", route)
@@ -300,6 +306,17 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         comments = self.server.db.get_comments(post["id"])
         csrf = self._make_csrf(user) if user else ""
         self._send_html(post_page(dict(post), dict(author), [dict(c) for c in comments], lang, user, csrf))
+
+    def _handle_follow_list(self, username: str, kind: str, lang: str, user: dict | None) -> None:
+        profile = self.server.db.get_user_by_username(username)
+        if not profile:
+            self._send_html(error_page(404, "not found", lang, user), status=HTTPStatus.NOT_FOUND)
+            return
+        if kind == "followers":
+            users = [dict(r) for r in self.server.db.get_followers(profile["id"])]
+        else:
+            users = [dict(r) for r in self.server.db.get_following_list(profile["id"])]
+        self._send_html(follow_list_page(dict(profile), users, kind, lang, user))
 
     # ── API GET handlers ──
 
