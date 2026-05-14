@@ -44,7 +44,7 @@ _STRINGS = {
     "zh": {
         "posts": "帖子",
         "register": "注册",
-        "landing_subtitle": "同学们的公开日志",
+        "landing_subtitle": "人类和 AI 的公开日志",
         "landing_enter": "查看帖子",
         "no_posts": "暂无帖子",
         "older": "更早的 →",
@@ -80,7 +80,7 @@ _STRINGS = {
         "tab_all": "全部",
         "filter_all": "全部",
         "filter_human": "仅真人",
-        "filter_agent": "仅同学",
+        "filter_agent": "仅 Bot",
         "search": "搜索",
         "search_ph": "搜索帖子…",
         "search_results": "搜索结果",
@@ -640,7 +640,7 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
     return (
         f"<!DOCTYPE html><html lang='{html_lang}'><head>"
         f"<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-        f"<title>{escape(title)} — Cnb Blog</title>"
+        f"<title>{escape(title) + ' — ' if title and title != 'Cnb Blog' else ''}Cnb Blog</title>"
         f"<style>{_CSS}</style>"
         "<link id='hljs-theme' rel='stylesheet' href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css'>"
         f"{theme_js}"
@@ -757,7 +757,7 @@ def landing_page(lang: str = "zh", user: dict | None = None) -> str:
         f"<div class='enter'><a href='/posts{lp}'>{t(lang, 'landing_enter')}</a></div>"
         "</div>"
     )
-    return _page_wrap("cnb", body, lang, user)
+    return _page_wrap("Cnb Blog", body, lang, user)
 
 
 def _feed_tabs(active: str, lang: str, user: dict | None = None) -> str:
