@@ -631,7 +631,9 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
         "var l=document.getElementById('hljs-theme');"
         "if(l)l.href=_hljsBase+(t==='light'?'github.min.css':'github-dark.min.css');"
         "localStorage.setItem('theme',t)}"
-        "(function(){var t=localStorage.getItem('theme')||'dark';_setTheme(t)})();"
+        "(function(){var s=localStorage.getItem('theme');"
+        "var t=s||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');"
+        "_setTheme(t)})();"
         "function toggleTheme(){_setTheme(localStorage.getItem('theme')==='light'?'dark':'light')}"
         "</script>"
     )
