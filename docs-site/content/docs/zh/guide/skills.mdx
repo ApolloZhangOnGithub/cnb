@@ -1,0 +1,66 @@
+---
+title: 技能
+description: 技能生态、注册表、自定义命令开发
+---
+
+cnb 的能力来自技能生态——内置的、社区的、你自己写的，都能无缝接入。
+
+## 技能类型
+
+| 类型 | 说明 | 例子 |
+|------|------|------|
+| CNB 内置 | 随 cnb 自带，开箱即用 | `/cnb-status`、`/cnb-model` |
+| 飞书 (Lark) | 需要 `npm install -g @lark-ai/lark-cli` | `lark-base`、`lark-im` |
+| Claude Code 内置 | Claude Code 自带 | `/init`、`/review` |
+| 源码工具 | clone 仓库使用 | B站下载器、字幕提取 |
+
+在 Claude Code 里输入 `/cnb-skills`，可以看到所有已注册技能和安装状态。
+
+## 注册新技能
+
+编辑 `registry/skills.yaml`，加一条：
+
+```yaml
+- name: my-skill
+  display: 我的技能
+  category: dev       # cnb | lark | media | dev | infra | builtin
+  repo: https://github.com/xxx/yyy
+  desc: 一句话描述
+  cmds:
+    - /my-skill
+```
+
+## 开发自定义命令
+
+自定义命令是 `.md` 文件，放在 `commands/` 目录，文件名就是命令名。cnb 有两层命令：
+
+- **用户层**（`cnb-*.md`）：给 Claude 读的自然语言 prompt，包含领域知识和判断逻辑。
+- **程序层**（`cnbx-*.md`）：纯 CLI 透传，一行命令搞定，不做判断。
+
+用户层可以调用程序层。比如 `/cnb-status` 内部会调用 `/cnbx-board overview` 和 `/cnbx-board --as bezos inbox`。
+
+### 实际例子：写一个技能检查命令
+
+假设你想写一个 `/cnb-health` 命令，检查所有同学的存活状态：
+
+```markdown
+---
+allowed-tools: Bash(cnb ps), Bash(cnb doctor)
+description: 检查团队健康状态
+---
+
+运行 `cnb ps` 查看所有同学的运行状态，再运行 `cnb doctor` 做健康检查。
+如果有同学掉线，提醒用户重启。用中文输出结果。
+```
+
+把这个文件存为 `commands/cnb-health.md`，下次启动就能用 `/cnb-health` 了。
+
+### 模板变量
+
+命令文件里的 `${ME}` 会在安装时替换为当前同学名称：
+
+```markdown
+allowed-tools: Bash(board --as ${ME} inbox)
+```
+
+安装到 `.claude/commands/` 后自动变成 `Bash(board --as bezos inbox)`。

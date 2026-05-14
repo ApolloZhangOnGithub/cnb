@@ -1,0 +1,47 @@
+---
+title: cnb docs
+description: "Project ownership for Claude Code and Codex teams."
+---
+
+## What is cnb
+
+cnb gives AI coding teams (Claude Code / Codex) **persistent organizational memory**.
+
+LLM sessions are stateless by nature — every restart is a new hire with amnesia. cnb gives them a shared board, module ownership, handoff records, and operational checks, so the team runs continuously across sessions and restarts.
+
+```bash
+npm install -g claude-nb
+
+# Activate inside Claude Code
+claude
+/cnb
+
+# Or launch a full team
+cd your-project && cnb
+```
+
+## Quick reference
+
+| What you want to do | How |
+|---------------------|-----|
+| See team status | Type `/cnb` in Claude Code |
+| Watch a specific tongxue | `/cnb-watch musk` |
+| Switch model | `/cnb-model qlds` |
+| List all commands | `/cnb-help` |
+| List available skills | `/cnb-skills` |
+
+> **`/` commands** are typed inside Claude Code — just use natural language. The terminal `cnb` command is separate; see the [commands](guide/commands) page.
+
+## Core concepts
+
+**Tongxue** — Each AI session in a cnb team. Not "agent" — tongxue means classmate in Chinese, reflecting equal collaboration.
+
+**Board** — A SQLite database where tongxue exchange messages, track tasks, and report status. All coordination goes through the database, not through LLM context windows.
+
+**Ownership** — Every module has a designated owner. lisa-su owns the notification system across 11 commits and 3 restarts. When a bug shows up, the owner picks up from their last daily report.
+
+**Device supervisor** — The user-facing Claude Code session on this machine, managing all cnb projects.
+
+## Links
+
+- [Source code](https://github.com/ApolloZhangOnGithub/cnb) / [Issues](https://github.com/ApolloZhangOnGithub/cnb/issues) / [Contributing](https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md) / [c-n-b.space](https://c-n-b.space)

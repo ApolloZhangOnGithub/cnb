@@ -1,0 +1,209 @@
+---
+title: 飞书 Bridge
+description: "将飞书群聊连接到 Mac 设备主管同学，实现异步指令路由。"
+---
+
+飞书 bridge 允许白名单内的飞书群聊唤醒 Mac 设备主管同学。它是一个异步指令通道，而非终端屏幕镜像。Codex 或 Claude 的实时终端渲染留在 Mac 上；飞书只接收最终结果、简短提问，以及主动请求的截图或 watch 链接。
+
+## 快速开始
+
+```bash
+cnb feishu setup
+cnb feishu status
+cnb feishu start
+```
+
+`setup` 会写入本地 `[feishu]` 配置、生成缺失的本地 token、在条件允许时启动本地 webhook，并在 `ngrok` 已安装且认证的情况下准备隧道 URL。建议在 `start` 前先运行 `status`，以便在 bridge 接收真实消息前发现缺失的应用凭证、chat ID、webhook URL 或 watch 设置。
+
+在 macOS 上，`cnb feishu start` 还会在 `caffeinate` 可用时启动一个生命周期绑定的 `caffeinate -dims` 伴随进程，防止空闲和息屏中断值班中的 bridge。`cnb feishu stop` 会停止该伴随进程，`cnb feishu status` 会显示 keep-awake 的状态：active、unavailable、disabled 或 stale。非 macOS 主机及没有 `caffeinate` 的 Mac 照常运行 bridge。
+
+## 运行模型
+
+生产路径为 `local_openapi`：
+
+1. 飞书调用本机的 CNB webhook。
+2. CNB 验证 verification token、群聊和发送者约束。
+3. CNB 将消息路由到设备主管的 tmux 会话。
+4. CNB 通过飞书 OpenAPI 使用配置的应用凭证进行回复。
+
+<Warning>Hermes / `hermes_lark_cli` 仅用于开发测试适配，不要放入生产路径。</Warning>
+
+路由到主管的 prompt 包含飞书 `message_id`。主管应使用：
+
+- `cnb feishu reply <message_id> "message"` 用于最终结果、阻塞项和实质性更新。
+- `cnb feishu ask <message_id> "short question"` 仅用于简短的确认、选择或授权请求。
+- `cnb feishu watch` 当用户需要实时只读视图时使用。
+- `cnb feishu tui` 当用户明确要求当前截图时使用。
+
+`ask` 有意限制为短消息，会拒绝长篇总结或带围栏代码块的内容，以防止进度报告变成群聊刷屏。
+
+最终的 `cnb feishu reply` 是关闭门控。CNB 仅在回复发送路径报告成功后才将入站请求标记为完成。如果发送失败，请求保持打开状态，在飞书 activity state 中标记为 blocked，并将失败信息输出到 stderr 供操作者查看。
+
+## 设备主管状态边界
+
+设备主管是机器级别的状态，不是项目 board 会话。项目 `.cnb/dailies/<shift>/<session>.md` 文件仅属于在该项目 board 数据库中注册的项目同学。
+
+当飞书路由的设备主管写入关机笔记、日报或交接状态时，必须使用全局主管区域：
+
+```text
+~/.cnb/device-supervisor/dailies/<date>.md
+```
+
+不得将机器级别的交接写入项目同学的日报，如 `.cnb/dailies/<shift>/codex.md` 或 `.cnb/dailies/<shift>/lead.md`。这些文件可以在全局笔记中引用（当项目交接相关时），但它们的所有权属于项目会话。
+
+## 配置结构
+
+`cnb feishu setup` 将此部分写入 `~/.cnb/config.toml`。密钥由用户持有，按环境区分。
+
+```toml
+[feishu]
+transport = "local_openapi"
+app_id = "cli_xxxxx"
+app_secret = "..."
+verification_token = "..."
+webhook_host = "127.0.0.1"
+webhook_port = 8787
+webhook_public_url = "https://your-tunnel.example/cnb/feishu"
+chat_id = "oc_xxxxx"
+device_supervisor_name = "device-supervisor"
+device_supervisor_tmux = "cnb-device-supervisor"
+agent = "codex"
+ack = true
+notification_policy = "final_only"
+activity_updates = true
+activity_update_seconds = [1]
+activity_update_repeat_seconds = 1
+tui_capture_lines = 120
+watch_port = 8765
+watch_public_url = "https://your-tunnel.example/watch"
+watch_token = "..."
+watch_tool = "builtin"
+watch_refresh_ms = 250
+caffeine_enabled = true
+readback_enabled = false
+resource_handoff_enabled = true
+resource_handoff_max_bytes = 26214400
+caffeine_enabled = true
+```
+
+旧版 `terminal_supervisor_*` 配置键仍作为别名接受，但新配置应使用 `device_supervisor_*`。
+
+## 通知策略
+
+`notification_policy = "final_only"` 是默认的移动端友好模式：普通飞书请求路由到设备主管时不发送确认或实时 activity 推送。iOS 仅在主管发送最终 `cnb feishu reply` 时收到通知。
+
+其他模式刻意更窄：
+
+| 策略 | 行为 |
+|------|------|
+| `final_only` | 无自动确认或实时卡片；仅最终回复。 |
+| `ack` | 一次收到确认，然后最终回复。 |
+| `live` | 确认加上一个 activity 卡片循环，用于临时调试。 |
+
+Live 模式更新一个飞书 activity 卡片，显示可读的终端尾部文本。完整的高频屏幕属于 `/watch` Web TUI。
+
+包含 Markdown 结构（列表、强调、链接、行内代码或围栏代码块）的回复会以飞书富文本发送，以便最终总结和代码片段在客户端正常渲染。
+
+## 资源转交与回读
+
+当前消息的资源转交与聊天历史回读是分离的。
+
+当 `resource_handoff_enabled = true` 时，当前飞书入站消息中的图片、文件、音视频资源以及富文本中嵌入的图片/文件会通过飞书消息资源 API 下载到：
+
+```text
+~/.cnb/feishu_resources/<message_id>/
+```
+
+主管 prompt 接收绝对路径。飞书文档链接和普通 URL 以链接形式透传。Bridge 不会对这些资源进行 OCR、解析或摘要。
+
+回读是诊断模式，不是常规的上下文加载。默认保持 `readback_enabled = false`。仅当用户询问飞书消息、历史条目、会话或已读状态异常时才开启。在拥有必要的飞书消息读取权限后，主管可以运行：
+
+```bash
+cnb feishu history --limit 12
+cnb feishu inspect-message <message_id>
+```
+
+CNB 不会在请求的资源文件之外持久化聊天历史。
+
+## Web TUI
+
+`cnb feishu watch` 启动内置的只读 Web TUI 并返回一个带 token 的 URL。同一个公共隧道源可以同时用于飞书 webhook 和 watch 路由；`watch_token` 保护查看器。普通的 `cnb feishu status` 会隐去 token。
+
+Web TUI 每 `watch_refresh_ms` 毫秒刷新一次，仅在屏幕文本变化时更新 DOM，并在用户未滚动的情况下保持视口锚定在底部。
+
+## Mac 防休眠
+
+在 macOS 上，当 `caffeine_enabled = true` 且 `caffeinate` 命令可用时，`cnb feishu start` 会启动一个生命周期绑定的 `caffeinate -di` 进程。这可以在设备主管 bridge 值班期间防止空闲系统休眠和息屏，无需更改节能或锁屏设置。
+
+`cnb feishu stop` 会停止伴随的 caffeine 进程，`cnb feishu status` 报告状态为 `active`、`inactive`、`disabled` 或 `unavailable`。非 macOS 主机和没有 `caffeinate` 的机器照常运行 bridge，并报告 caffeine 为 unavailable。
+
+## 部署清单
+
+- 在飞书开发者控制台中，将事件订阅请求 URL 设置为 `webhook_public_url`。
+- 使用 `~/.cnb/config.toml` 中相同的 `verification_token` 进行飞书 URL 验证。
+- 为机器人订阅 `im.message.receive_v1` 事件。
+- 授予接收消息、读取引用消息以及以机器人身份回复/发送消息所需的 IM 权限。
+- 将机器人安装到目标群聊并设置 `chat_id`，或有意启用首次聊天绑定。
+- 保持 `watch_token` 私密。仅通过有意的 `cnb feishu watch` 回复分享完整的 watch URL。
+- 在 macOS 上，除非有其他用户持有的进程已在管理主机休眠，否则保持 `caffeine_enabled = true`。此功能仅使用本地 `caffeinate` 命令，不需要 sudo 或系统设置更改。
+
+## 权限清单
+
+对于当前的 bridge 路径，在飞书开发者控制台中申请以下广泛的 IM/Chat/Contact 权限。这是"尽可能开放 bridge 可用权限"的集合，不是最小集合。
+
+```json
+{
+  "scopes": {
+    "tenant": [
+      "contact:contact.base:readonly",
+      "contact:user.base:readonly",
+      "contact:user.email:readonly",
+      "contact:user.employee_id:readonly",
+      "contact:user.id:readonly",
+      "im:chat",
+      "im:chat:create",
+      "im:chat:readonly",
+      "im:chat.members:read",
+      "im:chat.members:write_only",
+      "im:message",
+      "im:message:readonly",
+      "im:message:send_as_bot",
+      "im:message.group_msg",
+      "im:message.group_at_msg.include_bot:readonly",
+      "im:message.group_at_msg:readonly",
+      "im:message.p2p_msg:readonly",
+      "im:resource"
+    ],
+    "user": []
+  }
+}
+```
+
+如果控制台为你的租户暴露了额外的 IM 子权限，也请保持启用。Bridge 仅消费当前消息转交和可选的回读路径；当前控制室流程不需要 Calendar/Docs/Drive 权限。
+
+`ngrok` 是用户持有的基础设施。CNB 只有在本机已安装并认证 ngrok 后才能启动 `ngrok http ...`，例如：
+
+```bash
+ngrok config add-authtoken <your-token>
+```
+
+CNB 不会分发、共享或生成 ngrok 凭证。每个用户或部署必须授权自己的 ngrok 账户。
+
+## 飞书侧快捷命令
+
+飞书侧命令是可选的精确快捷方式：
+
+| 命令 | 结果 |
+|------|------|
+| `/cnb_tui` 或 `/c_tui` | 回复当前设备主管的 TUI 截图。 |
+| `/cnb_watch` 或 `/c_watch` | 启动内置只读 Web TUI 查看器并回复链接。 |
+| `/cnb_status` 或 `/c_status` | 回复设备、tmux、团队和前台会话的状态摘要。 |
+
+普通的自然语言请求不需要这些命令。它们会被路由到主管并附带简短的能力指南，主管应在调用本地能力前推断目标。
+
+## 相关界面
+
+- 设备总管与多设备主管定义了多个 Mac 设备主管如何使用飞书作为人类可见的控制室，而不会成为脑裂的活跃写入者。
+- Mac companion 和 Island 解释了 Mac 伴侣应用和可选的 iPhone Live Activity bridge。
+- `tools/cnb-mac-companion/` 通过 WebKit 在本地嵌入同样的内置 Web TUI。
+- `tools/cnb-island/` 可以导出飞书聊天配置，用于模拟器和实体 iPhone 检查，而不提交密钥。

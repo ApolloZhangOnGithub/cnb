@@ -1,0 +1,65 @@
+---
+title: 路线图
+description: 当前优先级、ownership 生命周期、研究议程
+---
+
+最后更新：2026-05-10
+
+cnb 围绕所有权来组织开发。这不是一份按难度排的功能清单，而是按组织优先级排序的工作方向。
+
+## 当前焦点：角色拆分
+
+现在最重要的一件事是把 lead 角色拆成两个独立角色（[#64](https://github.com/ApolloZhangOnGithub/cnb/issues/64)）：
+
+- **终端主管同学**：按机器分配，面向用户，接收外部消息，汇报状态
+- **项目负责同学**：按仓库分配，负责项目级团队管理和交付
+
+这个拆分阻塞了多项所有权、通信和调度决策，是当前路线图的关键路径。
+
+## 所有权体系
+
+所有权是 cnb 的核心，正在分阶段建设：
+
+- **注册与自治**（[#45](https://github.com/ApolloZhangOnGithub/cnb/issues/45)）——核心命令已完成，文档和边缘情况待补
+- **交接机制**（[#49](https://github.com/ApolloZhangOnGithub/cnb/issues/49)）——正在开发转移、孤儿检测、离职和兜底方案
+- **路由准确性**（[#87](https://github.com/ApolloZhangOnGithub/cnb/issues/87)）——目前路由还很粗放，需要引入置信度和冲突处理
+- **自适应扩展**（[#30](https://github.com/ApolloZhangOnGithub/cnb/issues/30)）——等利用率数据积累后再制定规则
+
+## 运营基础设施
+
+这些事不需要讨论，需要有人认领并执行：
+
+- [#48](https://github.com/ApolloZhangOnGithub/cnb/issues/48) 基础设施负责人
+- [#60](https://github.com/ApolloZhangOnGithub/cnb/issues/60) 私钥存储和 `.gitignore` 规则
+- [#67](https://github.com/ApolloZhangOnGithub/cnb/issues/67) pytest 隔离
+- [#73](https://github.com/ApolloZhangOnGithub/cnb/issues/73) sync-issues 工作流修复
+- [#74](https://github.com/ApolloZhangOnGithub/cnb/issues/74) 脏工作树和过时 PR 清理
+- [#39](https://github.com/ApolloZhangOnGithub/cnb/issues/39) `.claudes/` 到 `.cnb/` 迁移
+- [#43](https://github.com/ApolloZhangOnGithub/cnb/issues/43) 更新检查
+- [#56](https://github.com/ApolloZhangOnGithub/cnb/issues/56) wiki 维护
+
+## 下一步：扩展能力
+
+核心稳定之后要做的事：
+
+- [#34](https://github.com/ApolloZhangOnGithub/cnb/issues/34) 待处理操作队列——让用户干预循环更顺畅
+- [#75](https://github.com/ApolloZhangOnGithub/cnb/issues/75) 只读看板视图——不用模拟会话就能看状态
+- [#41](https://github.com/ApolloZhangOnGithub/cnb/issues/41) 自动关闭流程
+- [#42](https://github.com/ApolloZhangOnGithub/cnb/issues/42) 全局仪表盘（`~/.cnb/`）
+- [#47](https://github.com/ApolloZhangOnGithub/cnb/issues/47) 跨项目身份
+- [#46](https://github.com/ApolloZhangOnGithub/cnb/issues/46) 任务功能使用研究
+
+## 研究方向
+
+这些是假说，不是待办。只有核心所有权系统稳定后才值得投入：
+
+- [#50](https://github.com/ApolloZhangOnGithub/cnb/issues/50) 模块所有权是否会降低全局理解？
+- [#51](https://github.com/ApolloZhangOnGithub/cnb/issues/51) 自主探索能否防止能力退化？
+- [#52](https://github.com/ApolloZhangOnGithub/cnb/issues/52) 跨项目沟通能否带来更好的视角？
+- [#53](https://github.com/ApolloZhangOnGithub/cnb/issues/53) 项目生命周期规则——何时归档、何时唤醒
+- [#54](https://github.com/ApolloZhangOnGithub/cnb/issues/54) 上下文健康——修剪和间隔复习
+- [#62](https://github.com/ApolloZhangOnGithub/cnb/issues/62) cnb 作为 LLM 行为研究平台
+
+## 远景
+
+跨机器传输、知识共享、定期团队反思、托管/云端运营、独立 GitHub App 身份、资源分配与激励机制。这些目前只是方向，没有具体时间表。

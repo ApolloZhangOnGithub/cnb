@@ -1,0 +1,5 @@
+{
+  "title": "cnb docs",
+  "pages": ["index", "guide", "reference"],
+  "defaultOpen": true
+}

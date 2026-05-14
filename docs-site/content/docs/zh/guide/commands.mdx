@@ -1,0 +1,75 @@
+---
+title: 命令
+description: 斜杠命令 vs 终端命令，两层架构（cnb/cnbx）
+---
+
+cnb 有两种"命令"，入口不同，本质不同。
+
+## 一句话区分
+
+**`/` 命令**在 Claude Code 对话框里输入，说人话，Claude 帮你执行。
+**`cnb` 命令**在终端里输入，严格 CLI 语法，Shell 直接跑。
+
+| | 斜杠命令 | 终端命令 |
+|---|---|---|
+| 输入位置 | Claude Code 对话 | Terminal |
+| 执行者 | Claude 理解意图后调用工具 | Shell 直接运行 |
+| 语法 | 自然语言 | CLI 参数 |
+| 例子 | `/cnb-model 切ds` | `cnb board --as bezos send musk "hello"` |
+
+## 斜杠命令
+
+在 Claude Code 对话中输入 `/cnb-status`，Claude 加载一段 prompt，理解意图，调用底层工具执行。
+
+**说人话就行**：
+- `/cnb` — 全局体检
+- `/cnb-status` — 团队状态
+- `/cnb-model 切ds` — 切换到 Deepseek
+- `/cnb-watch musk` — musk 在干嘛
+- `/cnb-skills` — 看有哪些技能
+
+完整列表用 `/cnb-help` 自动扫描。
+
+## 终端命令
+
+在 Terminal 里运行的程序，用于启动团队、管理看板、发消息。
+
+```bash
+cnb                    # 启动团队
+cnb ps                 # 看谁在线
+cnb logs musk          # 看消息历史
+cnb stop musk          # 停掉一个同学
+cnb doctor             # 环境检查
+```
+
+看板操作：
+
+```bash
+cnb board --as <name> inbox           # 查收件箱
+cnb board --as <name> send <to> "msg" # 发消息
+cnb board --as <name> task add "desc" # 加任务
+cnb board --as <name> own map         # ownership 地图
+```
+
+## 两层架构：cnb vs cnbx
+
+斜杠命令内部分两层：
+
+| 层 | 给谁用 | 风格 | 例子 |
+|---|--------|------|------|
+| `cnb-*` | 人 → Claude | 自然语言 prompt | `/cnb-status` |
+| `cnbx-*` | Claude → 程序 | 纯 CLI 透传 | `/cnbx-board overview` |
+
+**为什么分两层？**
+
+`/cnb-status` 是给人读的 prompt——它知道什么时候该看 overview，什么时候该看 inbox，根据你的意图灵活组合。
+
+`/cnbx-board overview` 是 Claude 内部调用的原子操作——永远只跑一个命令，精确可组合，没有判断逻辑。
+
+用户说 `/cnb-status`，Claude 理解意图后可能同时调用 `/cnbx-board overview` + `/cnbx-board --as bezos inbox` + `/cnbx-board --as bezos view`，然后归纳出一份简洁报告。
+
+## 自定义命令
+
+在 `commands/` 目录创建 `.md` 文件即可。`cnb` 启动时自动安装到 `.claude/commands/`。
+
+详见[技能](skills)页面。

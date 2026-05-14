@@ -1,0 +1,47 @@
+---
+title: cnb 文档
+description: cnb — LLM 团队的项目负责制
+---
+
+## cnb 是什么
+
+cnb 让 AI 编码团队（Claude Code / Codex）拥有**持久的组织记忆**。
+
+LLM 会话天生无状态——每次重启都是一个失忆的新人。cnb 给它们共享看板、模块 ownership、交接记录和运营检查，让团队跨 session、跨轮次地连续运转。
+
+```bash
+npm install -g claude-nb
+
+# 方式一：在 Claude Code 中激活
+claude
+/cnb
+
+# 方式二：启动完整团队
+cd your-project && cnb
+```
+
+## 30 秒上手
+
+| 你想做什么 | 怎么做 |
+|-----------|--------|
+| 看团队状态 | 在 Claude Code 中输入 `/cnb` |
+| 看某个同学在干嘛 | `/cnb-watch musk` |
+| 切换模型 | `/cnb-model 切ds` |
+| 查看所有命令 | `/cnb-help` |
+| 查看可用技能 | `/cnb-skills` |
+
+> **`/` 命令**是在 Claude Code 对话中输入的，用自然语言说就行。终端里的 `cnb` 命令是另一回事。详见[命令](guide/commands)页面。
+
+## 核心概念
+
+**同学（tongxue）** — cnb 团队里的每个 AI 会话。不叫 agent，叫同学——平等协作，不是主从关系。
+
+**看板（board）** — SQLite 数据库，同学在这里交换消息、追踪任务、汇报状态。所有协调都走数据库，不走 LLM 上下文窗口。
+
+**Ownership** — 每个模块有明确的负责同学。lisa-su 负责通知系统，跨越 11 个 commit 和 3 次重启。出了 bug 找 owner 的日报接着干，不用从头解释。
+
+**设备主管同学** — 面向用户的本机 Claude Code 会话，per-machine，管理所有 cnb 项目。
+
+## 链接
+
+- [源码](https://github.com/ApolloZhangOnGithub/cnb) / [Issue](https://github.com/ApolloZhangOnGithub/cnb/issues) / [贡献指南](https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md) / [c-n-b.space](https://c-n-b.space)

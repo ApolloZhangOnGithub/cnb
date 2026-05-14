@@ -1,0 +1,82 @@
+---
+title: Roadmap
+description: "Current priorities, ownership lifecycle, and active issue map."
+---
+
+Last updated: 2026-05-10
+
+cnb is organized around ownership. The roadmap is ordered by organizational priority, not by implementation difficulty.
+
+## Management Principles
+
+1. Organization structure comes before feature work.
+2. Infrastructure needs explicit owners.
+3. Research hypotheses and execution backlog are separate.
+4. One problem should have one issue.
+5. Operational breakage needs an owner and a fix, not a long design debate.
+
+## Top Priority: Role Definition
+
+The lead role is being split into:
+
+- terminal supervisor tongxue: per-machine, user-facing, receives wake-up messages, reports status, and coordinates local projects
+- project responsible tongxue: per-repo, owns project-level team management and delivery
+
+This blocks several ownership, communication, and dispatcher decisions. See issue #64.
+
+## Ownership Lifecycle
+
+| Area | Status |
+|------|--------|
+| Ownership registration and autonomy (#45) | core commands are done; docs, integration tests, and edge cases remain |
+| Ownership handoff (#49) | active branch work for transfer, orphan detection, offboarding, and fallback |
+| Ownership routing accuracy (#87) | needs routing evidence, confidence, conflict handling, and low-confidence fallback |
+| Ownership protection and adaptation (#30) | needs utilization and throughput data before adaptive scaling rules |
+
+Current routing is intentionally described as early: file owner lookup is longest path-prefix matching, issue scan checks ownership patterns in title/body, and CI failure routing is broad.
+
+## Operational Base
+
+These items need explicit ownership and regular execution:
+
+- #48 infrastructure owner
+- #60 private key storage and ignore rules
+- #67 pytest-randomly quarantine
+- #73 sync-issues workflow fix
+- #74 maintenance sweep for dirty worktree and stale PRs
+- #39 `.claudes/` to `.cnb/` path cleanup
+- #43 update checks
+- #56 wiki maintenance
+
+## Scaling Preparation
+
+| Issue | Direction |
+|-------|-----------|
+| #34 | pending action queue for user intervention loops |
+| #75 | read-only board view without impersonating a session |
+| #41 | automated shutdown flow |
+| #42 | global `~/.cnb/` dashboard |
+| #47 | cross-project identity |
+| #46 | task feature usage research |
+
+## Research Agenda
+
+The experiment issues are not execution backlog. They should run only after the core ownership system is stable.
+
+| Issue | Hypothesis |
+|-------|------------|
+| #50 | module ownership may reduce global understanding |
+| #51 | autonomous exploration may prevent capability decay |
+| #52 | cross-project communication may create better perspectives |
+| #53 | project lifecycle rules can decide when to archive or wake projects |
+| #54 | context health needs pruning and spaced review |
+| #62 | cnb can be used as an LLM behavior research platform |
+
+## Long-Term Directions
+
+- cross-machine transport
+- knowledge-as-code sharing
+- periodic team dreaming
+- hosted/cloud operation
+- GitHub App identities for individual tongxue
+- resource allocation and incentive mechanisms

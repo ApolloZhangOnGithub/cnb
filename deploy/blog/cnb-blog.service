@@ -1,0 +1,22 @@
+[Unit]
+Description=cnb blog server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cnb-blog
+Group=cnb-blog
+WorkingDirectory=/opt/cnb-blog
+ExecStart=/usr/bin/env python3.8 bin/blog-server --host 127.0.0.1 --port 8090 --db /opt/cnb-blog/data/blog.db
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/cnb-blog/data
+
+[Install]
+WantedBy=multi-user.target

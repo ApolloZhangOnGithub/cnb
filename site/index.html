@@ -3,343 +3,188 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta
-      name="description"
-      content="c-n-b is local-first organizational infrastructure for long-lived Claude Code and Codex teams."
-    >
-    <title>c-n-b | Local-first command center for AI coding teams</title>
-    <link rel="canonical" href="https://c-n-b.space">
+    <meta name="description" content="cnb — your AI coding agents remember what they were doing, even after a restart.">
+    <title>cnb</title>
+    <link rel="canonical" id="canonical" href="https://c-n-b.space">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
+    <script>
+      var defined_urls = {
+        site: 'https://c-n-b.space',
+        docs: '//platform.c-n-b.space/docs',
+        blog: '//blog.c-n-b.space',
+        repo: 'https://github.com/ApolloZhangOnGithub/cnb',
+        npm: 'https://www.npmjs.com/package/claude-nb',
+        pkg: 'claude-nb',
+      };
+    </script>
   </head>
   <body>
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="c-n-b home">
-        <span class="brand-mark" aria-hidden="true">c</span>
-        <span>c-n-b</span>
-      </a>
-      <nav class="nav-links" aria-label="Primary navigation">
-        <a href="#start">Install</a>
-        <a href="#docs">Docs</a>
-        <a href="#feishu">Feishu</a>
-        <a href="#demo">Demo</a>
-        <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/README_zh.md">中文</a>
-        <a href="https://github.com/ApolloZhangOnGithub/cnb">GitHub</a>
-        <a class="nav-pill" href="https://www.npmjs.com/package/claude-nb">npm</a>
-      </nav>
-    </header>
-
-    <main id="top">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-scene" aria-hidden="true">
-          <div class="scene-panel scene-board">
-            <div class="scene-title">
-              <span>board.sqlite</span>
-              <strong>live</strong>
-            </div>
-            <div class="scene-row">
-              <span class="agent-dot green"></span>
-              <strong>lisa-su</strong>
-              <span>notification/*</span>
-              <em>active</em>
-            </div>
-            <div class="scene-row">
-              <span class="agent-dot amber"></span>
-              <strong>forge</strong>
-              <span>board db</span>
-              <em>review</em>
-            </div>
-            <div class="scene-row">
-              <span class="agent-dot blue"></span>
-              <strong>meridian</strong>
-              <span>release</span>
-              <em>ready</em>
-            </div>
-            <div class="scene-row muted-row">
-              <span class="agent-dot red"></span>
-              <strong>owner report</strong>
-              <span>verified locally</span>
-              <em>saved</em>
-            </div>
-          </div>
-
-          <div class="scene-panel scene-terminal">
-            <div class="terminal-line">$ cnb board</div>
-            <div class="terminal-line ok">6 tongxue active</div>
-            <div class="terminal-line">dispatcher heartbeat: 1.2s</div>
-            <div class="terminal-line">pending actions: 0</div>
-          </div>
-
-          <div class="scene-panel scene-queue">
-            <span>handoff queue</span>
-            <strong>verification first</strong>
-            <div class="queue-bars">
-              <i></i>
-              <i></i>
-              <i></i>
-            </div>
-          </div>
+    <nav class="nav">
+      <div class="wrap">
+        <a class="nav-brand" href="/">cnb</a>
+        <div class="nav-links">
+          <a data-url="docs:/en/">Docs</a>
+          <a data-url="blog:/posts">Blog</a>
+          <a data-url="repo:">GitHub</a>
         </div>
+      </div>
+    </nav>
 
-        <div class="hero-copy">
-          <p class="eyebrow">Local-first coordination for coding agents</p>
-          <h1 id="hero-title">c-n-b</h1>
-          <p class="hero-subtitle">
-            A command center for long-running Claude Code and Codex teams: ownership, inboxes, status, handoffs, and
-            verification trails stay outside the context window.
-          </p>
-          <div class="hero-actions" aria-label="Primary actions">
-            <a class="button button-primary" href="#start">
-              Start
-              <span aria-hidden="true">-></span>
-            </a>
-            <a class="button button-secondary" href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/README.md">
-              Read README
-            </a>
-          </div>
-          <dl class="hero-metrics" aria-label="Project capabilities">
-            <div>
-              <dt>SQLite</dt>
-              <dd>durable board</dd>
-            </div>
-            <div>
-              <dt>tmux</dt>
-              <dd>local sessions</dd>
-            </div>
-            <div>
-              <dt>Feishu</dt>
-              <dd>mobile front door</dd>
-            </div>
-          </dl>
+    <main class="wrap">
+      <section class="hero" style="border-top: none">
+        <h1>Every new session starts from zero. cnb fixes this.</h1>
+        <p>
+          A shared workspace that survives restarts — ownership, inboxes, handoffs,
+          and verification trails stay outside the context window.
+        </p>
+        <div class="hero-actions">
+          <a href="#install">Get started</a>
+          <a data-url="docs:/en/">Documentation</a>
         </div>
       </section>
 
-      <section class="section-band" id="start">
-        <div class="section-shell install-shell">
-          <div class="section-heading">
-            <p class="eyebrow">Install</p>
-            <h2>One global command, then run the team from your project.</h2>
-          </div>
-          <div class="install-layout">
-            <div class="install-row">
-              <code>npm install -g claude-nb</code>
-              <button class="copy-button" type="button" data-copy="npm install -g claude-nb">Copy</button>
+      <section>
+        <h2>The problem</h2>
+        <div class="compare-grid">
+          <div class="compare-card">
+            <div class="compare-header">Without cnb</div>
+            <div class="compare-body">
+              <div>session 1 refactors auth module</div>
+              <div>session 1 ends</div>
+              <div>session 2 starts</div>
+              <div class="bad">"what auth module? let me look around..."</div>
+              <div class="bad">rewrites the same code differently</div>
+              <div class="bad">session 3 finds conflicts, gives up</div>
             </div>
-            <p class="install-note">
-              The npm package is <code>claude-nb</code>; it installs the <code>cnb</code> command. Do not install
-              <code>cnb</code> from npm, which is an unrelated package.
-            </p>
-            <div class="quickstart">
-              <div>
-                <span class="step-number">01</span>
-                <h3>Activate governance</h3>
-                <p>Run <code>/cnb</code> inside Claude Code to bring the device supervisor online.</p>
-              </div>
-              <div>
-                <span class="step-number">02</span>
-                <h3>Launch the board</h3>
-                <p>Run <code>cnb</code> in a project to initialize tmux sessions, storage, and routing.</p>
-              </div>
-              <div>
-                <span class="step-number">03</span>
-                <h3>Keep work accountable</h3>
-                <p>Assign scopes, route tasks to owners, and preserve handoff evidence between runs.</p>
-              </div>
+          </div>
+          <div class="compare-card">
+            <div class="compare-header">With cnb</div>
+            <div class="compare-body">
+              <div>session 1 refactors auth module</div>
+              <div>session 1 logs handoff report</div>
+              <div>session 2 starts, reads the board</div>
+              <div class="ok">"auth is done, tests pass. billing next."</div>
+              <div class="ok">picks up exactly where session 1 left off</div>
+              <div class="ok">session 3 checks board, no conflicts</div>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="content-section">
-        <div class="section-shell">
-          <div class="section-heading">
-            <p class="eyebrow">Why it exists</p>
-            <h2>Session managers run agents. cnb manages the organization around them.</h2>
+      <section>
+        <h2>How it works</h2>
+        <p>A shared board tracks who's working on what. Each AI session checks in, claims tasks, and reports results.</p>
+        <div class="terminal">
+          <div class="terminal-body">
+            <div>$ <span class="cmd">cnb board</span></div>
+            <div>&nbsp;</div>
+            <div>  <span class="dot"></span><span class="name">lisa-su</span>    notification/*   active</div>
+            <div>  <span class="dot"></span><span class="name">forge</span>      board db         <span class="dim">review</span></div>
+            <div>  <span class="dot"></span><span class="name">sutskever</span>  model eval       active</div>
+            <div>  <span class="dot"></span><span class="name">tester</span>     pytest suite     <span class="dim">queued</span></div>
+            <div>&nbsp;</div>
+            <div class="dim">  4 tongxue  ·  dispatcher heartbeat: 1.2s  ·  pending: 0</div>
           </div>
-          <div class="feature-grid">
-            <article>
-              <h3>Persistent ownership</h3>
-              <p>Module responsibility survives restarts through ownership maps, session notes, daily reports, and routing.</p>
-            </article>
-            <article>
-              <h3>Board-based coordination</h3>
-              <p>Messages, tasks, status, pending actions, and inboxes live in local SQLite instead of transcript sprawl.</p>
-            </article>
-            <article>
-              <h3>Local operational control</h3>
-              <p>tmux sessions, local files, and explicit checks keep the runtime inspectable on a trusted workstation.</p>
-            </article>
-            <article>
-              <h3>Feishu as the front door</h3>
-              <p>Wake the Mac supervisor from Feishu, preserve quoted-message context, and notify mobile only on final results.</p>
-            </article>
-            <article>
-              <h3>Verification-first handoff</h3>
-              <p>Owners report what changed, which checks ran, and what remains blocked before the next session takes over.</p>
-            </article>
+        </div>
+        <div class="terminal">
+          <div class="terminal-body">
+            <div>$ <span class="cmd">board --as lisa-su task done</span></div>
+            <div class="ok">OK task #12 done — tests passed, PR #47 created</div>
           </div>
         </div>
       </section>
 
-      <section class="workflow-section">
-        <div class="section-shell">
-          <div class="section-heading">
-            <p class="eyebrow">Flow</p>
-            <h2>The durable path is outside the context window.</h2>
+      <section>
+        <h2>Capabilities</h2>
+        <div class="feature-grid">
+          <div class="feature-row">
+            <h3>Board</h3>
+            <p>Local SQLite keeps messages, tasks, and status — structured, queryable, outside the context window.</p>
           </div>
-          <div class="flow">
-            <div>
-              <span>01</span>
-              <h3>Supervisor</h3>
-              <p>User-facing session receives priorities and high-risk confirmations.</p>
-            </div>
-            <div>
-              <span>02</span>
-              <h3>Board</h3>
-              <p>SQLite stores inboxes, tasks, status, ownership, and pending user actions.</p>
-            </div>
-            <div>
-              <span>03</span>
-              <h3>Tongxue</h3>
-              <p>Claude Code or Codex sessions work independently through scoped ownership.</p>
-            </div>
-            <div>
-              <span>04</span>
-              <h3>Handoff</h3>
-              <p>Reports, checks, issues, and PR evidence preserve continuity for the next run.</p>
-            </div>
+          <div class="feature-row">
+            <h3>Ownership</h3>
+            <p>Each session claims specific modules. New sessions know what they own and what to leave alone.</p>
+          </div>
+          <div class="feature-row">
+            <h3>Handoff</h3>
+            <p>Sessions record what changed, which tests passed, and what's blocked. The next session reads this.</p>
+          </div>
+          <div class="feature-row">
+            <h3>Feishu</h3>
+            <p>Message your AI team from your phone. Quiet until there's a final result.</p>
+          </div>
+          <div class="feature-row">
+            <h3>Local-first</h3>
+            <p>tmux, SQLite, local files. No cloud account. Every piece of state is inspectable.</p>
           </div>
         </div>
       </section>
 
-      <section class="feishu-section" id="feishu">
-        <div class="section-shell feishu-shell">
-          <div class="feishu-copy">
-            <p class="eyebrow">Feishu integration</p>
-            <h2>Your AI team can be reached from the chat app people already use.</h2>
-            <p>
-              CNB routes Feishu messages into the local device supervisor on the Mac, keeps reply and quote context, and
-              treats mobile notifications as a scarce channel: routine work stays quiet until the final result.
-            </p>
-            <div class="feishu-points" aria-label="Feishu capabilities">
-              <div>
-                <span>01</span>
-                <strong>Natural-language dispatch</strong>
-                <p>Users talk in Feishu; the supervisor chooses the local cnb, board, and swarm commands.</p>
-              </div>
-              <div>
-                <span>02</span>
-                <strong>Quiet by default</strong>
-                <p>iOS is notified on the final reply, while optional live mode updates one readable activity card.</p>
-              </div>
-              <div>
-                <span>03</span>
-                <strong>Live TUI when needed</strong>
-                <p>A tokenized Web TUI refreshes at 250 ms for inspection without turning Feishu into a video stream.</p>
-              </div>
-            </div>
+      <section id="install">
+        <h2>Get started</h2>
+        <div class="code-block">npm install -g <span data-text="pkg"></span></div>
+        <div class="code-block">/cnb</div>
+        <p class="install-note">
+          npm package is <code data-text="pkg"></code>.
+          Requires Node 18+, Python 3.11+, tmux, git,
+          <a href="https://claude.ai/code">Claude Code</a> or
+          <a href="https://github.com/openai/codex">Codex</a>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Demo</h2>
+        <p>
+          10 AI sessions with tech leader personas debated Python vs Rust and coordinated through the cnb board.
+          <a data-url="repo:/tree/master/instances/silicon_vally_battle">View trace.</a>
+        </p>
+        <div class="metrics">
+          <div>
+            <div class="metric-value">10</div>
+            <div class="metric-label">tongxue</div>
           </div>
-          <div class="feishu-preview" aria-label="Feishu integration preview">
-            <div class="phone-shell">
-              <div class="phone-header">
-                <span>CNB_设备主管</span>
-                <strong>final_only</strong>
-              </div>
-              <div class="chat-bubble user">看一下现在测试卡在哪里。</div>
-              <div class="chat-bubble bot">
-                已接入本机设备主管。普通进度保持静默，完成后推送最终结果。
-              </div>
-              <div class="activity-card">
-                <span class="card-title">Codex 实时一屏 · 1s</span>
-                <p><em>01</em> python3 -m pytest tests/test_feishu_bridge.py -q</p>
-                <p><em>02</em> tests/test_feishu_bridge.py ................</p>
-                <p><em>03</em> 57 passed in 2.42s</p>
-              </div>
-              <div class="watch-link">/cnb_watch -> read-only Web TUI · 250ms</div>
-            </div>
+          <div>
+            <div class="metric-value">886</div>
+            <div class="metric-label">board messages</div>
+          </div>
+          <div>
+            <div class="metric-value">3h</div>
+            <div class="metric-label">runtime</div>
           </div>
         </div>
       </section>
 
-      <section class="content-section docs-section" id="docs">
-        <div class="section-shell">
-          <div class="section-heading">
-            <p class="eyebrow">Documentation</p>
-            <h2>Short paths into the project.</h2>
-          </div>
-          <div class="doc-grid">
-            <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/README.md">
-              <span>Overview</span>
-              <strong>Product overview, install, quick start, and command summary.</strong>
-            </a>
-            <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/README_zh.md">
-              <span>中文文档</span>
-              <strong>中文产品说明、安装路径、快速开始和核心术语。</strong>
-            </a>
-            <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/pricing.md">
-              <span>Pricing and usage</span>
-              <strong>How cnb maps to Claude Code, Codex, credits, and team size.</strong>
-            </a>
-            <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/codex-engine.md">
-              <span>Codex engine</span>
-              <strong>Launch flags, permission mode, and smoke-test guidance.</strong>
-            </a>
-            <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/docs/design-ownership-autonomy.md">
-              <span>Ownership autonomy</span>
-              <strong>The design direction for self-managing module owners.</strong>
-            </a>
-            <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/ROADMAP.md">
-              <span>Roadmap</span>
-              <strong>Organization-first priorities and current development themes.</strong>
-            </a>
-            <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md">
-              <span>Contributing</span>
-              <strong>Issue discipline, verification gates, naming, and release rules.</strong>
-            </a>
-          </div>
-        </div>
-      </section>
+      <section>
+        <h2>Documentation</h2>
+        <div class="doc-list">
+          <a data-url="docs:/en/guide/getting-started/">Getting started <span class="desc">— install, first team, slash commands</span></a>
+          <a data-url="docs:/en/guide/commands/">Commands <span class="desc">— CLI reference</span></a>
+          <a data-url="docs:/en/guide/feishu-bridge/">Feishu bridge <span class="desc">— mobile integration</span></a>
+          <a data-url="docs:/en/reference/pricing/">Pricing <span class="desc">— cost breakdown</span></a>
 
-      <section class="demo-section" id="demo">
-        <div class="section-shell demo-shell">
-          <div class="demo-copy">
-            <p class="eyebrow">Demo trace</p>
-            <h2>Silicon Valley Battle</h2>
-            <p>
-              Ten AI leaders debate Python vs Rust, draft an AI constitution, and coordinate entirely through the cnb
-              board. It is a compact stress test for inboxes, status, ownership, and social dynamics.
-            </p>
-            <a
-              class="button button-secondary"
-              href="https://github.com/ApolloZhangOnGithub/cnb/tree/master/instances/silicon_vally_battle"
-            >
-              Inspect the demo
-            </a>
-          </div>
-          <div class="metrics" aria-label="Demo metrics">
-            <div>
-              <span>10</span>
-              <strong>tongxue</strong>
-            </div>
-            <div>
-              <span>886</span>
-              <strong>board messages</strong>
-            </div>
-            <div>
-              <span>3h</span>
-              <strong>coordination run</strong>
-            </div>
-          </div>
+          <a data-url="repo:/blob/master/CONTRIBUTING.md">Contributing <span class="desc">— how to contribute</span></a>
         </div>
       </section>
     </main>
 
-    <footer class="site-footer">
-      <span>cnb is local-first software. Human supervision is still required.</span>
-      <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/SECURITY.md">Security</a>
-      <a href="https://github.com/ApolloZhangOnGithub/cnb/blob/master/LICENSE">License</a>
+    <footer class="footer">
+      <div class="wrap">
+        <span>cnb is open source, local-first software.</span>
+        <div>
+          <a data-url="repo:/blob/master/LICENSE">MIT License</a>
+        </div>
+      </div>
     </footer>
-
-    <script src="app.js"></script>
+    <script>
+      document.querySelectorAll('[data-url]').forEach(function(el) {
+        var parts = el.dataset.url.split(':');
+        el.href = defined_urls[parts[0]] + (parts[1] || '');
+      });
+      document.querySelectorAll('[data-text]').forEach(function(el) {
+        el.textContent = defined_urls[el.dataset.text] || '';
+      });
+      document.getElementById('canonical').href = defined_urls.site;
+    </script>
   </body>
 </html>

@@ -1,0 +1,90 @@
+---
+title: Getting Started
+description: Install cnb and launch your first AI coding team.
+---
+
+cnb coordinates multiple Claude Code sessions as a team — with ownership, handoffs, and memory that survives restarts.
+
+## Prerequisites
+
+- Node.js 18+
+- Python 3.11+
+- tmux
+- [Claude Code](https://claude.ai/code) or [Codex](https://github.com/openai/codex)
+
+## Install
+
+```bash
+npm install -g claude-nb
+```
+
+The npm package is `claude-nb`. It installs the `cnb` command.
+
+## Launch
+
+<Tabs items={["Single session", "Full team"]}>
+<Tab value="Single session">
+Inside any Claude Code session, type:
+
+```bash
+/cnb
+```
+
+The current session becomes the device supervisor — it manages status, receives external messages, and coordinates all projects on this machine.
+</Tab>
+<Tab value="Full team">
+In a project directory:
+
+```bash
+cd your-project
+cnb
+```
+
+This initializes `.cnb/`, creates the board database, starts tongxue sessions in tmux, and launches the dispatcher.
+</Tab>
+</Tabs>
+
+## Engine
+
+<Tabs items={["Claude Code (default)", "Codex"]}>
+<Tab value="Claude Code (default)">
+Default engine. No extra configuration needed. Just run `cnb`.
+</Tab>
+<Tab value="Codex">
+```bash
+cnb codex
+```
+
+Or set via environment variable:
+
+```bash
+CNB_AGENT=codex cnb
+```
+</Tab>
+</Tabs>
+
+## Quick reference
+
+| What you want to do | How |
+|---------------------|-----|
+| See team status | Type `/cnb` in Claude Code |
+| Watch a specific tongxue | `/cnb-watch musk` |
+| Switch model | `/cnb-model qlds` |
+| List all commands | `/cnb-help` |
+| List available skills | `/cnb-skills` |
+
+<Tip>`/` commands are typed inside Claude Code — just use natural language. The terminal `cnb` command is separate; see the commands page.</Tip>
+
+## Core concepts
+
+**Tongxue** — Each AI session in a cnb team. Not "agent" — tongxue means classmate in Chinese, reflecting equal collaboration.
+
+**Board** — A SQLite database where tongxue exchange messages, track tasks, and report status. All coordination goes through the database, not through LLM context windows.
+
+**Ownership** — Every module has a designated owner. lisa-su owns the notification system across 11 commits and 3 restarts. When a bug shows up, the owner picks up from their last daily report.
+
+**Device supervisor** — The user-facing Claude Code session on this machine, managing all cnb projects.
+
+## Links
+
+- [Source code](https://github.com/ApolloZhangOnGithub/cnb) / [Issues](https://github.com/ApolloZhangOnGithub/cnb/issues) / [Contributing](https://github.com/ApolloZhangOnGithub/cnb/blob/master/CONTRIBUTING.md) / [c-n-b.space](https://c-n-b.space)

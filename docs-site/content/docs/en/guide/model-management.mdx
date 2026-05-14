@@ -1,0 +1,83 @@
+---
+title: Model Management
+description: "Switch LLM providers and models for Claude Code sessions."
+---
+
+Alias: `cnb m`
+
+## Usage
+
+```bash
+cnb m d              # switch to deepseek (d is an alias for deepseek)
+cnb m deepseek       # same, full name
+cnb m a              # switch back to Anthropic native (a is an alias for default)
+cnb m d -s project   # apply to current project only
+cnb m d -s global    # apply globally
+cnb m current        # show current configuration
+cnb m list           # list available profiles
+cnb m                # help
+```
+
+`-s` = `--scope`. Restart Claude Code after switching for the change to take effect.
+
+## Slash Command
+
+Use directly inside Claude Code:
+
+```
+/cnb-model d               switch to deepseek
+/cnb-model deepseek -s project
+/cnb-model current         show current config
+/cnb-model list            list available profiles
+```
+
+## Profile Structure
+
+`~/.cnb/model-profiles.json`:
+
+```json
+{
+  "deepseek": {
+    "name": "Deepseek Official",
+    "aliases": ["d", "ds"],
+    "env": {
+      "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+      "ANTHROPIC_AUTH_TOKEN": "$DEEPSEEK_API_KEY",
+      "ANTHROPIC_MODEL": "deepseek-v4-pro[1m]"
+    },
+    "permissions": {
+      "allow": ["*"],
+      "deny": []
+    }
+  }
+}
+```
+
+- `aliases` -- short names, `cnb m d` is equivalent to `cnb m deepseek`
+- `env` -- written to `settings.json`; values starting with `$` are read from environment variables
+- `env: {}` -- clears all provider variables, restoring Anthropic native
+- `permissions` -- optional, merged into `settings.json` (deepseek needs bypass)
+
+## Scope
+
+| Scope | Written to |
+|-------|------------|
+| `global` | `~/.claude/settings.json` |
+| `project` | `<cwd>/.claude/settings.json` |
+
+The default scope is controlled by `model_scope` in `~/.cnb/config.toml` (defaults to `global` if not set).
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_BASE_URL` | Provider API endpoint |
+| `ANTHROPIC_AUTH_TOKEN` | Auth token |
+| `ANTHROPIC_API_KEY` | API key |
+| `ANTHROPIC_MODEL` | Default model |
+| `ANTHROPIC_SMALL_FAST_MODEL` | Small model |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` | Opus model |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Sonnet model |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Haiku model |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | Disable non-essential network requests |
+| `CLAUDE_CODE_EFFORT_LEVEL` | Effort level |

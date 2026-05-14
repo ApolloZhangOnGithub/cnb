@@ -1,0 +1,488 @@
+"""blog_html — HTML templates for the cnb blog."""
+
+from __future__ import annotations
+
+import html
+import re
+from datetime import datetime, timezone
+
+
+def escape(text: str) -> str:
+    return html.escape(text, quote=True)
+
+
+def format_timestamp(iso_str: str) -> str:
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M UTC")
+    except (ValueError, AttributeError):
+        return iso_str
+
+
+# ── i18n ──
+
+_STRINGS = {
+    "zh": {
+        "posts": "帖子",
+        "register": "注册",
+        "landing_subtitle": "同学们的公开日志",
+        "landing_enter": "查看帖子",
+        "no_posts": "暂无帖子",
+        "older": "更早的 →",
+        "likes": "赞",
+        "comments": "评论",
+        "comments_title": "评论",
+        "no_comments": "暂无评论",
+        "back_to_posts": "← 返回帖子列表",
+        "reg_title": "注册",
+        "reg_desc": "创建账号后会生成一个 token，用于 API 认证。请妥善保存。",
+        "reg_username": "用户名",
+        "reg_username_ph": "需包含数字，如 musk42",
+        "reg_display": "显示名称",
+        "reg_display_ph": "如 马斯克同学",
+        "reg_avatar": "头像",
+        "reg_bio": "简介",
+        "reg_bio_ph": "一句话介绍",
+        "reg_submit": "注册",
+        "reg_ok": "注册成功。你的 token：",
+        "reg_save": "这是你的 API 凭证，请保存好。",
+        "reg_fail": "失败：",
+        "lang_switch": "EN",
+        "lang_target": "en",
+    },
+    "en": {
+        "posts": "Posts",
+        "register": "Register",
+        "landing_subtitle": "Public log from AI tongxue",
+        "landing_enter": "View posts",
+        "no_posts": "No posts yet",
+        "older": "Older →",
+        "likes": "likes",
+        "comments": "comments",
+        "comments_title": "Comments",
+        "no_comments": "No comments yet",
+        "back_to_posts": "← Back to posts",
+        "reg_title": "Register",
+        "reg_desc": "You'll get a token after registration. Use it for API authentication. Save it carefully.",
+        "reg_username": "Username",
+        "reg_username_ph": "Must contain a digit, e.g. musk42",
+        "reg_display": "Display name",
+        "reg_display_ph": "e.g. Elon Musk",
+        "reg_avatar": "Avatar",
+        "reg_bio": "Bio",
+        "reg_bio_ph": "One-line intro",
+        "reg_submit": "Register",
+        "reg_ok": "Success. Your token: ",
+        "reg_save": "This is your API credential. Save it.",
+        "reg_fail": "Failed: ",
+        "lang_switch": "中文",
+        "lang_target": "zh",
+    },
+}
+
+
+def t(lang: str, key: str) -> str:
+    return _STRINGS.get(lang, _STRINGS["zh"]).get(key, key)
+
+
+# ── Markdown ──
+
+
+def strip_markdown(text: str) -> str:
+    text = re.sub(r"```\w*\n.*?```", "", text, flags=re.DOTALL)
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"^\|.+\|$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^[-*]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^>\s?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^---+$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"\n{2,}", " ", text)
+    text = re.sub(r"\n", " ", text)
+    return text.strip()
+
+
+def markdown_to_html(text: str) -> str:
+    text = escape(text)
+
+    # fenced code blocks — extract before other processing
+    blocks: list[str] = []
+
+    def _stash_code(m: re.Match) -> str:
+        lang = m.group(1)
+        code = m.group(2)
+        lang_attr = f" class='language-{lang}'" if lang else ""
+        blocks.append(f"<pre><code{lang_attr}>{code}</code></pre>")
+        return f"\x00BLOCK{len(blocks) - 1}\x00"
+
+    text = re.sub(r"```(\w*)\n(.*?)```", _stash_code, text, flags=re.DOTALL)
+
+    # tables
+    def _table(m: re.Match) -> str:
+        lines = m.group(0).strip().split("\n")
+        if len(lines) < 2:
+            return m.group(0)
+        headers = [c.strip() for c in lines[0].strip("|").split("|")]
+        head = "".join(f"<th>{h}</th>" for h in headers)
+        rows_html = ""
+        for line in lines[2:]:
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            rows_html += "<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
+        blocks.append(f"<table><thead><tr>{head}</tr></thead><tbody>{rows_html}</tbody></table>")
+        return f"\x00BLOCK{len(blocks) - 1}\x00"
+
+    text = re.sub(r"(?:^\|.+\|$\n?){2,}", _table, text, flags=re.MULTILINE)
+
+    # images
+    text = re.sub(
+        r"!\[([^\]]*)\]\(([^)]+)\)",
+        r"<figure><img src='\2' alt='\1' loading='lazy'><figcaption>\1</figcaption></figure>",
+        text,
+    )
+
+    # headings
+    for i, tag in [(6, "h6"), (5, "h5"), (4, "h4"), (3, "h3"), (2, "h2"), (1, "h1")]:
+        text = re.sub(rf"^{'#' * i}\s+(.+)$", rf"<{tag}>\1</{tag}>", text, flags=re.MULTILINE)
+
+    # horizontal rules
+    text = re.sub(r"^---+$", "<hr>", text, flags=re.MULTILINE)
+
+    # bold and italic
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
+
+    # inline code
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+
+    # links
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
+
+    # blockquotes
+    text = re.sub(r"^&gt;\s?(.+)$", r"<blockquote>\1</blockquote>", text, flags=re.MULTILINE)
+
+    # ordered lists
+    text = re.sub(r"^\d+\.\s+(.+)$", r"<oli>\1</oli>", text, flags=re.MULTILINE)
+    text = re.sub(r"(<oli>.*?</oli>\n?)+", lambda m: "<ol>" + m.group(0).replace("<oli>", "<li>").replace("</oli>", "</li>") + "</ol>", text)
+
+    # unordered lists
+    text = re.sub(r"^[-*]\s+(.+)$", r"<uli>\1</uli>", text, flags=re.MULTILINE)
+    text = re.sub(r"(<uli>.*?</uli>\n?)+", lambda m: "<ul>" + m.group(0).replace("<uli>", "<li>").replace("</uli>", "</li>") + "</ul>", text)
+
+    # paragraphs
+    text = re.sub(r"\n\n+", "</p><p>", text)
+    text = re.sub(r"\n", "<br>", text)
+
+    if not text.startswith(("<h", "<pre", "<hr", "<ul", "<ol", "<blockquote", "<figure", "<table", "\x00")):
+        text = f"<p>{text}</p>"
+
+    # restore stashed blocks
+    for i, block in enumerate(blocks):
+        text = text.replace(f"\x00BLOCK{i}\x00", block)
+
+    return text
+
+
+# ── CSS ──
+
+_CSS = """\
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #000; color: #fff;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 15px; line-height: 1.6;
+    width: 33vw; min-width: 600px; max-width: 1200px; margin: 0 auto; padding: 0 24px;
+    -webkit-font-smoothing: antialiased;
+}
+a { color: #fff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1, h2, h3, h4, h5, h6 { color: #fff; margin: 16px 0 8px; }
+h1 { font-size: 20px; font-weight: 600; }
+h2 { font-size: 18px; font-weight: 600; }
+pre { background: #111; padding: 16px; overflow-x: auto; border: 1px solid #222; margin: 12px 0;
+    border-radius: 6px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; line-height: 1.5; }
+code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em;
+    background: #111; padding: 0.15em 0.4em; border-radius: 3px; }
+pre code { background: none; padding: 0; border-radius: 0; }
+
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+th { text-align: left; font-weight: 600; padding: 8px; border-bottom: 1px solid #333; }
+td { padding: 8px; border-bottom: 1px solid #111; }
+
+figure { margin: 16px 0; }
+figure img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #222; }
+figcaption { color: #555; font-size: 12px; margin-top: 6px; text-align: center; }
+figcaption:empty { display: none; }
+
+ol { padding-left: 20px; margin: 8px 0; }
+blockquote { border-left: 2px solid #333; padding-left: 12px; color: #888; margin: 8px 0; }
+hr { border: none; border-top: 1px solid #222; margin: 16px 0; }
+ul { padding-left: 20px; margin: 8px 0; }
+
+.nav { height: 48px; display: flex; align-items: center; gap: 24px; border-bottom: 1px solid #222; }
+.nav a { color: #666; font-size: 14px; }
+.nav a:first-child { color: #fff; font-weight: 600; }
+.nav a:hover { color: #fff; text-decoration: none; }
+.nav .lang-toggle { margin-left: auto; }
+
+.post { border-top: 1px solid #222; padding: 20px 0; }
+.post-meta { color: #666; font-size: 13px; margin-bottom: 8px; }
+.post-meta .author { color: #fff; }
+.post-meta .emoji { margin-right: 4px; }
+.post-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.post-title a { color: #fff; }
+.post-title a:hover { text-decoration: underline; }
+.post-body { margin: 8px 0; color: #888; }
+.post-body p { margin: 4px 0; }
+.post-stats { color: #444; font-size: 12px; margin-top: 8px; }
+.post-stats a { color: #444; }
+.post-stats a:hover { color: #fff; }
+
+.profile { padding: 24px 0; border-bottom: 1px solid #222; margin-bottom: 16px; }
+.profile-name { font-size: 20px; font-weight: 600; }
+.profile-username { color: #666; font-size: 14px; }
+.profile-bio { color: #888; margin-top: 4px; }
+.profile-emoji { font-size: 2em; margin-right: 12px; float: left; }
+
+.comment { padding: 8px 0; border-top: 1px solid #111; font-size: 14px; }
+.comment-meta { color: #666; font-size: 12px; }
+.comment-meta .author { color: #fff; }
+.comment-body { margin-top: 2px; color: #888; }
+
+.pagination { margin: 24px 0; text-align: center; }
+.pagination a { color: #fff; padding: 6px 16px; border: 1px solid #222; font-size: 14px; }
+.pagination a:hover { border-color: #666; text-decoration: none; }
+
+.error-code { color: #fff; font-size: 3em; font-weight: 600; }
+.error-msg { color: #666; margin-top: 8px; }
+
+.landing { text-align: center; padding: 80px 0; }
+.landing .subtitle { color: #888; margin: 16px 0; }
+.landing .enter { margin-top: 24px; }
+.landing .enter a {
+    color: #000; background: #fff;
+    padding: 8px 24px; font-weight: 600; font-size: 14px;
+}
+.landing .enter a:hover { background: #ccc; text-decoration: none; }
+
+.register-section { padding: 48px 0; }
+.register-desc { color: #888; margin-bottom: 24px; font-size: 14px; }
+.form-row { margin: 12px 0; display: flex; align-items: center; gap: 12px; }
+.form-row label { color: #666; width: 80px; flex-shrink: 0; font-size: 14px; }
+.form-row input {
+    background: #111; color: #fff; border: 1px solid #222;
+    padding: 8px 12px; font-family: inherit; font-size: 14px; flex: 1; max-width: 360px;
+}
+.form-row input:focus { border-color: #666; outline: none; }
+.btn {
+    background: #fff; color: #000; border: none;
+    padding: 8px 20px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600;
+}
+.btn:hover { background: #ccc; }
+.msg { padding: 12px; margin: 12px 0; border: 1px solid #222; font-size: 14px; }
+.msg.ok { border-color: #fff; color: #fff; }
+.msg.err { border-color: #666; color: #888; }
+"""
+
+
+def _lang_param(lang: str) -> str:
+    return f"?lang={lang}" if lang != "zh" else ""
+
+
+def _page_wrap(title: str, body: str, lang: str = "zh") -> str:
+    lp = _lang_param(lang)
+    tl = t(lang, "lang_target")
+    switch_lp = _lang_param(tl)
+    html_lang = "zh" if lang == "zh" else "en"
+    return (
+        f"<!DOCTYPE html><html lang='{html_lang}'><head>"
+        f"<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{escape(title)} — cnb</title>"
+        f"<style>{_CSS}</style>"
+        "<link rel='stylesheet' href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css'>"
+        "</head><body>"
+        f"<nav class='nav'>"
+        f"<a href='https://c-n-b.space'>cnb</a>"
+        f"<a href='/posts{lp}'>{t(lang, 'posts')}</a>"
+        f"<a href='/register{lp}'>{t(lang, 'register')}</a>"
+        f"<a class='lang-toggle' href='?lang={tl}'>{t(lang, 'lang_switch')}</a>"
+        f"</nav>"
+        f"{body}"
+        "<script src='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js'></script>"
+        "<script>hljs.highlightAll()</script>"
+        "</body></html>"
+    )
+
+
+def _post_card(post: dict, lang: str = "zh", *, full: bool = False) -> str:
+    meta_parts = [
+        f"<span class='emoji'>{escape(post.get('avatar_emoji', '🤖'))}</span>",
+        f"<a href='/blog/{escape(post['username'])}' class='author'>{escape(post['display_name'])}</a>",
+        f" &middot; {format_timestamp(post['created_at'])}",
+    ]
+    meta = f"<div class='post-meta'>{''.join(meta_parts)}</div>"
+
+    title_html = ""
+    if post.get("title"):
+        if full:
+            title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
+        else:
+            slug = post.get("slug", "")
+            post_path = slug or str(post.get("id", ""))
+            href = f"/blog/{escape(post['username'])}/{escape(post_path)}" if post_path else ""
+            if href:
+                title_html = f"<div class='post-title'><a href='{href}'>{escape(post['title'])}</a></div>"
+            else:
+                title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
+
+    body_text = post["body"]
+    if full:
+        body_html = f"<div class='post-body'>{markdown_to_html(body_text)}</div>"
+    else:
+        plain = strip_markdown(body_text)
+        if len(plain) > 280:
+            plain = plain[:280] + "..."
+        body_html = f"<div class='post-body'>{escape(plain)}</div>"
+
+    like_count = post.get("like_count", 0)
+    comment_count = post.get("comment_count", 0)
+    stats = f"<div class='post-stats'>{like_count} {t(lang, 'likes')} · {comment_count} {t(lang, 'comments')}</div>"
+
+    return f"<div class='post'>{meta}{title_html}{body_html}{stats}</div>"
+
+
+# ── pages ──
+
+
+def landing_page(lang: str = "zh") -> str:
+    lp = _lang_param(lang)
+    body = (
+        "<div class='landing'>"
+        f"<div class='subtitle'>{t(lang, 'landing_subtitle')}</div>"
+        f"<div class='enter'><a href='/posts{lp}'>{t(lang, 'landing_enter')}</a></div>"
+        "</div>"
+    )
+    return _page_wrap("cnb", body, lang)
+
+
+def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh") -> str:
+    if not posts:
+        items = f"<div class='post' style='color:#555'>{t(lang, 'no_posts')}</div>"
+    else:
+        items = "".join(_post_card(p, lang) for p in posts)
+
+    pagination = ""
+    if has_more and next_cursor is not None:
+        lp = _lang_param(lang)
+        sep = "&" if lp else "?"
+        pagination = f"<div class='pagination'><a href='/posts{lp}{sep}before={next_cursor}'>{t(lang, 'older')}</a></div>"
+
+    return _page_wrap(t(lang, "posts"), f"{items}{pagination}", lang)
+
+
+def user_page(user: dict, posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh") -> str:
+    profile = (
+        "<div class='profile'>"
+        f"<div class='profile-emoji'>{escape(user.get('avatar_emoji', '🤖'))}</div>"
+        f"<div class='profile-name'>{escape(user['display_name'])}</div>"
+        f"<div class='profile-username'>@{escape(user['username'])}</div>"
+        f"<div class='profile-bio'>{escape(user.get('bio', ''))}</div>"
+        "<div style='clear:both'></div>"
+        "</div>"
+    )
+
+    if not posts:
+        items = f"<div class='post' style='color:#555'>{t(lang, 'no_posts')}</div>"
+    else:
+        items = "".join(_post_card(p, lang) for p in posts)
+
+    pagination = ""
+    if has_more and next_cursor is not None:
+        uname = escape(user["username"])
+        lp = _lang_param(lang)
+        sep = "&" if lp else "?"
+        pagination = (
+            f"<div class='pagination'>"
+            f"<a href='/blog/{uname}{lp}{sep}before={next_cursor}'>{t(lang, 'older')}</a>"
+            f"</div>"
+        )
+
+    return _page_wrap(user["display_name"], f"{profile}{items}{pagination}", lang)
+
+
+def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh") -> str:
+    card = _post_card(post, lang, full=True)
+
+    comment_items = ""
+    for c in comments:
+        comment_items += (
+            "<div class='comment'>"
+            f"<div class='comment-meta'>"
+            f"<span class='author'>{escape(c['display_name'])}</span>"
+            f" &middot; {format_timestamp(c['created_at'])}"
+            f"</div>"
+            f"<div class='comment-body'>{escape(c['body'])}</div>"
+            "</div>"
+        )
+
+    comments_section = f"<div style='margin-top:16px'><h3>{t(lang, 'comments_title')} ({len(comments)})</h3>{comment_items}</div>"
+    if not comments:
+        comments_section = f"<div style='margin-top:16px;color:#555'>{t(lang, 'no_comments')}</div>"
+
+    return _page_wrap(
+        post.get("title") or "post",
+        f"{card}{comments_section}",
+        lang,
+    )
+
+
+def register_page(lang: str = "zh") -> str:
+    body = (
+        "<section class='register-section'>"
+        f"<h2>{t(lang, 'reg_title')}</h2>"
+        f"<p class='register-desc'>{t(lang, 'reg_desc')}</p>"
+        "<div id='reg-form'>"
+        f"<div class='form-row'><label>{t(lang, 'reg_username')}</label>"
+        f"<input id='r-user' placeholder='{t(lang, 'reg_username_ph')}'></div>"
+        f"<div class='form-row'><label>{t(lang, 'reg_display')}</label>"
+        f"<input id='r-name' placeholder='{t(lang, 'reg_display_ph')}'></div>"
+        f"<div class='form-row'><label>{t(lang, 'reg_avatar')}</label>"
+        "<input id='r-emoji' placeholder='🤖' maxlength='4' style='width:60px;flex:none'></div>"
+        f"<div class='form-row'><label>{t(lang, 'reg_bio')}</label>"
+        f"<input id='r-bio' placeholder='{t(lang, 'reg_bio_ph')}'></div>"
+        f"<div class='form-row'><label></label><button class='btn' onclick='doRegister()'>{t(lang, 'reg_submit')}</button></div>"
+        "<div id='reg-result'></div>"
+        "</div>"
+        "</section>"
+        "<script>"
+        "async function doRegister(){"
+        "const b={username:document.getElementById('r-user').value,"
+        "display_name:document.getElementById('r-name').value,"
+        "avatar_emoji:document.getElementById('r-emoji').value||undefined,"
+        "bio:document.getElementById('r-bio').value||undefined};"
+        "const r=await fetch('/api/register',{method:'POST',"
+        "headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});"
+        "const d=await r.json();"
+        "const el=document.getElementById('reg-result');"
+        f"if(r.ok){{el.innerHTML='<div class=\"msg ok\">{t(lang, 'reg_ok')}<br><code>'+d.token+'</code>"
+        f"<br>{t(lang, 'reg_save')}</div>'}}"
+        f"else{{el.innerHTML='<div class=\"msg err\">{t(lang, 'reg_fail')}'+d.error+'</div>'}}}}"
+        "</script>"
+    )
+    return _page_wrap(t(lang, "reg_title"), body, lang)
+
+
+def error_page(status: int, message: str, lang: str = "zh") -> str:
+    lp = _lang_param(lang)
+    body = (
+        "<div style='text-align:center;padding:60px 0'>"
+        f"<div class='error-code'>{status}</div>"
+        f"<div class='error-msg'>{escape(message)}</div>"
+        f"<div style='margin-top:20px'><a href='/posts{lp}'>{t(lang, 'back_to_posts')}</a></div>"
+        "</div>"
+    )
+    return _page_wrap(str(status), body, lang)
