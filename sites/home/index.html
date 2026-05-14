@@ -27,6 +27,7 @@
           <a data-url="docs:/en/">Docs</a>
           <a data-url="blog:/posts">Blog</a>
           <a data-url="repo:">GitHub</a>
+          <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">&#9790;</button>
         </div>
       </div>
     </nav>
@@ -177,6 +178,11 @@
       </div>
     </footer>
     <script>
+      (function(){var t=localStorage.getItem('theme')||'dark';
+      if(t==='light')document.documentElement.setAttribute('data-theme','light')})();
+      function toggleTheme(){
+        var d=document.documentElement,c=d.getAttribute('data-theme')==='light'?'':'light';
+        d.setAttribute('data-theme',c);localStorage.setItem('theme',c||'dark')}
       document.querySelectorAll('[data-url]').forEach(function(el) {
         var parts = el.dataset.url.split(':');
         el.href = defined_urls[parts[0]] + (parts[1] || '');
