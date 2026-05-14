@@ -55,7 +55,9 @@ _STRINGS = {
         "login_username": "用户名",
         "login_password": "密码",
         "login_submit": "登录",
-        "login_fail": "用户名或 token 错误",
+        "login_github": "使用 GitHub 登录",
+        "login_password_alt": "用密码登录",
+        "login_fail": "用户名或密码错误",
         "submit_title": "发帖",
         "submit_title_label": "标题",
         "submit_title_ph": "可选",
@@ -102,7 +104,9 @@ _STRINGS = {
         "login_username": "Username",
         "login_password": "Password",
         "login_submit": "Login",
-        "login_fail": "Invalid username or token",
+        "login_github": "Login with GitHub",
+        "login_password_alt": "Login with password",
+        "login_fail": "Invalid username or password",
         "submit_title": "Submit",
         "submit_title_label": "Title",
         "submit_title_ph": "Optional",
@@ -324,6 +328,7 @@ ul { padding-left: 20px; margin: 8px 0; }
     padding: 8px 20px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600;
 }
 .btn:hover { background: #ccc; }
+.github-btn { display: inline-block; padding: 10px 24px; text-decoration: none; }
 .msg { padding: 12px; margin: 12px 0; border: 1px solid #222; font-size: 14px; }
 .msg.ok { border-color: #fff; color: #fff; }
 .msg.err { border-color: #666; color: #888; }
@@ -467,7 +472,7 @@ def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor
     return _page_wrap(profile_user["display_name"], f"{profile}{items}{pagination}", lang, user)
 
 
-def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", user: dict | None = None) -> str:
+def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", user: dict | None = None, csrf: str = "") -> str:
     card = _post_card(post, lang, full=True, user=user)
 
     comment_items = ""
@@ -492,6 +497,7 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
     if user:
         comment_form = (
             f"<form method='POST' action='/comment/{post_id}{lp}' style='margin-top:16px'>"
+            f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
             f"<textarea name='body' rows='3' placeholder='{t(lang, 'comment_ph')}' "
             "style='width:100%;background:#111;color:#fff;border:1px solid #222;padding:8px;font-family:inherit;font-size:14px;resize:vertical'></textarea>"
             f"<button class='btn' type='submit' style='margin-top:8px'>{t(lang, 'comment_btn')}</button>"
@@ -514,21 +520,30 @@ def login_page(lang: str = "zh", error: bool = False) -> str:
     body = (
         "<section class='register-section'>"
         f"<h2>{t(lang, 'login_title')}</h2>"
-        f"<p class='register-desc'>{t(lang, 'login_desc')}</p>"
         f"{err_msg}"
-        f"<form method='POST' action='/login{lp}'>"
+        f"<div style='margin:24px 0'>"
+        f"<a href='/auth/github' class='btn github-btn'>"
+        "<svg width='16' height='16' viewBox='0 0 16 16' fill='currentColor' style='vertical-align:-2px;margin-right:8px'>"
+        "<path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z'/>"
+        "</svg>"
+        f"{t(lang, 'login_github')}</a>"
+        "</div>"
+        f"<details style='margin-top:24px'>"
+        f"<summary style='color:#666;cursor:pointer;font-size:13px'>{t(lang, 'login_password_alt')}</summary>"
+        f"<form method='POST' action='/login{lp}' style='margin-top:12px'>"
         f"<div class='form-row'><label>{t(lang, 'login_username')}</label>"
         "<input name='username' required></div>"
         f"<div class='form-row'><label>{t(lang, 'login_password')}</label>"
         "<input name='password' type='password' required></div>"
         f"<div class='form-row'><label></label><button class='btn' type='submit'>{t(lang, 'login_submit')}</button></div>"
         "</form>"
+        "</details>"
         "</section>"
     )
     return _page_wrap(t(lang, "login_title"), body, lang)
 
 
-def submit_page(lang: str = "zh", user: dict | None = None) -> str:
+def submit_page(lang: str = "zh", user: dict | None = None, csrf: str = "") -> str:
     lp = _lang_param(lang)
     if not user:
         return _page_wrap(t(lang, "submit_title"),
@@ -538,6 +553,7 @@ def submit_page(lang: str = "zh", user: dict | None = None) -> str:
         "<section class='register-section'>"
         f"<h2>{t(lang, 'submit_title')}</h2>"
         f"<form method='POST' action='/submit{lp}'>"
+        f"<input type='hidden' name='_csrf' value='{escape(csrf)}'>"
         f"<div class='form-row'><label>{t(lang, 'submit_title_label')}</label>"
         f"<input name='title' placeholder='{t(lang, 'submit_title_ph')}'></div>"
         f"<div style='margin:12px 0'>"

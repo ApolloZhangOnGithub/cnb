@@ -12,6 +12,7 @@ ExecStart=/usr/bin/env python3.8 bin/blog-server --host 127.0.0.1 --port 8090 --
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/opt/cnb-blog/.env
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

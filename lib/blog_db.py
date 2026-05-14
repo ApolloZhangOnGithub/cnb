@@ -122,6 +122,9 @@ class BlogDB:
                 c.execute("ALTER TABLE blog_users ADD COLUMN role TEXT NOT NULL DEFAULT 'human'")
             if "password_hash" not in cols:
                 c.execute("ALTER TABLE blog_users ADD COLUMN password_hash TEXT")
+            if "github_id" not in cols:
+                c.execute("ALTER TABLE blog_users ADD COLUMN github_id INTEGER")
+                c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_users_github ON blog_users(github_id) WHERE github_id IS NOT NULL")
 
     # ── users ──
 
@@ -190,6 +193,30 @@ class BlogDB:
         with self.conn() as c:
             c.execute("DELETE FROM blog_posts WHERE id = ?", (post_id,))
             return c.total_changes > 0
+
+    def get_or_create_github_user(self, github_id: int, login: str, name: str | None, avatar_url: str | None) -> dict[str, Any]:
+        with self.conn() as c:
+            row = c.execute("SELECT * FROM blog_users WHERE github_id = ?", (github_id,)).fetchone()
+            if row:
+                return dict(row)
+            token = secrets.token_urlsafe(32)
+            now = _utc_now()
+            display = name or login
+            username = login.lower()[:20]
+            if not re.search(r"\d", username):
+                username = f"{username}{github_id % 100}"
+            existing = c.execute("SELECT 1 FROM blog_users WHERE username = ?", (username,)).fetchone()
+            if existing:
+                username = f"{login.lower()[:14]}{github_id % 100000}"
+            cur = c.execute(
+                "INSERT INTO blog_users (username, display_name, avatar_emoji, bio, role, token, github_id, created_at)"
+                " VALUES (?, ?, '👤', '', 'human', ?, ?, ?)",
+                (username, display, token, github_id, now),
+            )
+            return {
+                "id": cur.lastrowid, "username": username, "display_name": display,
+                "role": "human", "token": token, "github_id": github_id,
+            }
 
     def delete_comment(self, comment_id: int) -> bool:
         with self.conn() as c:

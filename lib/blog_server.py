@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import secrets
 import signal
 import sqlite3
 import sys
@@ -19,7 +20,13 @@ from socketserver import ThreadingMixIn
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+import os
+import urllib.request
+
 from lib.blog_db import BlogDB
+
+GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 from lib.blog_html import (
     error_page,
     feed_page,
@@ -65,6 +72,15 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return None
         return dict(row)
 
+    def _make_csrf(self, user: dict) -> str:
+        import hmac
+        return hmac.new(user["token"].encode(), b"csrf", "sha256").hexdigest()[:32]
+
+    def _check_csrf(self, user: dict | None, form: dict) -> bool:
+        if not user:
+            return False
+        return form.get("_csrf", "") == self._make_csrf(user)
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         route = parsed.path.rstrip("/") or "/"
@@ -81,11 +97,18 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if route == "/login":
             self._send_html(login_page(lang))
             return
+        if route == "/auth/github":
+            self._handle_github_redirect(lang)
+            return
+        if route == "/auth/callback":
+            self._handle_github_callback(params, lang)
+            return
         if route == "/logout":
             self._send_html_with_headers(landing_page(lang), [("Set-Cookie", "token=; Path=/; Max-Age=0")])
             return
         if route == "/submit":
-            self._send_html(submit_page(lang, user))
+            csrf = self._make_csrf(user) if user else ""
+            self._send_html(submit_page(lang, user, csrf))
             return
         if route == "/register":
             self._send_html(register_page(lang))
@@ -220,7 +243,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._send_html(error_page(404, "post not found", lang, user), status=HTTPStatus.NOT_FOUND)
             return
         comments = self.server.db.get_comments(post["id"])
-        self._send_html(post_page(dict(post), dict(author), [dict(c) for c in comments], lang, user))
+        csrf = self._make_csrf(user) if user else ""
+        self._send_html(post_page(dict(post), dict(author), [dict(c) for c in comments], lang, user, csrf))
 
     def _handle_post_page_by_id(self, username: str, post_id: int, lang: str = "zh", user: dict | None = None) -> None:
         author = self.server.db.get_user_by_username(username)
@@ -232,7 +256,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._send_html(error_page(404, "post not found", lang, user), status=HTTPStatus.NOT_FOUND)
             return
         comments = self.server.db.get_comments(post["id"])
-        self._send_html(post_page(dict(post), dict(author), [dict(c) for c in comments], lang, user))
+        csrf = self._make_csrf(user) if user else ""
+        self._send_html(post_page(dict(post), dict(author), [dict(c) for c in comments], lang, user, csrf))
 
     # ── API GET handlers ──
 
@@ -264,6 +289,78 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
         self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
+    # ── GitHub OAuth ──
+
+    def _handle_github_redirect(self, lang: str) -> None:
+        if not GITHUB_CLIENT_ID:
+            self._send_html(error_page(500, "GitHub OAuth not configured", lang), status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        state = secrets.token_urlsafe(16)
+        url = (
+            f"https://github.com/login/oauth/authorize"
+            f"?client_id={GITHUB_CLIENT_ID}"
+            f"&redirect_uri=https://blog.c-n-b.space/auth/callback"
+            f"&scope=read:user"
+            f"&state={state}"
+        )
+        self._redirect(url, [("Set-Cookie", f"oauth_state={state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600")])
+
+    def _handle_github_callback(self, params: dict, lang: str) -> None:
+        code = (params.get("code") or [""])[0]
+        state = (params.get("state") or [""])[0]
+        if not code or not state:
+            self._send_html(error_page(400, "missing code or state", lang), status=HTTPStatus.BAD_REQUEST)
+            return
+
+        from http.cookies import SimpleCookie
+        cookie = SimpleCookie(self.headers.get("Cookie", ""))
+        expected_state = cookie.get("oauth_state")
+        if not expected_state or expected_state.value != state:
+            self._send_html(error_page(403, "invalid state", lang), status=HTTPStatus.FORBIDDEN)
+            return
+
+        try:
+            token_data = json.dumps({
+                "client_id": GITHUB_CLIENT_ID,
+                "client_secret": GITHUB_CLIENT_SECRET,
+                "code": code,
+            }).encode()
+            req = urllib.request.Request(
+                "https://github.com/login/oauth/access_token",
+                data=token_data,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                token_resp = json.loads(resp.read())
+            access_token = token_resp.get("access_token")
+            if not access_token:
+                self._send_html(error_page(401, "GitHub auth failed", lang), status=HTTPStatus.UNAUTHORIZED)
+                return
+
+            user_req = urllib.request.Request(
+                "https://api.github.com/user",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(user_req, timeout=10) as resp:
+                gh_user = json.loads(resp.read())
+        except Exception as e:
+            self._send_html(error_page(502, f"GitHub API error: {e}", lang), status=HTTPStatus.BAD_GATEWAY)
+            return
+
+        github_id = gh_user.get("id")
+        login = gh_user.get("login", "")
+        name = gh_user.get("name")
+        if not github_id or not login:
+            self._send_html(error_page(502, "invalid GitHub response", lang), status=HTTPStatus.BAD_GATEWAY)
+            return
+
+        user = self.server.db.get_or_create_github_user(github_id, login, name, gh_user.get("avatar_url"))
+        lp = "?lang=en" if lang == "en" else ""
+        self._redirect(f"/posts{lp}", [
+            (f"Set-Cookie", f"token={user['token']}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000"),
+            ("Set-Cookie", "oauth_state=; Path=/; Max-Age=0"),
+        ])
+
     # ── form handlers ──
 
     def _read_form_body(self) -> dict[str, str]:
@@ -285,7 +382,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         token = user["token"]
         lp = "?lang=en" if lang == "en" else ""
-        self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000")])
+        self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000")])
 
     def _handle_form_submit(self, lang: str) -> None:
         user = self._get_cookie_user()
@@ -294,6 +391,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._redirect(f"/login{lp}")
             return
         form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
         title = form.get("title", "").strip() or None
         body = form.get("body", "").strip()
         if not body:
@@ -317,6 +417,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._redirect(f"/login")
             return
         form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
         body = form.get("body", "").strip()
         post = self.server.db.get_post(post_id)
         if not post:
@@ -362,7 +465,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         user = self.server.db.verify_login(username, password)
         if user:
             lp = "?lang=en" if lang == "en" else ""
-            self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={user['token']}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000")])
+            self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={user['token']}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000")])
         else:
             self._redirect(f"/login")
 
