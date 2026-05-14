@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS blog_comments (
 );
 CREATE INDEX IF NOT EXISTS idx_blog_comments_post ON blog_comments(post_id);
 
+CREATE TABLE IF NOT EXISTS blog_follows (
+    follower_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
+    following_id INTEGER NOT NULL REFERENCES blog_users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (follower_id, following_id)
+);
+
 CREATE TABLE IF NOT EXISTS docs_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     page TEXT NOT NULL,
@@ -377,6 +384,74 @@ class BlogDB:
                 " FROM blog_comments c JOIN blog_users u ON c.author_id = u.id"
                 " WHERE c.post_id = ? ORDER BY c.id ASC",
                 (post_id,),
+            ).fetchall()
+
+    # ── follows ──
+
+    def toggle_follow(self, follower_id: int, following_id: int) -> bool:
+        if follower_id == following_id:
+            return False
+        now = _utc_now()
+        with self.conn() as c:
+            existing = c.execute(
+                "SELECT 1 FROM blog_follows WHERE follower_id = ? AND following_id = ?",
+                (follower_id, following_id),
+            ).fetchone()
+            if existing:
+                c.execute("DELETE FROM blog_follows WHERE follower_id = ? AND following_id = ?", (follower_id, following_id))
+                return False
+            c.execute("INSERT INTO blog_follows (follower_id, following_id, created_at) VALUES (?, ?, ?)", (follower_id, following_id, now))
+            return True
+
+    def is_following(self, follower_id: int, following_id: int) -> bool:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT 1 FROM blog_follows WHERE follower_id = ? AND following_id = ?",
+                (follower_id, following_id),
+            ).fetchone() is not None
+
+    def get_follower_count(self, user_id: int) -> int:
+        with self.conn() as c:
+            return c.execute("SELECT COUNT(*) FROM blog_follows WHERE following_id = ?", (user_id,)).fetchone()[0]
+
+    def get_following_count(self, user_id: int) -> int:
+        with self.conn() as c:
+            return c.execute("SELECT COUNT(*) FROM blog_follows WHERE follower_id = ?", (user_id,)).fetchone()[0]
+
+    def get_following_feed(self, user_id: int, before: int | None = None, limit: int = 20) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            if before is not None:
+                return c.execute(
+                    "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
+                    " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                    " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
+                    " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
+                    " WHERE p.author_id IN (SELECT following_id FROM blog_follows WHERE follower_id = ?)"
+                    " AND p.id < ? ORDER BY p.id DESC LIMIT ?",
+                    (user_id, before, limit),
+                ).fetchall()
+            return c.execute(
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
+                " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
+                " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
+                " WHERE p.author_id IN (SELECT following_id FROM blog_follows WHERE follower_id = ?)"
+                " ORDER BY p.id DESC LIMIT ?",
+                (user_id, limit),
+            ).fetchall()
+
+    def get_hot_feed(self, limit: int = 30) -> list[sqlite3.Row]:
+        with self.conn() as c:
+            return c.execute(
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
+                " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count,"
+                " ((SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id)"
+                "  + (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) * 2) AS score"
+                " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
+                " WHERE p.created_at > datetime('now', '-7 days')"
+                " ORDER BY score DESC, p.id DESC LIMIT ?",
+                (limit,),
             ).fetchall()
 
     def save_docs_feedback(self, page: str, vote: str, comment: str) -> int:

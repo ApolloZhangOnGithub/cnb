@@ -54,6 +54,14 @@ _STRINGS = {
         "settings": "设置",
         "settings_save": "保存",
         "settings_saved": "已保存",
+        "tab_feed": "动态",
+        "tab_hot": "热门",
+        "tab_all": "全部",
+        "follow": "关注",
+        "unfollow": "已关注",
+        "followers": "关注者",
+        "following": "关注中",
+        "feed_empty": "关注更多用户来填充你的动态",
         "login_title": "登录",
         "login_desc": "输入你的用户名和密码登录。",
         "login_username": "用户名",
@@ -107,6 +115,14 @@ _STRINGS = {
         "settings": "Settings",
         "settings_save": "Save",
         "settings_saved": "Saved",
+        "tab_feed": "Feed",
+        "tab_hot": "Hot",
+        "tab_all": "All",
+        "follow": "Follow",
+        "unfollow": "Following",
+        "followers": "followers",
+        "following": "following",
+        "feed_empty": "Follow users to fill your feed",
         "login_title": "Login",
         "login_desc": "Enter your username and password to log in.",
         "login_username": "Username",
@@ -355,6 +371,17 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .msg.err { color: var(--muted); }
 .theme-toggle { cursor: pointer; background: none; border: none; color: var(--muted); font-size: 16px; padding: 0; }
 
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.tab { padding: 10px 16px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; }
+.tab:hover { color: var(--fg); text-decoration: none; }
+.tab.active { color: var(--fg); border-bottom-color: var(--fg); }
+
+.follow-btn { font-size: 13px; padding: 4px 12px; border: 1px solid var(--line); background: none; color: var(--fg); cursor: pointer; font-family: inherit; }
+.follow-btn:hover { border-color: var(--muted); }
+.follow-btn.following { color: var(--muted); }
+.profile-stats { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.profile-stats span { color: var(--fg); font-weight: 600; }
+
 @media (max-width: 700px) { .wrap { width: auto; min-width: 0; } }
 """
 
@@ -480,9 +507,27 @@ def landing_page(lang: str = "zh", user: dict | None = None) -> str:
     return _page_wrap("cnb", body, lang, user)
 
 
-def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh", user: dict | None = None) -> str:
-    if not posts:
-        items = f"<div class='post' style='color:#555'>{t(lang, 'no_posts')}</div>"
+def _feed_tabs(active: str, lang: str, user: dict | None = None) -> str:
+    lp = _lang_param(lang)
+    tabs = [("feed", t(lang, "tab_feed")), ("hot", t(lang, "tab_hot")), ("all", t(lang, "tab_all"))]
+    if not user:
+        tabs = [("all", t(lang, "tab_all")), ("hot", t(lang, "tab_hot"))]
+    parts = []
+    for key, label in tabs:
+        cls = "tab active" if key == active else "tab"
+        sep = "&" if lp else "?"
+        href = f"/posts{lp}{sep}tab={key}" if key != ("feed" if user else "all") else f"/posts{lp}"
+        parts.append(f"<a class='{cls}' href='{href}'>{label}</a>")
+    return f"<div class='tabs'>{''.join(parts)}</div>"
+
+
+def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh", user: dict | None = None, tab: str = "feed") -> str:
+    tabs_html = _feed_tabs(tab, lang, user)
+
+    if not posts and tab == "feed" and user:
+        items = f"<div class='post' style='color:var(--dim)'>{t(lang, 'feed_empty')}</div>"
+    elif not posts:
+        items = f"<div class='post' style='color:var(--dim)'>{t(lang, 'no_posts')}</div>"
     else:
         items = "".join(_post_card(p, lang, user=user) for p in posts)
 
@@ -490,21 +535,41 @@ def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: 
     if has_more and next_cursor is not None:
         lp = _lang_param(lang)
         sep = "&" if lp else "?"
-        pagination = f"<div class='pagination'><a href='/posts{lp}{sep}before={next_cursor}'>{t(lang, 'older')}</a></div>"
+        tab_param = f"&tab={tab}" if tab != "feed" else ""
+        pagination = f"<div class='pagination'><a href='/posts{lp}{sep}before={next_cursor}{tab_param}'>{t(lang, 'older')}</a></div>"
 
-    return _page_wrap(t(lang, "posts"), f"{items}{pagination}", lang, user)
+    return _page_wrap(t(lang, "posts"), f"{tabs_html}{items}{pagination}", lang, user)
 
 
-def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh", user: dict | None = None) -> str:
+def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor: int | None,
+              lang: str = "zh", user: dict | None = None,
+              is_following: bool = False, follower_count: int = 0, following_count: int = 0) -> str:
     bio = profile_user.get('bio', '')
     bio_html = f"<div class='profile-bio'>{escape(bio)}</div>" if bio else ""
+
+    follow_html = ""
+    if user and user.get("id") != profile_user.get("id"):
+        pu = escape(profile_user['username'])
+        if is_following:
+            follow_html = f"<a href='/follow/{pu}' class='follow-btn following'>{t(lang, 'unfollow')}</a>"
+        else:
+            follow_html = f"<a href='/follow/{pu}' class='follow-btn'>{t(lang, 'follow')}</a>"
+
+    stats_html = (
+        f"<div class='profile-stats'>"
+        f"<span>{follower_count}</span> {t(lang, 'followers')} · "
+        f"<span>{following_count}</span> {t(lang, 'following')}"
+        f"</div>"
+    )
+
     profile = (
         "<div class='profile'>"
         f"<img class='profile-avatar' src='{escape(_avatar_url(dict(profile_user), 48))}' alt=''>"
         f"<div>"
-        f"<div class='profile-name'>{escape(profile_user['display_name'])}</div>"
+        f"<div class='profile-name'>{escape(profile_user['display_name'])} {follow_html}</div>"
         f"<div class='profile-username'>@{escape(profile_user['username'])}</div>"
         f"{bio_html}"
+        f"{stats_html}"
         f"</div>"
         "</div>"
     )

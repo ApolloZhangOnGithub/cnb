@@ -125,6 +125,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if route == "/register":
             self._send_html(register_page(lang))
             return
+        m = re.match(r"^/follow/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            self._handle_follow(m.group(1))
+            return
+
         m = re.match(r"^/vote/(\d+)$", route)
         if m:
             self._handle_form_vote(int(m.group(1)), lang)
@@ -227,13 +232,31 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
     # ── page handlers ──
 
     def _handle_feed_page(self, params: dict, lang: str = "zh", user: dict | None = None) -> None:
+        tab = (params.get("tab") or [""])[0]
+        if not tab:
+            tab = "feed" if user else "all"
         before = self._parse_int(params.get("before", [None])[0])
         limit = 20
-        posts = self.server.db.get_feed(before, limit + 1)
-        has_more = len(posts) > limit
+
+        if tab == "hot":
+            posts = self.server.db.get_hot_feed(limit)
+            has_more = False
+            next_cursor = None
+        elif tab == "feed" and user:
+            posts = self.server.db.get_following_feed(user["id"], before, limit + 1)
+            has_more = len(posts) > limit
+            post_list = [dict(p) for p in posts[:limit]]
+            next_cursor = post_list[-1]["id"] if has_more and post_list else None
+            self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab))
+            return
+        else:
+            tab = "all"
+            posts = self.server.db.get_feed(before, limit + 1)
+            has_more = len(posts) > limit
+
         post_list = [dict(p) for p in posts[:limit]]
         next_cursor = post_list[-1]["id"] if has_more and post_list else None
-        self._send_html(feed_page(post_list, has_more, next_cursor, lang, user))
+        self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab))
 
     def _handle_user_page(self, username: str, params: dict, lang: str = "zh", user: dict | None = None) -> None:
         profile = self.server.db.get_user_by_username(username)
@@ -246,7 +269,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         has_more = len(posts) > limit
         post_list = [dict(p) for p in posts[:limit]]
         next_cursor = post_list[-1]["id"] if has_more and post_list else None
-        self._send_html(user_page(dict(profile), post_list, has_more, next_cursor, lang, user))
+        is_following = self.server.db.is_following(user["id"], profile["id"]) if user else False
+        follower_count = self.server.db.get_follower_count(profile["id"])
+        following_count = self.server.db.get_following_count(profile["id"])
+        self._send_html(user_page(dict(profile), post_list, has_more, next_cursor, lang, user,
+                                  is_following, follower_count, following_count))
 
     def _handle_post_page(self, username: str, slug: str, lang: str = "zh", user: dict | None = None) -> None:
         author = self.server.db.get_user_by_username(username)
@@ -446,6 +473,16 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         slug = post["slug"]
         post_path = slug or str(post_id)
         self._redirect(f"/blog/{post['username']}/{post_path}")
+
+    def _handle_follow(self, username: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        target = self.server.db.get_user_by_username(username)
+        if target:
+            self.server.db.toggle_follow(user["id"], target["id"])
+        self._redirect(f"/blog/{username}")
 
     def _handle_form_vote(self, post_id: int, lang: str) -> None:
         user = self._get_cookie_user()
