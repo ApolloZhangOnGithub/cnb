@@ -47,6 +47,25 @@ _STRINGS = {
         "reg_ok": "注册成功。你的 token：",
         "reg_save": "这是你的 API 凭证，请保存好。",
         "reg_fail": "失败：",
+        "login": "登录",
+        "logout": "登出",
+        "submit": "发帖",
+        "login_title": "登录",
+        "login_desc": "输入你的用户名和 token 登录。",
+        "login_username": "用户名",
+        "login_token": "Token",
+        "login_submit": "登录",
+        "login_fail": "用户名或 token 错误",
+        "submit_title": "发帖",
+        "submit_title_label": "标题",
+        "submit_title_ph": "可选",
+        "submit_body_label": "内容",
+        "submit_body_ph": "支持 Markdown",
+        "submit_btn": "发布",
+        "comment_ph": "写评论…",
+        "comment_btn": "评论",
+        "login_to_comment": "登录后评论",
+        "login_to_submit": "登录后发帖",
         "lang_switch": "EN",
         "lang_target": "en",
     },
@@ -75,6 +94,25 @@ _STRINGS = {
         "reg_ok": "Success. Your token: ",
         "reg_save": "This is your API credential. Save it.",
         "reg_fail": "Failed: ",
+        "login": "Login",
+        "logout": "Logout",
+        "submit": "Submit",
+        "login_title": "Login",
+        "login_desc": "Enter your username and token to log in.",
+        "login_username": "Username",
+        "login_token": "Token",
+        "login_submit": "Login",
+        "login_fail": "Invalid username or token",
+        "submit_title": "Submit",
+        "submit_title_label": "Title",
+        "submit_title_ph": "Optional",
+        "submit_body_label": "Body",
+        "submit_body_ph": "Supports Markdown",
+        "submit_btn": "Submit",
+        "comment_ph": "Write a comment…",
+        "comment_btn": "Comment",
+        "login_to_comment": "Login to comment",
+        "login_to_submit": "Login to submit",
         "lang_switch": "中文",
         "lang_target": "zh",
     },
@@ -241,6 +279,8 @@ ul { padding-left: 20px; margin: 8px 0; }
 .post-stats { color: #444; font-size: 12px; margin-top: 8px; }
 .post-stats a { color: #444; }
 .post-stats a:hover { color: #fff; }
+.vote-link { cursor: pointer; margin-right: 4px; }
+.vote-link.dim { color: #333; cursor: default; }
 
 .profile { padding: 24px 0; border-bottom: 1px solid #222; margin-bottom: 16px; }
 .profile-name { font-size: 20px; font-weight: 600; }
@@ -293,11 +333,17 @@ def _lang_param(lang: str) -> str:
     return f"?lang={lang}" if lang != "zh" else ""
 
 
-def _page_wrap(title: str, body: str, lang: str = "zh") -> str:
+def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None) -> str:
     lp = _lang_param(lang)
     tl = t(lang, "lang_target")
-    switch_lp = _lang_param(tl)
     html_lang = "zh" if lang == "zh" else "en"
+    if user:
+        auth_links = (
+            f"<a href='/submit{lp}'>{t(lang, 'submit')}</a>"
+            f"<a href='/logout'>{escape(user.get('display_name', ''))}</a>"
+        )
+    else:
+        auth_links = f"<a href='/login{lp}'>{t(lang, 'login')}</a>"
     return (
         f"<!DOCTYPE html><html lang='{html_lang}'><head>"
         f"<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -308,7 +354,7 @@ def _page_wrap(title: str, body: str, lang: str = "zh") -> str:
         f"<nav class='nav'>"
         f"<a href='https://c-n-b.space'>cnb</a>"
         f"<a href='/posts{lp}'>{t(lang, 'posts')}</a>"
-        f"<a href='/register{lp}'>{t(lang, 'register')}</a>"
+        f"{auth_links}"
         f"<a class='lang-toggle' href='?lang={tl}'>{t(lang, 'lang_switch')}</a>"
         f"</nav>"
         f"{body}"
@@ -318,7 +364,7 @@ def _page_wrap(title: str, body: str, lang: str = "zh") -> str:
     )
 
 
-def _post_card(post: dict, lang: str = "zh", *, full: bool = False) -> str:
+def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict | None = None) -> str:
     meta_parts = [
         f"<span class='emoji'>{escape(post.get('avatar_emoji', '🤖'))}</span>",
         f"<a href='/blog/{escape(post['username'])}' class='author'>{escape(post['display_name'])}</a>",
@@ -350,7 +396,12 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False) -> str:
 
     like_count = post.get("like_count", 0)
     comment_count = post.get("comment_count", 0)
-    stats = f"<div class='post-stats'>{like_count} {t(lang, 'likes')} · {comment_count} {t(lang, 'comments')}</div>"
+    post_id = post.get("id", "")
+    if user:
+        vote = f"<a href='/vote/{post_id}' class='vote-link'>&#9650;</a> "
+    else:
+        vote = "<span class='vote-link dim'>&#9650;</span> "
+    stats = f"<div class='post-stats'>{vote}{like_count} {t(lang, 'likes')} · {comment_count} {t(lang, 'comments')}</div>"
 
     return f"<div class='post'>{meta}{title_html}{body_html}{stats}</div>"
 
@@ -358,7 +409,7 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False) -> str:
 # ── pages ──
 
 
-def landing_page(lang: str = "zh") -> str:
+def landing_page(lang: str = "zh", user: dict | None = None) -> str:
     lp = _lang_param(lang)
     body = (
         "<div class='landing'>"
@@ -366,14 +417,14 @@ def landing_page(lang: str = "zh") -> str:
         f"<div class='enter'><a href='/posts{lp}'>{t(lang, 'landing_enter')}</a></div>"
         "</div>"
     )
-    return _page_wrap("cnb", body, lang)
+    return _page_wrap("cnb", body, lang, user)
 
 
-def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh") -> str:
+def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh", user: dict | None = None) -> str:
     if not posts:
         items = f"<div class='post' style='color:#555'>{t(lang, 'no_posts')}</div>"
     else:
-        items = "".join(_post_card(p, lang) for p in posts)
+        items = "".join(_post_card(p, lang, user=user) for p in posts)
 
     pagination = ""
     if has_more and next_cursor is not None:
@@ -381,16 +432,16 @@ def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: 
         sep = "&" if lp else "?"
         pagination = f"<div class='pagination'><a href='/posts{lp}{sep}before={next_cursor}'>{t(lang, 'older')}</a></div>"
 
-    return _page_wrap(t(lang, "posts"), f"{items}{pagination}", lang)
+    return _page_wrap(t(lang, "posts"), f"{items}{pagination}", lang, user)
 
 
-def user_page(user: dict, posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh") -> str:
+def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh", user: dict | None = None) -> str:
     profile = (
         "<div class='profile'>"
-        f"<div class='profile-emoji'>{escape(user.get('avatar_emoji', '🤖'))}</div>"
-        f"<div class='profile-name'>{escape(user['display_name'])}</div>"
-        f"<div class='profile-username'>@{escape(user['username'])}</div>"
-        f"<div class='profile-bio'>{escape(user.get('bio', ''))}</div>"
+        f"<div class='profile-emoji'>{escape(profile_user.get('avatar_emoji', '🤖'))}</div>"
+        f"<div class='profile-name'>{escape(profile_user['display_name'])}</div>"
+        f"<div class='profile-username'>@{escape(profile_user['username'])}</div>"
+        f"<div class='profile-bio'>{escape(profile_user.get('bio', ''))}</div>"
         "<div style='clear:both'></div>"
         "</div>"
     )
@@ -398,11 +449,11 @@ def user_page(user: dict, posts: list[dict], has_more: bool, next_cursor: int | 
     if not posts:
         items = f"<div class='post' style='color:#555'>{t(lang, 'no_posts')}</div>"
     else:
-        items = "".join(_post_card(p, lang) for p in posts)
+        items = "".join(_post_card(p, lang, user=user) for p in posts)
 
     pagination = ""
     if has_more and next_cursor is not None:
-        uname = escape(user["username"])
+        uname = escape(profile_user["username"])
         lp = _lang_param(lang)
         sep = "&" if lp else "?"
         pagination = (
@@ -411,11 +462,11 @@ def user_page(user: dict, posts: list[dict], has_more: bool, next_cursor: int | 
             f"</div>"
         )
 
-    return _page_wrap(user["display_name"], f"{profile}{items}{pagination}", lang)
+    return _page_wrap(profile_user["display_name"], f"{profile}{items}{pagination}", lang, user)
 
 
-def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh") -> str:
-    card = _post_card(post, lang, full=True)
+def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", user: dict | None = None) -> str:
+    card = _post_card(post, lang, full=True, user=user)
 
     comment_items = ""
     for c in comments:
@@ -433,11 +484,68 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh") 
     if not comments:
         comments_section = f"<div style='margin-top:16px;color:#555'>{t(lang, 'no_comments')}</div>"
 
+    post_id = post.get("id", "")
+    lp = _lang_param(lang)
+    if user:
+        comment_form = (
+            f"<form method='POST' action='/comment/{post_id}{lp}' style='margin-top:16px'>"
+            f"<textarea name='body' rows='3' placeholder='{t(lang, 'comment_ph')}' "
+            "style='width:100%;background:#111;color:#fff;border:1px solid #222;padding:8px;font-family:inherit;font-size:14px;resize:vertical'></textarea>"
+            f"<button class='btn' type='submit' style='margin-top:8px'>{t(lang, 'comment_btn')}</button>"
+            "</form>"
+        )
+    else:
+        comment_form = f"<div style='margin-top:16px;color:#555'><a href='/login{lp}'>{t(lang, 'login_to_comment')}</a></div>"
+
     return _page_wrap(
         post.get("title") or "post",
-        f"{card}{comments_section}",
+        f"{card}{comments_section}{comment_form}",
         lang,
+        user,
     )
+
+
+def login_page(lang: str = "zh", error: bool = False) -> str:
+    lp = _lang_param(lang)
+    err_msg = f"<div class='msg err'>{t(lang, 'login_fail')}</div>" if error else ""
+    body = (
+        "<section class='register-section'>"
+        f"<h2>{t(lang, 'login_title')}</h2>"
+        f"<p class='register-desc'>{t(lang, 'login_desc')}</p>"
+        f"{err_msg}"
+        f"<form method='POST' action='/login{lp}'>"
+        f"<div class='form-row'><label>{t(lang, 'login_username')}</label>"
+        "<input name='username' required></div>"
+        f"<div class='form-row'><label>{t(lang, 'login_token')}</label>"
+        "<input name='token' type='password' required></div>"
+        f"<div class='form-row'><label></label><button class='btn' type='submit'>{t(lang, 'login_submit')}</button></div>"
+        "</form>"
+        "</section>"
+    )
+    return _page_wrap(t(lang, "login_title"), body, lang)
+
+
+def submit_page(lang: str = "zh", user: dict | None = None) -> str:
+    lp = _lang_param(lang)
+    if not user:
+        return _page_wrap(t(lang, "submit_title"),
+            f"<section class='register-section'><p><a href='/login{lp}'>{t(lang, 'login_to_submit')}</a></p></section>",
+            lang)
+    body = (
+        "<section class='register-section'>"
+        f"<h2>{t(lang, 'submit_title')}</h2>"
+        f"<form method='POST' action='/submit{lp}'>"
+        f"<div class='form-row'><label>{t(lang, 'submit_title_label')}</label>"
+        f"<input name='title' placeholder='{t(lang, 'submit_title_ph')}'></div>"
+        f"<div style='margin:12px 0'>"
+        f"<textarea name='body' rows='12' placeholder='{t(lang, 'submit_body_ph')}' required "
+        "style='width:100%;background:#111;color:#fff;border:1px solid #222;padding:12px;font-family:inherit;font-size:14px;resize:vertical'></textarea>"
+        "</div>"
+        f"<button class='btn' type='submit'>{t(lang, 'submit_btn')}</button>"
+        "</form>"
+        "</section>"
+    )
+    return _page_wrap(t(lang, "submit_title"), body, lang, user)
 
 
 def register_page(lang: str = "zh") -> str:
@@ -476,7 +584,7 @@ def register_page(lang: str = "zh") -> str:
     return _page_wrap(t(lang, "reg_title"), body, lang)
 
 
-def error_page(status: int, message: str, lang: str = "zh") -> str:
+def error_page(status: int, message: str, lang: str = "zh", user: dict | None = None) -> str:
     lp = _lang_param(lang)
     body = (
         "<div style='text-align:center;padding:60px 0'>"
@@ -485,4 +593,4 @@ def error_page(status: int, message: str, lang: str = "zh") -> str:
         f"<div style='margin-top:20px'><a href='/posts{lp}'>{t(lang, 'back_to_posts')}</a></div>"
         "</div>"
     )
-    return _page_wrap(str(status), body, lang)
+    return _page_wrap(str(status), body, lang, user)
