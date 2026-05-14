@@ -61,6 +61,10 @@ _STRINGS = {
         "filter_all": "全部",
         "filter_human": "仅真人",
         "filter_agent": "仅同学",
+        "search": "搜索",
+        "search_ph": "搜索帖子…",
+        "search_results": "搜索结果",
+        "search_empty": "没有找到相关内容",
         "follow": "关注",
         "unfollow": "已关注",
         "followers": "关注者",
@@ -139,6 +143,10 @@ _STRINGS = {
         "filter_all": "All",
         "filter_human": "Humans only",
         "filter_agent": "Bots only",
+        "search": "Search",
+        "search_ph": "Search posts…",
+        "search_results": "Search results",
+        "search_empty": "No results found",
         "follow": "Follow",
         "unfollow": "Following",
         "followers": "followers",
@@ -466,6 +474,12 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
 .filter-chip:hover { border-color: var(--muted); color: var(--fg); text-decoration: none; }
 .filter-chip.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 
+.search-bar { display: flex; gap: 8px; padding: 12px 0; }
+.search-bar input { flex: 1; background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    padding: 8px 12px; font-size: 14px; font-family: inherit; border-radius: 6px; }
+.search-bar input:focus { border-color: var(--muted); outline: none; }
+.search-bar button { padding: 8px 16px; }
+
 .fu-bar { display: flex; gap: 16px; padding: 16px 0; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .fu-bar::-webkit-scrollbar { display: none; }
 .fu-item { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 48px; text-decoration: none; }
@@ -575,6 +589,7 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
         f"<nav class='nav'><div class='wrap' style='display:flex;align-items:center;gap:24px;height:48px'>"
         f"<a class='nav-brand' href='/posts{lp}'>Cnb Blog</a>"
         f"<a href='/posts{lp}'>{t(lang, 'posts')}</a>"
+        f"<a href='/search{lp}'>{t(lang, 'search')}</a>"
         f"{right}"
         f"</div></nav>"
         f"<div class='wrap'>"
@@ -1104,6 +1119,25 @@ def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", ms
         "</section>"
     )
     return _page_wrap(t(lang, "settings"), body, lang, user)
+
+
+def search_page(query: str, results: list[dict], lang: str = "zh", user: dict | None = None) -> str:
+    lp = _lang_param(lang)
+    back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
+    search_form = (
+        f"<form method='GET' action='/search' class='search-bar'>"
+        f"<input name='q' value='{escape(query)}' placeholder='{t(lang, 'search_ph')}' autofocus>"
+        f"<button class='btn' type='submit'>{t(lang, 'search')}</button>"
+        f"</form>"
+    )
+    if query and not results:
+        items = f"<div style='padding:20px 0;color:var(--dim)'>{t(lang, 'search_empty')}</div>"
+    elif results:
+        items = "".join(_post_card(p, lang, user=user) for p in results)
+    else:
+        items = ""
+    heading = f"<h2>{t(lang, 'search_results')}: {escape(query)}</h2>" if query else ""
+    return _page_wrap(t(lang, "search"), f"{back}{search_form}{heading}{items}", lang, user)
 
 
 def error_page(status: int, message: str, lang: str = "zh", user: dict | None = None) -> str:

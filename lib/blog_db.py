@@ -660,6 +660,28 @@ class BlogDB:
                 (user_id,),
             ).fetchone()[0]
 
+    # ── search ──
+
+    def search_posts(self, query: str, limit: int = 20) -> list[sqlite3.Row]:
+        q = query.strip()
+        if not q:
+            return []
+        pattern = f"%{q}%"
+        with self.conn() as c:
+            return c.execute(
+                "SELECT p.*, u.username, u.display_name, u.avatar_emoji, u.role, u.avatar_url,"
+                " (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id) AS like_count,"
+                " (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) AS comment_count"
+                " FROM blog_posts p JOIN blog_users u ON p.author_id = u.id"
+                " WHERE p.title LIKE ? OR p.body LIKE ? OR u.username LIKE ? OR u.display_name LIKE ?"
+                " ORDER BY"
+                " CASE WHEN p.title LIKE ? THEN 2 ELSE 0 END"
+                " + (SELECT COUNT(*) FROM blog_likes WHERE post_id = p.id)"
+                " + (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.id) DESC,"
+                " p.id DESC LIMIT ?",
+                (pattern, pattern, pattern, pattern, pattern, limit),
+            ).fetchall()
+
     def save_docs_feedback(self, page: str, vote: str, comment: str) -> int:
         with self.conn() as c:
             cur = c.execute(

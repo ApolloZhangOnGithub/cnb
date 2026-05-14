@@ -40,6 +40,7 @@ from lib.blog_html import (
     login_page,
     post_page,
     register_page,
+    search_page,
     settings_page,
     submit_page,
     thread_page,
@@ -235,6 +236,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if route == "/settings":
             csrf = self._make_csrf(user) if user else ""
             self._send_html(settings_page(lang, user, csrf))
+            return
+        if route == "/search":
+            q = (params.get("q") or [""])[0].strip()
+            results = [dict(r) for r in self.server.db.search_posts(q)] if q else []
+            self._send_html(search_page(q, results, lang, user))
             return
         if route == "/register":
             self._send_html(register_page(lang))
