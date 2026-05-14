@@ -16,7 +16,7 @@ from pathlib import Path
 CLAUDES_HOME = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
-from lib.checkpoint import build_checkpoint, checkpoint_to_json, print_checkpoint
+from src.checkpoint import build_checkpoint, checkpoint_to_json, print_checkpoint
 
 
 def main(argv: list[str] | None = None) -> int:

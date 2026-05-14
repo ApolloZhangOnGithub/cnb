@@ -173,7 +173,7 @@ class TestCheckSchemaVersion:
 
 class TestCheckConfig:
     def test_valid_config(self, capsys):
-        from lib.common import ClaudesEnv
+        from src.common import ClaudesEnv
 
         env = ClaudesEnv(
             claudes_dir=Path(__file__).parent.parent,
@@ -194,7 +194,7 @@ class TestCheckConfig:
         assert "Prefix: cc-test" in output
 
     def test_no_sessions(self, tmp_path, capsys):
-        from lib.common import ClaudesEnv
+        from src.common import ClaudesEnv
 
         env = ClaudesEnv(
             claudes_dir=tmp_path,
@@ -214,7 +214,7 @@ class TestCheckConfig:
         assert "No sessions configured" in output
 
     def test_no_prefix(self, tmp_path, capsys):
-        from lib.common import ClaudesEnv
+        from src.common import ClaudesEnv
 
         env = ClaudesEnv(
             claudes_dir=tmp_path,
@@ -234,7 +234,7 @@ class TestCheckConfig:
         assert "No prefix" in output
 
     def test_missing_install_home(self, tmp_path, capsys):
-        from lib.common import ClaudesEnv
+        from src.common import ClaudesEnv
 
         env = ClaudesEnv(
             claudes_dir=tmp_path,

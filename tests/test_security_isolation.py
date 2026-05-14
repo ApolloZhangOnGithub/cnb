@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from lib.board_db import BoardDB
-from lib.board_msg import cmd_ack, cmd_inbox, cmd_send, cmd_status
-from lib.board_task import cmd_task
-from lib.common import ClaudesEnv
+from src.board_db import BoardDB
+from src.board_msg import cmd_ack, cmd_inbox, cmd_send, cmd_status
+from src.board_task import cmd_task
+from src.common import ClaudesEnv
 from tests.conftest import SCHEMA_VERSION
 
 pytestmark = pytest.mark.security

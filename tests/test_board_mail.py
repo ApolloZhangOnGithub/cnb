@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from lib.board_db import BoardDB
-from lib.board_mail import cmd_mail
+from src.board_db import BoardDB
+from src.board_mail import cmd_mail
 from tests.conftest import SCHEMA_VERSION
 
 SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"

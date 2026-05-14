@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.board_lock import GIT_LOCK_TTL, _cleanup_stale, cmd_git_lock, cmd_git_lock_status, cmd_git_unlock
+from src.board_lock import GIT_LOCK_TTL, _cleanup_stale, cmd_git_lock, cmd_git_lock_status, cmd_git_unlock
 
 
 class TestCleanupStale:

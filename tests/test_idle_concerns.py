@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-from lib.concerns.base import Concern
-from lib.concerns.idle import IdleDetector, IdleKiller
+from src.concerns.base import Concern
+from src.concerns.idle import IdleDetector, IdleKiller
 from tests.conftest import make_dispatcher_config
 
 PREFIX = "cc-test"

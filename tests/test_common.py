@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from lib.common import (
+from src.common import (
     escape_like,
     is_privileged,
     is_terminal_bug_status,

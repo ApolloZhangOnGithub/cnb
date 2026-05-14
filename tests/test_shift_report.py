@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from lib.board_db import BoardDB
-from lib.shift_report import (
+from src.board_db import BoardDB
+from src.shift_report import (
     generate_agent_report,
     generate_shift_meta,
     next_shift_number,

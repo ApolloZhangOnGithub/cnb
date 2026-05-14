@@ -3,7 +3,7 @@
 Verifies: structure consistency, required fields, no duplicate names across themes.
 """
 
-from lib.theme_profiles import PROFILES
+from src.theme_profiles import PROFILES
 
 
 class TestProfileStructure:

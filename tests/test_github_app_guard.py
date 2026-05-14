@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from lib.github_app_guard import GitHubAppGuardError, check_installation, validate_policy
+from src.github_app_guard import GitHubAppGuardError, check_installation, validate_policy
 
 
 def _policy() -> dict:

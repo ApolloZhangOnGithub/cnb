@@ -3,7 +3,7 @@
 import pytest
 from cryptography.exceptions import InvalidTag
 
-from lib.crypto import (
+from src.crypto import (
     generate_keypair,
     load_private_key,
     private_key_from_pem,

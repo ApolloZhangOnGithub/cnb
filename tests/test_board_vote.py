@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.board_vote import cmd_propose, cmd_tally, cmd_vote
+from src.board_vote import cmd_propose, cmd_tally, cmd_vote
 
 
 @pytest.fixture(autouse=True)

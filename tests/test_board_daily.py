@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.board_daily import cmd_daily
+from src.board_daily import cmd_daily
 
 
 class TestCmdDaily:

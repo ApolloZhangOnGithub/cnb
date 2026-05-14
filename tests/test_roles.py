@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lib.roles import (
+from src.roles import (
     EMPTY_MANIFEST,
     RoleManifest,
     load_all_manifests,

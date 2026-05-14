@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from lib.cnb_sync_gateway import SyncEventStore, build_server, require_auth_for_public_bind
+from src.cnb_sync_gateway import SyncEventStore, build_server, require_auth_for_public_bind
 
 
 def request_json(

@@ -5,8 +5,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from lib.concerns.config import DispatcherConfig
-from lib.concerns.helpers import (
+from src.concerns.config import DispatcherConfig
+from src.concerns.helpers import (
     board_send,
     get_dev_sessions,
     has_tool_process,

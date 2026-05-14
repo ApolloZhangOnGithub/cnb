@@ -2,8 +2,8 @@
 
 import pytest
 
-from lib.board_inspect import cmd_inspect
-from lib.board_msg import cmd_send
+from src.board_inspect import cmd_inspect
+from src.board_msg import cmd_send
 
 
 class TestInspectInbox:

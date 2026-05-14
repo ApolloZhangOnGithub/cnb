@@ -5,8 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from lib.concerns.config import DispatcherConfig
-from lib.concerns.notifications import (
+from src.concerns.config import DispatcherConfig
+from src.concerns.notifications import (
     BugSLAChecker,
     InboxNudger,
     ManagerCloseoutEscalator,

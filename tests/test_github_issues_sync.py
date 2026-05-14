@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from lib.github_issues_sync import main, sync_issues
+from src.github_issues_sync import main, sync_issues
 
 
 def test_sync_issues_writes_markdown_index_and_removes_stale(tmp_path: Path) -> None:

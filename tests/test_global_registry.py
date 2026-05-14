@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.global_registry import (
+from src.global_registry import (
     VALID_CREDENTIAL_STATUSES,
     _read_credentials,
     _read_projects,
@@ -98,7 +98,7 @@ class TestRegisterProject:
         assert len(data["projects"]) == 1
 
     def test_ambient_registry_skips_transient_test_projects(self, tmp_path, monkeypatch):
-        import lib.global_registry as registry
+        import src.global_registry as registry
 
         cnb_home = tmp_path / ".cnb"
         monkeypatch.setattr(registry, "CNB_HOME", cnb_home)
@@ -422,7 +422,7 @@ class TestDiscoverProjects:
 
 class TestCmdProjectsScan:
     def test_json_output_reports_board_project_without_registering(self, tmp_path, capsys, monkeypatch):
-        import lib.global_registry as registry
+        import src.global_registry as registry
 
         monkeypatch.setattr(registry.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no tmux/git")))
         registry_path = tmp_path / "home" / ".cnb" / "projects.json"
@@ -447,7 +447,7 @@ class TestCmdProjectsScan:
         assert not registry_path.exists()
 
     def test_register_in_marker_mode_skips_marker_only_projects(self, tmp_path, capsys, monkeypatch):
-        import lib.global_registry as registry
+        import src.global_registry as registry
 
         monkeypatch.setattr(registry.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no tmux/git")))
         registry_path = tmp_path / "home" / ".cnb" / "projects.json"
@@ -471,7 +471,7 @@ class TestCmdProjectsScan:
         assert registered[0]["path"] == str(board_proj.resolve())
 
     def test_no_legacy_ignores_claudes_marker(self, tmp_path, capsys, monkeypatch):
-        import lib.global_registry as registry
+        import src.global_registry as registry
 
         monkeypatch.setattr(registry.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no tmux/git")))
         legacy_proj = tmp_path / "legacy"
@@ -485,7 +485,7 @@ class TestCmdProjectsScan:
         assert payload["projects"] == []
 
     def test_tmux_and_git_timeout_degrade_cleanly(self, tmp_path, capsys, monkeypatch):
-        import lib.global_registry as registry
+        import src.global_registry as registry
 
         def fake_run(*_args, **_kwargs):
             raise subprocess.TimeoutExpired(cmd="external", timeout=3)

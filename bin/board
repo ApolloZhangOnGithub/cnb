@@ -13,8 +13,8 @@ from pathlib import Path
 CLAUDES_HOME = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
-from lib.board_db import BoardDB
-from lib.common import ClaudesEnv, parse_flags, validate_identity
+from src.board_db import BoardDB
+from src.common import ClaudesEnv, parse_flags, validate_identity
 
 # ---------------------------------------------------------------------------
 # Command registry
@@ -336,7 +336,7 @@ for c in COMMANDS:
 def _dispatch(cmd: Command, db: BoardDB, identity: str, rest: list[str]) -> None:
     """Lazy-import the handler module and call the registered function."""
     if identity:
-        from lib.roles import load_manifest, resolve_role_for_identity
+        from src.roles import load_manifest, resolve_role_for_identity
 
         role_name = resolve_role_for_identity(identity)
         manifest = load_manifest(role_name)
@@ -368,7 +368,7 @@ def _fmt_command(cmd: Command, width: int) -> str:
 
 
 def print_help(identity: str = "") -> None:
-    from lib.roles import load_manifest, resolve_role_for_identity
+    from src.roles import load_manifest, resolve_role_for_identity
 
     visible = [c for c in COMMANDS if not c.hidden]
     manifest = None

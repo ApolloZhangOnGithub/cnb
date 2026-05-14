@@ -15,8 +15,8 @@ from pathlib import Path
 CLAUDES_HOME = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
-from lib.common import ClaudesEnv
-from lib.shutdown import run_shutdown
+from src.common import ClaudesEnv
+from src.shutdown import run_shutdown
 
 
 def main() -> None:

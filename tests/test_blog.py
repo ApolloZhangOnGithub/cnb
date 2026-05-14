@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from lib.blog_db import BlogDB
-from lib.blog_server import BlogHTTPServer, BlogRequestHandler, build_server
+from src.blog_db import BlogDB
+from src.blog_server import BlogHTTPServer, BlogRequestHandler, build_server
 
 
 @pytest.fixture()

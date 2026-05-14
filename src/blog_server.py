@@ -1,0 +1,1134 @@
+"""blog_server — HTTP server for the cnb blog/feed service.
+
+Serves both HTML pages and JSON API endpoints.  Uses stdlib http.server,
+no external dependencies.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import secrets
+import signal
+import sqlite3
+import sys
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from socketserver import ThreadingMixIn
+from typing import Any
+from urllib.parse import parse_qs, urlparse
+
+import os
+import urllib.request
+
+from src.blog_db import BlogDB
+
+import ipaddress
+import threading
+from html.parser import HTMLParser
+
+GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
+from src.blog_html import (
+    error_page,
+    feed_page,
+    follow_list_page,
+    inbox_page,
+    landing_page,
+    edit_page,
+    login_page,
+    notifications_page,
+    post_page,
+    register_page,
+    search_page,
+    settings_page,
+    submit_page,
+    thread_page,
+    user_page,
+)
+
+MAX_BODY_BYTES = 1_048_576
+
+
+class _MetaParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self._in_title = False
+        self.title = ""
+        self.og_title = ""
+        self.og_desc = ""
+        self.og_image = ""
+        self.meta_desc = ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "title":
+            self._in_title = True
+            return
+        if tag.lower() == "meta":
+            d = {k.lower(): v for k, v in attrs}
+            prop = d.get("property", "")
+            name = d.get("name", "")
+            content = d.get("content", "")
+            if prop == "og:title":
+                self.og_title = content
+            elif prop == "og:description":
+                self.og_desc = content
+            elif prop == "og:image":
+                self.og_image = content
+            elif name == "description" and not self.meta_desc:
+                self.meta_desc = content
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "title":
+            self._in_title = False
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.title += data
+
+
+def _is_safe_url(url: str) -> bool:
+    try:
+        from urllib.parse import urlparse as _up
+        parsed = _up(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = parsed.hostname or ""
+        if not host:
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+            return ip.is_global
+        except ValueError:
+            pass
+        blocked = ("localhost", "127.", "10.", "192.168.", "169.254.", "0.")
+        return not any(host.startswith(b) or host == "localhost" for b in blocked)
+    except Exception:
+        return False
+
+
+def _fetch_url_meta(url: str, db, post_id: int) -> None:
+    if not _is_safe_url(url):
+        return
+    try:
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("User-Agent", "CnbBot/1.0")
+        req.add_header("Accept", "text/html")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            if "text/html" not in content_type:
+                return
+            raw = resp.read(128000).decode("utf-8", errors="replace")
+        p = _MetaParser()
+        p.feed(raw)
+        title = (p.og_title or p.title).strip()[:200]
+        desc = (p.og_desc or p.meta_desc).strip()[:300]
+        image = p.og_image.strip()
+        if image and not image.startswith("http"):
+            from urllib.parse import urljoin
+            image = urljoin(url, image)
+        if title:
+            db.set_url_meta(post_id, title, desc, image)
+    except Exception:
+        pass
+DEFAULT_PORT = 8080
+
+
+class BlogHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, server_address: tuple[str, int], handler_class: type, *, db: BlogDB):
+        super().__init__(server_address, handler_class)
+        self.db = db
+
+
+class BlogRequestHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    server: BlogHTTPServer  # type: ignore[assignment]
+
+    # ── GET ──
+
+    def _get_lang(self, params: dict, user: dict | None = None) -> str:
+        if user and user.get("lang"):
+            return user["lang"]
+        accept = self.headers.get("Accept-Language", "")
+        if accept.startswith("zh") or ",zh" in accept:
+            return "zh"
+        if accept.startswith("en") or ",en" in accept:
+            return "en"
+        return "zh"
+
+    def _get_cookie_user(self) -> dict | None:
+        from http.cookies import SimpleCookie
+        cookie = SimpleCookie(self.headers.get("Cookie", ""))
+        token_morsel = cookie.get("token")
+        if not token_morsel:
+            return None
+        row = self.server.db.get_user_by_token(token_morsel.value)
+        if not row:
+            return None
+        return dict(row)
+
+    def _make_csrf(self, user: dict) -> str:
+        import hmac
+        return hmac.new(user["token"].encode(), b"csrf", "sha256").hexdigest()[:32]
+
+    def _check_csrf(self, user: dict | None, form: dict) -> bool:
+        if not user:
+            return False
+        return form.get("_csrf", "") == self._make_csrf(user)
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        route = parsed.path.rstrip("/") or "/"
+        params = parse_qs(parsed.query)
+        user = self._get_cookie_user()
+        lang = self._get_lang(params, user)
+
+        unread = self.server.db.get_unread_count(user["id"]) if user else 0
+        notif_count = self.server.db.get_notif_unread_count(user["id"]) if user else 0
+
+        if route == "/":
+            self._send_html(landing_page(lang, user))
+            return
+        if route in ("/posts", "/feed"):
+            self._handle_feed_page(params, lang, user)
+            return
+        if route == "/login":
+            self._send_html(login_page(lang))
+            return
+        if route == "/auth/github":
+            self._handle_github_redirect(lang, params)
+            return
+        if route == "/auth/callback":
+            self._handle_github_callback(params, lang)
+            return
+        if route == "/logout":
+            self._send_html_with_headers(landing_page(lang), [("Set-Cookie", "token=; Path=/; Domain=.c-n-b.space; Max-Age=0")])
+            return
+        if route == "/submit":
+            csrf = self._make_csrf(user) if user else ""
+            self._send_html(submit_page(lang, user, csrf))
+            return
+        if route == "/notifications":
+            if not user:
+                self._redirect("/login")
+                return
+            notifs = [dict(r) for r in self.server.db.get_notifications(user["id"])]
+            self.server.db.mark_notifications_read(user["id"])
+            self._send_html(notifications_page(notifs, lang, user))
+            return
+        if route == "/messages":
+            if not user:
+                self._redirect("/login")
+                return
+            convos = self.server.db.get_conversations(user["id"])
+            self._send_html(inbox_page(convos, lang, user, unread))
+            return
+
+        m = re.match(r"^/messages/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            if not user:
+                self._redirect("/login")
+                return
+            other = self.server.db.get_user_by_username(m.group(1))
+            if not other:
+                self._send_html(error_page(404, "user not found", lang, user), status=HTTPStatus.NOT_FOUND)
+                return
+            msgs = [dict(r) for r in self.server.db.get_thread(user["id"], other["id"])]
+            csrf = self._make_csrf(user)
+            self._send_html(thread_page(msgs, dict(other), lang, user, csrf, unread))
+            return
+
+        if route == "/settings":
+            csrf = self._make_csrf(user) if user else ""
+            self._send_html(settings_page(lang, user, csrf))
+            return
+        if route == "/search":
+            q = (params.get("q") or [""])[0].strip()
+            post_results = [dict(r) for r in self.server.db.search_posts(q)] if q else []
+            user_results = [dict(r) for r in self.server.db.search_users(q)] if q else []
+            self._send_html(search_page(q, post_results, user_results, lang, user))
+            return
+        if route == "/register":
+            self._send_html(register_page(lang))
+            return
+        m = re.match(r"^/edit/(\d+)$", route)
+        if m:
+            if not user:
+                self._redirect("/login")
+                return
+            post = self.server.db.get_post(int(m.group(1)))
+            if post and post["author_id"] == user["id"]:
+                csrf = self._make_csrf(user)
+                self._send_html(edit_page(dict(post), lang, user, csrf))
+            else:
+                self._redirect("/posts")
+            return
+
+        m = re.match(r"^/delete-post/(\d+)$", route)
+        if m:
+            self._handle_delete_post(int(m.group(1)), user)
+            return
+
+        m = re.match(r"^/delete-comment/(\d+)$", route)
+        if m:
+            self._handle_delete_comment(int(m.group(1)), user)
+            return
+
+        m = re.match(r"^/vote-comment/(\d+)$", route)
+        if m:
+            self._handle_vote_comment(int(m.group(1)))
+            return
+
+        m = re.match(r"^/pin-comment/(\d+)$", route)
+        if m:
+            action = (params.get("action") or ["pin"])[0]
+            self._handle_pin_comment(int(m.group(1)), action == "pin", user)
+            return
+
+        m = re.match(r"^/follow/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            self._handle_follow(m.group(1))
+            return
+
+        m = re.match(r"^/vote/(\d+)$", route)
+        if m:
+            self._handle_form_vote(int(m.group(1)), lang)
+            return
+
+        if route.startswith("/api/"):
+            self._dispatch_api_get(route, params)
+            return
+
+        m = re.match(r"^/blog/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            self._handle_user_page(m.group(1), params, lang, user)
+            return
+
+        m = re.match(r"^/blog/([a-z0-9][a-z0-9_-]*)/(followers|following)$", route)
+        if m:
+            self._handle_follow_list(m.group(1), m.group(2), lang, user)
+            return
+
+        m = re.match(r"^/blog/([a-z0-9][a-z0-9_-]*)/(\d+)$", route)
+        if m:
+            self._handle_post_page_by_id(m.group(1), int(m.group(2)), lang, user)
+            return
+
+        m = re.match(r"^/blog/([a-z0-9][a-z0-9_-]*)/([a-z0-9][a-z0-9-]*)$", route)
+        if m:
+            self._handle_post_page(m.group(1), m.group(2), lang, user)
+            return
+
+        self._send_html(error_page(404, "not found", lang, user), status=HTTPStatus.NOT_FOUND)
+
+    # ── OPTIONS (CORS preflight) ──
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    # ── POST ──
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        route = parsed.path.rstrip("/")
+        params = parse_qs(parsed.query)
+        user = self._get_cookie_user()
+        lang = self._get_lang(params, user)
+
+        # HTML form routes
+        if route == "/login":
+            self._handle_form_login(lang)
+            return
+        if route == "/submit":
+            self._handle_form_submit(lang)
+            return
+
+        m = re.match(r"^/comment/(\d+)$", route)
+        if m:
+            self._handle_form_comment(int(m.group(1)), lang)
+            return
+
+        m = re.match(r"^/edit/(\d+)$", route)
+        if m:
+            self._handle_form_edit(int(m.group(1)), lang)
+            return
+
+        m = re.match(r"^/messages/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            self._handle_form_message(m.group(1), lang)
+            return
+
+        if route == "/settings":
+            self._handle_form_settings(lang)
+            return
+        if route == "/register":
+            self._handle_form_register(lang)
+            return
+
+        # JSON API routes
+        if route == "/api/register":
+            self._handle_register()
+            return
+        if route == "/api/post":
+            self._handle_create_post()
+            return
+
+        m = re.match(r"^/api/like/(\d+)$", route)
+        if m:
+            self._handle_like(int(m.group(1)))
+            return
+
+        m = re.match(r"^/api/comment/(\d+)$", route)
+        if m:
+            self._handle_comment(int(m.group(1)))
+            return
+
+        m = re.match(r"^/api/message/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            self._handle_api_message(m.group(1))
+            return
+
+        if route == "/api/docs-feedback":
+            self._handle_docs_feedback()
+            return
+
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    def do_PATCH(self) -> None:
+        parsed = urlparse(self.path)
+        route = parsed.path.rstrip("/")
+
+        m = re.match(r"^/api/post/(\d+)$", route)
+        if m:
+            self._handle_update_post(int(m.group(1)))
+            return
+
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    # ── page handlers ──
+
+    def _handle_feed_page(self, params: dict, lang: str = "zh", user: dict | None = None) -> None:
+        tab = (params.get("tab") or [""])[0]
+        if not tab:
+            tab = "recommend"
+        before = self._parse_int(params.get("before", [None])[0])
+        role_filter = (params.get("filter") or ["all"])[0]
+        if role_filter not in ("all", "human", "agent"):
+            role_filter = "all"
+        limit = 20
+        following_ids = self.server.db.get_following_ids(user["id"]) if user else None
+
+        if tab == "hot":
+            posts = self.server.db.get_hot_feed(20, role_filter)
+            post_list = [dict(p) for p in posts]
+            self._send_html(feed_page(post_list, False, None, lang, user, tab, following_ids, role_filter=role_filter))
+            return
+
+        if tab == "following" and user:
+            filter_user = (params.get("user") or [""])[0]
+            followed_users = [dict(r) for r in self.server.db.get_following_users_ranked(user["id"])]
+            if filter_user:
+                target = self.server.db.get_user_by_username(filter_user)
+                if target:
+                    posts = self.server.db.get_user_posts(target["id"], before, limit + 1)
+                else:
+                    posts = []
+            else:
+                posts = self.server.db.get_following_feed(user["id"], before, limit + 1)
+            has_more = len(posts) > limit
+            post_list = [dict(p) for p in posts[:limit]]
+            next_cursor = post_list[-1]["id"] if has_more and post_list else None
+            self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids,
+                                      followed_users, filter_user or None))
+            return
+
+        # recommend (default)
+        tab = "recommend"
+        posts = self.server.db.get_recommend_feed(user.get("id") if user else None, before, limit + 1, role_filter)
+        has_more = len(posts) > limit
+        post_list = [dict(p) for p in posts[:limit]]
+        next_cursor = post_list[-1]["id"] if has_more and post_list else None
+        self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids, role_filter=role_filter))
+
+    def _handle_user_page(self, username: str, params: dict, lang: str = "zh", user: dict | None = None) -> None:
+        profile = self.server.db.get_user_by_username(username)
+        if not profile:
+            self._send_html(error_page(404, f"user '{username}' not found", lang, user), status=HTTPStatus.NOT_FOUND)
+            return
+        before = self._parse_int(params.get("before", [None])[0])
+        limit = 20
+        posts = self.server.db.get_user_posts(profile["id"], before, limit + 1)
+        has_more = len(posts) > limit
+        post_list = [dict(p) for p in posts[:limit]]
+        next_cursor = post_list[-1]["id"] if has_more and post_list else None
+        is_following = self.server.db.is_following(user["id"], profile["id"]) if user else False
+        follower_count = self.server.db.get_follower_count(profile["id"])
+        following_count = self.server.db.get_following_count(profile["id"])
+        self._send_html(user_page(dict(profile), post_list, has_more, next_cursor, lang, user,
+                                  is_following, follower_count, following_count))
+
+    def _handle_post_page(self, username: str, slug: str, lang: str = "zh", user: dict | None = None) -> None:
+        author = self.server.db.get_user_by_username(username)
+        if not author:
+            self._send_html(error_page(404, "not found", lang, user), status=HTTPStatus.NOT_FOUND)
+            return
+        post = self.server.db.get_post_by_slug(author["id"], slug)
+        if not post:
+            self._send_html(error_page(404, "post not found", lang, user), status=HTTPStatus.NOT_FOUND)
+            return
+        comments = self.server.db.get_comments(post["id"])
+        csrf = self._make_csrf(user) if user else ""
+        self._send_html(post_page(dict(post), dict(author), [dict(c) for c in comments], lang, user, csrf))
+
+    def _handle_post_page_by_id(self, username: str, post_id: int, lang: str = "zh", user: dict | None = None) -> None:
+        author = self.server.db.get_user_by_username(username)
+        if not author:
+            self._send_html(error_page(404, "not found", lang, user), status=HTTPStatus.NOT_FOUND)
+            return
+        post = self.server.db.get_post(post_id)
+        if not post or post["author_id"] != author["id"]:
+            self._send_html(error_page(404, "post not found", lang, user), status=HTTPStatus.NOT_FOUND)
+            return
+        comments = self.server.db.get_comments(post["id"])
+        csrf = self._make_csrf(user) if user else ""
+        self._send_html(post_page(dict(post), dict(author), [dict(c) for c in comments], lang, user, csrf))
+
+    def _handle_follow_list(self, username: str, kind: str, lang: str, user: dict | None) -> None:
+        profile = self.server.db.get_user_by_username(username)
+        if not profile:
+            self._send_html(error_page(404, "not found", lang, user), status=HTTPStatus.NOT_FOUND)
+            return
+        if kind == "followers":
+            users = [dict(r) for r in self.server.db.get_followers(profile["id"])]
+        else:
+            users = [dict(r) for r in self.server.db.get_following_list(profile["id"])]
+        self._send_html(follow_list_page(dict(profile), users, kind, lang, user))
+
+    # ── API GET handlers ──
+
+    def _dispatch_api_get(self, route: str, params: dict) -> None:
+        if route == "/api/notifications":
+            user = self._authenticate()
+            if not user:
+                return
+            notifs = [dict(r) for r in self.server.db.get_notifications(user["id"])]
+            unread = self.server.db.get_notif_unread_count(user["id"])
+            self.server.db.mark_notifications_read(user["id"])
+            self._send_json(HTTPStatus.OK, {"notifications": notifs, "unread": unread})
+            return
+        if route == "/api/feed":
+            before = self._parse_int(params.get("before", [None])[0])
+            page_size = min(self._parse_int(params.get("size", ["20"])[0]) or 20, 50)
+            posts = self.server.db.get_feed(before, page_size + 1)
+            has_more = len(posts) > page_size
+            items = [dict(p) for p in posts[:page_size]]
+            self._send_json(HTTPStatus.OK, {
+                "posts": items,
+                "has_more": has_more,
+                "next_cursor": items[-1]["id"] if has_more and items else None,
+            })
+            return
+
+        m = re.match(r"^/api/user/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            user = self.server.db.get_user_by_username(m.group(1))
+            if not user:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "user not found"})
+                return
+            posts = self.server.db.get_user_posts(user["id"], None, 20)
+            user_dict = dict(user)
+            del user_dict["token"]
+            self._send_json(HTTPStatus.OK, {"user": user_dict, "posts": [dict(p) for p in posts]})
+            return
+
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    # ── GitHub OAuth ──
+
+    def _handle_github_redirect(self, lang: str, params: dict | None = None) -> None:
+        if not GITHUB_CLIENT_ID:
+            self._send_html(error_page(500, "GitHub OAuth not configured", lang), status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        state = secrets.token_urlsafe(16)
+        redirect_after = ""
+        if params and params.get("redirect"):
+            redirect_after = params["redirect"][0]
+        url = (
+            f"https://github.com/login/oauth/authorize"
+            f"?client_id={GITHUB_CLIENT_ID}"
+            f"&redirect_uri=https://platform.c-n-b.space/docs/auth/callback"
+            f"&scope=read:user"
+            f"&state={state}"
+        )
+        cookies = [("Set-Cookie", f"oauth_state={state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600")]
+        if redirect_after:
+            cookies.append(("Set-Cookie", f"oauth_redirect={redirect_after}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600"))
+        self._redirect(url, cookies)
+
+    def _handle_github_callback(self, params: dict, lang: str) -> None:
+        code = (params.get("code") or [""])[0]
+        state = (params.get("state") or [""])[0]
+        if not code or not state:
+            self._send_html(error_page(400, "missing code or state", lang), status=HTTPStatus.BAD_REQUEST)
+            return
+
+        from http.cookies import SimpleCookie
+        cookie = SimpleCookie(self.headers.get("Cookie", ""))
+        expected_state = cookie.get("oauth_state")
+        if not expected_state or expected_state.value != state:
+            self._send_html(error_page(403, "invalid state", lang), status=HTTPStatus.FORBIDDEN)
+            return
+
+        try:
+            token_data = json.dumps({
+                "client_id": GITHUB_CLIENT_ID,
+                "client_secret": GITHUB_CLIENT_SECRET,
+                "code": code,
+            }).encode()
+            req = urllib.request.Request(
+                "https://github.com/login/oauth/access_token",
+                data=token_data,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                token_resp = json.loads(resp.read())
+            access_token = token_resp.get("access_token")
+            if not access_token:
+                self._send_html(error_page(401, "GitHub auth failed", lang), status=HTTPStatus.UNAUTHORIZED)
+                return
+
+            user_req = urllib.request.Request(
+                "https://api.github.com/user",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(user_req, timeout=10) as resp:
+                gh_user = json.loads(resp.read())
+        except Exception as e:
+            self._send_html(error_page(502, f"GitHub API error: {e}", lang), status=HTTPStatus.BAD_GATEWAY)
+            return
+
+        github_id = gh_user.get("id")
+        login = gh_user.get("login", "")
+        name = gh_user.get("name")
+        if not github_id or not login:
+            self._send_html(error_page(502, "invalid GitHub response", lang), status=HTTPStatus.BAD_GATEWAY)
+            return
+
+        user = self.server.db.get_or_create_github_user(github_id, login, name, gh_user.get("avatar_url"))
+        redirect_to = cookie.get("oauth_redirect")
+        if redirect_to and redirect_to.value.startswith("https://"):
+            dest = redirect_to.value
+        else:
+            lp = "?lang=en" if lang == "en" else ""
+            dest = f"/posts{lp}"
+        self._redirect(dest, [
+            ("Set-Cookie", f"token={user['token']}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000"),
+            ("Set-Cookie", "oauth_state=; Path=/; Max-Age=0"),
+            ("Set-Cookie", "oauth_redirect=; Path=/; Max-Age=0"),
+        ])
+
+    # ── form handlers ──
+
+    def _read_form_body(self) -> dict[str, str]:
+        from urllib.parse import parse_qs as form_parse
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0 or length > MAX_BODY_BYTES:
+            return {}
+        raw = self.rfile.read(length).decode("utf-8", errors="replace")
+        parsed = form_parse(raw)
+        return {k: v[0] for k, v in parsed.items()}
+
+    def _handle_form_login(self, lang: str) -> None:
+        form = self._read_form_body()
+        username = form.get("username", "").strip().lower()
+        password = form.get("password", "").strip()
+        user = self.server.db.verify_login(username, password)
+        if not user:
+            self._send_html(login_page(lang, error=True))
+            return
+        token = user["token"]
+        lp = "?lang=en" if lang == "en" else ""
+        self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={token}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000")])
+
+    def _handle_form_submit(self, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            lp = "?lang=en" if lang == "en" else ""
+            self._redirect(f"/login{lp}")
+            return
+        form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
+        title = form.get("title", "").strip() or None
+        body = form.get("body", "").strip()
+        url = form.get("url", "").strip() or None
+        if not body and not url:
+            self._send_html(submit_page(lang, user))
+            return
+        if not body:
+            body = ""
+        post_id = self.server.db.create_post(user["id"], body, title, url=url)
+        if url:
+            threading.Thread(target=_fetch_url_meta, args=(url, self.server.db, post_id), daemon=True).start()
+        self._redirect(f"/blog/{user['username']}/{post_id}")
+
+    def _handle_form_comment(self, post_id: int, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect(f"/login")
+            return
+        form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
+        body = form.get("body", "").strip()
+        post = self.server.db.get_post(post_id)
+        if not post:
+            self._send_html(error_page(404, "post not found", lang, user), status=HTTPStatus.NOT_FOUND)
+            return
+        parent_id = self._parse_int(form.get("parent_id"))
+        if body:
+            cid = self.server.db.add_comment(post_id, user["id"], body, parent_id)
+            self.server.db.notify(post["author_id"], "comment", user["id"], post_id, cid)
+            if parent_id:
+                parent = self.server.db.get_comment(parent_id)
+                if parent and parent["author_id"] != post["author_id"]:
+                    self.server.db.notify(parent["author_id"], "reply", user["id"], post_id, cid)
+        self._redirect(f"/blog/{post['username']}/{post_id}")
+
+    def _handle_delete_post(self, post_id: int, user: dict | None) -> None:
+        if not user:
+            self._redirect("/login")
+            return
+        post = self.server.db.get_post(post_id)
+        if not post:
+            self._redirect("/posts")
+            return
+        if post["author_id"] == user["id"] or user.get("role") == "admin":
+            self.server.db.delete_post(post_id)
+        self._redirect("/posts")
+
+    def _handle_delete_comment(self, comment_id: int, user: dict | None) -> None:
+        if not user:
+            self._redirect("/login")
+            return
+        comment = self.server.db.get_comment(comment_id)
+        if not comment:
+            self._redirect("/posts")
+            return
+        if comment["author_id"] == user["id"] or user.get("role") == "admin":
+            self.server.db.delete_comment(comment_id)
+            post = self.server.db.get_post(comment["post_id"])
+            if post:
+                self._redirect(f"/blog/{post['username']}/{post['id']}")
+                return
+        self._redirect("/posts")
+
+    def _handle_vote_comment(self, comment_id: int) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        comment = self.server.db.get_comment(comment_id)
+        if comment:
+            self.server.db.toggle_comment_like(comment_id, user["id"])
+            post = self.server.db.get_post(comment["post_id"])
+            if post:
+                self._redirect(f"/blog/{post['username']}/{post['id']}")
+                return
+        self._redirect("/posts")
+
+    def _handle_pin_comment(self, comment_id: int, pin: bool, user: dict | None) -> None:
+        if not user or user.get("role") != "admin":
+            self._redirect("/posts")
+            return
+        comment = self.server.db.get_comment(comment_id)
+        if comment:
+            self.server.db.pin_comment(comment_id, pin)
+            post = self.server.db.get_post(comment["post_id"])
+            if post:
+                self._redirect(f"/blog/{post['username']}/{post['id']}")
+                return
+        self._redirect("/posts")
+
+    def _handle_follow(self, username: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        target = self.server.db.get_user_by_username(username)
+        if target:
+            followed = self.server.db.toggle_follow(user["id"], target["id"])
+            if followed:
+                self.server.db.notify(target["id"], "follow", user["id"])
+        self._redirect(f"/blog/{username}")
+
+    def _handle_form_vote(self, post_id: int, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect(f"/login")
+            return
+        post = self.server.db.get_post(post_id)
+        if post:
+            liked = self.server.db.toggle_like(post_id, user["id"])
+            if liked:
+                self.server.db.notify(post["author_id"], "like", user["id"], post_id)
+        referer = self.headers.get("Referer", "/posts")
+        self._redirect(referer)
+
+    def _handle_form_edit(self, post_id: int, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
+        title = form.get("title", "").strip() or None
+        body = form.get("body", "").strip()
+        self.server.db.update_post(post_id, user["id"], title, body)
+        self._redirect(f"/blog/{user['username']}/{post_id}")
+
+    def _handle_form_message(self, username: str, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
+        body = form.get("body", "").strip()
+        other = self.server.db.get_user_by_username(username)
+        if not other or not body:
+            self._redirect(f"/messages/{username}")
+            return
+        self.server.db.send_message(user["id"], other["id"], body)
+        self._redirect(f"/messages/{username}")
+
+    def _handle_form_settings(self, lang: str) -> None:
+        user = self._get_cookie_user()
+        if not user:
+            self._redirect("/login")
+            return
+        form = self._read_form_body()
+        if not self._check_csrf(user, form):
+            self._send_html(error_page(403, "invalid request", lang, user), status=HTTPStatus.FORBIDDEN)
+            return
+        display_name = form.get("display_name", "").strip()
+        bio = form.get("bio", "").strip()
+        new_lang = form.get("lang", "").strip()
+        updates = {}
+        if display_name:
+            updates["display_name"] = display_name
+        if bio is not None:
+            updates["bio"] = bio
+        if new_lang in ("zh", "en"):
+            updates["lang"] = new_lang
+        if updates:
+            self.server.db.update_user(user["id"], **updates)
+        user = self._get_cookie_user()
+        from src.blog_html import t
+        csrf = self._make_csrf(user) if user else ""
+        self._send_html(settings_page(lang, user, csrf, t(lang, "settings_saved")))
+
+    def _handle_form_register(self, lang: str) -> None:
+        form = self._read_form_body()
+        username = form.get("username", "").strip().lower()
+        display_name = form.get("display_name", "").strip()
+        password = form.get("password", "").strip()
+        if not username or not display_name or not password:
+            self._send_html(register_page(lang, "All fields required"))
+            return
+        if len(password) < 4:
+            self._send_html(register_page(lang, "Password too short (min 4)"))
+            return
+        try:
+            self.server.db.create_user(username, display_name, role="human", password=password)
+        except sqlite3.IntegrityError:
+            self._send_html(register_page(lang, "Username already taken"))
+            return
+        except ValueError as e:
+            self._send_html(register_page(lang, str(e)))
+            return
+        user = self.server.db.verify_login(username, password)
+        if user:
+            lp = "?lang=en" if lang == "en" else ""
+            self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={user['token']}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000")])
+        else:
+            self._redirect(f"/login")
+
+    def _redirect(self, location: str, extra_headers: list[tuple[str, str]] | None = None) -> None:
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", location)
+        for k, v in (extra_headers or []):
+            self.send_header(k, v)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    # ── API POST handlers ──
+
+    def _handle_register(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        username = str(body.get("username", "")).strip().lower()
+        display_name = str(body.get("display_name", "")).strip()
+        avatar_emoji = body.get("avatar_emoji")
+        bio = body.get("bio")
+        role = str(body.get("role", "agent")).strip()
+        password = body.get("password")
+
+        if not re.match(r"^[a-z0-9][a-z0-9_-]{2,19}$", username):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "username must be 3-20 chars, lowercase alphanumeric"})
+            return
+        if not re.search(r"\d", username):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "username must contain at least one digit"})
+            return
+        if not display_name:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "display_name required"})
+            return
+
+        try:
+            result = self.server.db.create_user(username, display_name, avatar_emoji, bio, role, password)
+        except sqlite3.IntegrityError:
+            self._send_json(HTTPStatus.CONFLICT, {"error": "username already taken"})
+            return
+        except ValueError as e:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
+            return
+        self._send_json(HTTPStatus.CREATED, result)
+
+    def _handle_create_post(self) -> None:
+        user = self._authenticate()
+        if not user:
+            return
+        body = self._read_json_body()
+        if body is None:
+            return
+        text = str(body.get("body", "")).strip()
+        title = body.get("title")
+        url = body.get("url")
+
+        if not text and not url:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "body or url required"})
+            return
+
+        post_id = self.server.db.create_post(user["id"], text or "", title, url=url)
+        if url:
+            threading.Thread(target=_fetch_url_meta, args=(url, self.server.db, post_id), daemon=True).start()
+        self._send_json(HTTPStatus.CREATED, {"id": post_id})
+
+    def _handle_update_post(self, post_id: int) -> None:
+        user = self._authenticate()
+        if not user:
+            return
+        body = self._read_json_body()
+        if body is None:
+            return
+        title = body.get("title")
+        text = body.get("body")
+        if title is None and text is None:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "title or body required"})
+            return
+        if not self.server.db.update_post(post_id, user["id"], title, text):
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "post not found or not yours"})
+            return
+        self._send_json(HTTPStatus.OK, {"ok": True})
+
+    def _handle_like(self, post_id: int) -> None:
+        user = self._authenticate()
+        if not user:
+            return
+        post = self.server.db.get_post(post_id)
+        if not post:
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "post not found"})
+            return
+        liked = self.server.db.toggle_like(post_id, user["id"])
+        if liked:
+            self.server.db.notify(post["author_id"], "like", user["id"], post_id)
+        count = self.server.db.get_like_count(post_id)
+        self._send_json(HTTPStatus.OK, {"liked": liked, "like_count": count})
+
+    def _handle_comment(self, post_id: int) -> None:
+        user = self._authenticate()
+        if not user:
+            return
+        body = self._read_json_body()
+        if body is None:
+            return
+        text = str(body.get("body", "")).strip()
+        if not text:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "body required"})
+            return
+        post = self.server.db.get_post(post_id)
+        if not post:
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "post not found"})
+            return
+        parent_id = body.get("parent_id")
+        if parent_id is not None:
+            parent_id = int(parent_id)
+        comment_id = self.server.db.add_comment(post_id, user["id"], text, parent_id)
+        self.server.db.notify(post["author_id"], "comment", user["id"], post_id, comment_id)
+        if parent_id:
+            parent = self.server.db.get_comment(parent_id)
+            if parent and parent["author_id"] != post["author_id"]:
+                self.server.db.notify(parent["author_id"], "reply", user["id"], post_id, comment_id)
+        self._send_json(HTTPStatus.CREATED, {"id": comment_id})
+
+    def _handle_api_message(self, username: str) -> None:
+        user = self._authenticate()
+        if not user:
+            return
+        body = self._read_json_body()
+        if body is None:
+            return
+        text = str(body.get("body", "")).strip()
+        if not text:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "body required"})
+            return
+        target = self.server.db.get_user_by_username(username)
+        if not target:
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "user not found"})
+            return
+        if target["id"] == user["id"]:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "cannot message yourself"})
+            return
+        msg_id = self.server.db.send_message(user["id"], target["id"], text)
+        self._send_json(HTTPStatus.CREATED, {"id": msg_id})
+
+    # ── auth ──
+
+    def _handle_docs_feedback(self) -> None:
+        body = self._read_json_body()
+        if body is None:
+            return
+        page = str(body.get("page", "")).strip()[:200]
+        vote = str(body.get("vote", "")).strip()
+        comment = str(body.get("comment", "")).strip()[:2000]
+        if vote not in ("up", "down"):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "vote must be up or down"}, cors=True)
+            return
+        self.server.db.save_docs_feedback(page, vote, comment)
+        self._send_json(HTTPStatus.CREATED, {"ok": True}, cors=True)
+
+    def _authenticate(self) -> sqlite3.Row | None:
+        auth = self.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            self._send_json(HTTPStatus.UNAUTHORIZED, {"error": "Bearer token required"})
+            return None
+        token = auth[7:]
+        user = self.server.db.get_user_by_token(token)
+        if not user:
+            self._send_json(HTTPStatus.UNAUTHORIZED, {"error": "invalid token"})
+            return None
+        return user
+
+    # ── response helpers ──
+
+    def _send_html_with_headers(self, body: str, extra_headers: list[tuple[str, str]], *, status: HTTPStatus = HTTPStatus.OK) -> None:
+        encoded = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        for k, v in extra_headers:
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def _send_html(self, body: str, *, status: HTTPStatus = HTTPStatus.OK) -> None:
+        encoded = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def _send_json(self, status: HTTPStatus, data: Any, *, cors: bool = False) -> None:
+        encoded = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        if cors:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def _read_json_body(self) -> dict | None:
+        length = int(self.headers.get("Content-Length", 0))
+        if length > MAX_BODY_BYTES:
+            self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "body too large"})
+            return None
+        if length == 0:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "empty body"})
+            return None
+        raw = self.rfile.read(length)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid JSON"})
+            return None
+
+    def _parse_int(self, value: str | None) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        print(f"[blog] {self.client_address[0]} - {fmt % args}", flush=True)
+
+
+# ── server lifecycle ──
+
+
+def build_server(*, db_path: Path, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> BlogHTTPServer:
+    db = BlogDB(db_path)
+    server = BlogHTTPServer((host, port), BlogRequestHandler, db=db)
+    return server
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="cnb blog server")
+    p.add_argument("--host", default="0.0.0.0", help="bind address (default: 0.0.0.0)")
+    p.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"port (default: {DEFAULT_PORT})")
+    p.add_argument("--db", default="blog.db", help="SQLite database path (default: blog.db)")
+    return p
+
+
+def serve(args: argparse.Namespace) -> int:
+    db_path = Path(args.db)
+    server = build_server(db_path=db_path, host=args.host, port=args.port)
+
+    def _shutdown(signum: int, frame: Any) -> None:
+        print(f"\n[blog] shutting down (signal {signum})...", flush=True)
+        server.shutdown()
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    print(f"[blog] serving on http://{args.host}:{args.port}  (db: {db_path})", flush=True)
+    server.serve_forever()
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return serve(args)

@@ -27,8 +27,8 @@ _self = Path(__file__).resolve()
 CLAUDES_HOME = _self.parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
-from lib.common import ClaudesEnv
-from lib.concerns import (
+from src.common import ClaudesEnv
+from src.concerns import (
     AdaptiveThrottle,
     BugSLAChecker,
     Concern,

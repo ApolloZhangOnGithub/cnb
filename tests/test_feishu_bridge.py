@@ -9,7 +9,7 @@ import urllib.error
 from types import SimpleNamespace
 
 from lib import feishu_bridge
-from lib.feishu_bridge import FeishuBridgeConfig, FeishuInboundEvent
+from src.feishu_bridge import FeishuBridgeConfig, FeishuInboundEvent
 
 
 def _cfg(tmp_path, **kwargs):

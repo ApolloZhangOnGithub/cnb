@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.resources import (
+from src.resources import (
     BATTERY_CRITICAL,
     BATTERY_LOW,
     BatteryInfo,

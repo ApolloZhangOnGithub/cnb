@@ -4,8 +4,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from lib.board_db import BoardDB
-from lib.digest import generate_daily_digest, generate_weekly_report
+from src.board_db import BoardDB
+from src.digest import generate_daily_digest, generate_weekly_report
 
 
 def _setup_db(tmp_path: Path) -> BoardDB:

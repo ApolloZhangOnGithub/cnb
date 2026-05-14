@@ -3,7 +3,7 @@
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from lib.tmux_utils import (
+from src.tmux_utils import (
     capture_pane,
     has_session,
     is_agent_running,

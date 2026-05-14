@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.board_pulse import cmd_pulse
-from lib.board_view import _heartbeat_status
+from src.board_pulse import cmd_pulse
+from src.board_view import _heartbeat_status
 
 
 class TestPulse:
@@ -24,7 +24,7 @@ class TestPulse:
         assert capsys.readouterr().out == ""
 
     def test_pulse_reports_unread_count(self, db, capsys):
-        from lib.board_msg import cmd_send
+        from src.board_msg import cmd_send
 
         cmd_send(db, "bob", ["alice", "hello"])
         capsys.readouterr()

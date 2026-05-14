@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from lib.board_db import BoardDB, inbox_delivered
+from src.board_db import BoardDB, inbox_delivered
 from tests.conftest import SCHEMA_VERSION
 
 SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
@@ -43,7 +43,7 @@ class TestBoardDBInit:
         assert db.db_path == db_path
 
     def test_missing_db_with_env_exits(self, tmp_path):
-        from lib.common import ClaudesEnv
+        from src.common import ClaudesEnv
 
         cd = tmp_path / ".claudes"
         cd.mkdir()

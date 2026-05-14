@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.concerns.base import Concern
+from src.concerns.base import Concern
 
 
 class TestConcernDefaults:

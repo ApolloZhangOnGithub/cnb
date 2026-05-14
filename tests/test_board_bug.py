@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.board_bug import _bug_assign, _bug_fix, _bug_list, _bug_overdue, _bug_report, cmd_bug
+from src.board_bug import _bug_assign, _bug_fix, _bug_list, _bug_overdue, _bug_report, cmd_bug
 
 
 class TestBugReport:

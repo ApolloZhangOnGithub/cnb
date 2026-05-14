@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.board_admin import cmd_kudos, cmd_kudos_list, cmd_resume, cmd_suspend
+from src.board_admin import cmd_kudos, cmd_kudos_list, cmd_resume, cmd_suspend
 
 
 @pytest.fixture

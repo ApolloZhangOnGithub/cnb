@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lib.swarm_backend import ScreenBackend, TmuxBackend, detect_backend
+from src.swarm_backend import ScreenBackend, TmuxBackend, detect_backend
 
 # ---------------------------------------------------------------------------
 # TmuxBackend

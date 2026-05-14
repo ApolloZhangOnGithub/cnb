@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.board_db import BoardDB
-from lib.board_pending import cmd_pending
+from src.board_db import BoardDB
+from src.board_pending import cmd_pending
 from tests.conftest import SCHEMA_VERSION
 
 
@@ -35,7 +35,7 @@ def _add_action(db: BoardDB, **kwargs) -> int:
         "created_by": "alice",
     }
     defaults.update(kwargs)
-    from lib.board_db import ts
+    from src.board_db import ts
 
     now = ts()
     return db.execute(

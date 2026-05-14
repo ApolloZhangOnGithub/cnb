@@ -3,8 +3,8 @@
 import subprocess
 from unittest.mock import Mock, patch
 
-from lib.notification_config import BUILTIN_DEFAULTS, HumanRecipient, NotificationConfig
-from lib.notification_delivery import deliver_external
+from src.notification_config import BUILTIN_DEFAULTS, HumanRecipient, NotificationConfig
+from src.notification_delivery import deliver_external
 
 
 def _config(**human_kwargs):

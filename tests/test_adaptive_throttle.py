@@ -2,9 +2,9 @@
 
 from unittest.mock import patch
 
-from lib.concerns.adaptive_throttle import AdaptiveThrottle
-from lib.concerns.base import Concern
-from lib.resources import CPUInfo
+from src.concerns.adaptive_throttle import AdaptiveThrottle
+from src.concerns.base import Concern
+from src.resources import CPUInfo
 
 
 class TestAdaptiveThrottle:

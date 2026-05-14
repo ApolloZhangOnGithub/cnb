@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.board_mailbox import cmd_keygen, cmd_keygen_all, cmd_mailbox_log, cmd_seal, cmd_unseal
+from src.board_mailbox import cmd_keygen, cmd_keygen_all, cmd_mailbox_log, cmd_seal, cmd_unseal
 
 
 def _mock_registry(pubkeys_file):

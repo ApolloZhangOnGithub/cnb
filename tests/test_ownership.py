@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lib.board_db import BoardDB
-from lib.board_own import auto_pr, cmd_own, cmd_scan, find_owner, verify_task
+from src.board_db import BoardDB
+from src.board_own import auto_pr, cmd_own, cmd_scan, find_owner, verify_task
 
 
 @pytest.fixture

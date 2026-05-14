@@ -9,7 +9,7 @@ import sqlite3
 
 import pytest
 
-from lib.board_bbs import cmd_post, cmd_reply, cmd_thread, cmd_threads
+from src.board_bbs import cmd_post, cmd_reply, cmd_thread, cmd_threads
 from tests.conftest import ts
 
 

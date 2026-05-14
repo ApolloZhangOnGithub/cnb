@@ -3,9 +3,9 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from lib.concerns.config import DispatcherConfig
-from lib.concerns.health import HealthChecker, ResourceMonitor, SessionKeepAlive
-from lib.resources import BatteryInfo, CPUInfo, MemoryInfo
+from src.concerns.config import DispatcherConfig
+from src.concerns.health import HealthChecker, ResourceMonitor, SessionKeepAlive
+from src.resources import BatteryInfo, CPUInfo, MemoryInfo
 
 PREFIX = "cc-test"
 

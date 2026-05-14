@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lib.board_tui import UI_SESSION, _apply_style, _open_terminal, _session_exists, _tmux, _tmux_out, cmd_tui
+from src.board_tui import UI_SESSION, _apply_style, _open_terminal, _session_exists, _tmux, _tmux_out, cmd_tui
 
 # ---------------------------------------------------------------------------
 # Helper tests

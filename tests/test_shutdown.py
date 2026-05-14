@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.board_db import BoardDB
-from lib.shutdown import (
+from src.board_db import BoardDB
+from src.shutdown import (
     _active_sessions,
     _unread_count,
     broadcast_shutdown,
@@ -222,7 +222,7 @@ class TestSaveShift:
 
 class TestRunShutdown:
     def _make_env(self, tmp_path):
-        from lib.common import ClaudesEnv
+        from src.common import ClaudesEnv
 
         cd = tmp_path / ".claudes"
         cd.mkdir(exist_ok=True)

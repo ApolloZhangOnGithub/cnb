@@ -16,8 +16,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.concerns.config import DispatcherConfig
-from lib.concerns.notifications import TimeAnnouncer
+from src.concerns.config import DispatcherConfig
+from src.concerns.notifications import TimeAnnouncer
 
 
 @pytest.fixture

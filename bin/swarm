@@ -10,7 +10,7 @@ from pathlib import Path
 CLAUDES_HOME = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
-from lib.swarm import SwarmConfig, SwarmManager
+from src.swarm import SwarmConfig, SwarmManager
 
 
 def _parse_start_args(args: list[str]) -> tuple[list[str], dict]:

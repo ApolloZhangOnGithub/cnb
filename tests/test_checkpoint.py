@@ -7,7 +7,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from lib.checkpoint import build_checkpoint, checkpoint_to_json, shutdown_warning_lines
+from src.checkpoint import build_checkpoint, checkpoint_to_json, shutdown_warning_lines
 
 ROOT = Path(__file__).parent.parent
 

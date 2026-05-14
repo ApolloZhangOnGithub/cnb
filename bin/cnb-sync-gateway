@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from lib.cnb_sync_gateway import main
+from src.cnb_sync_gateway import main
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))

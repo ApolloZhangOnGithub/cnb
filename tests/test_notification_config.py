@@ -1,6 +1,6 @@
 """Tests for lib/notification_config — notification subscription config parser."""
 
-from lib.notification_config import (
+from src.notification_config import (
     BUILTIN_DEFAULTS,
     CHANNELS,
     NOTIFICATION_TYPES,

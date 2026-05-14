@@ -16,11 +16,11 @@ from pathlib import Path
 CLAUDES_HOME = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
-from lib.board_db import BoardDB
-from lib.common import ClaudesEnv
-from lib.digest import generate_daily_digest, generate_weekly_report
-from lib.notification_config import BUILTIN_DEFAULTS, NOTIFICATION_TYPES, load
-from lib.notification_delivery import deliver_external
+from src.board_db import BoardDB
+from src.common import ClaudesEnv
+from src.digest import generate_daily_digest, generate_weekly_report
+from src.notification_config import BUILTIN_DEFAULTS, NOTIFICATION_TYPES, load
+from src.notification_delivery import deliver_external
 
 
 def _env() -> ClaudesEnv:

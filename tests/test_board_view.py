@@ -14,9 +14,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.board_files import cmd_files, cmd_get
-from lib.board_msg import cmd_history
-from lib.board_view import (
+from src.board_files import cmd_files, cmd_get
+from src.board_msg import cmd_history
+from src.board_view import (
     _heartbeat_status,
     cmd_dashboard,
     cmd_dirty,

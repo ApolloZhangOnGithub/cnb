@@ -5,8 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from lib.concerns.config import DispatcherConfig
-from lib.concerns.digest_scheduler import DigestScheduler
+from src.concerns.config import DispatcherConfig
+from src.concerns.digest_scheduler import DigestScheduler
 
 
 def _make_cfg(tmp_path: Path) -> DispatcherConfig:

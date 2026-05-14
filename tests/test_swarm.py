@@ -9,9 +9,9 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.common import ClaudesEnv
-from lib.swarm import SwarmConfig, SwarmManager
-from lib.swarm_backend import ScreenBackend, SessionBackend, TmuxBackend, detect_backend
+from src.common import ClaudesEnv
+from src.swarm import SwarmConfig, SwarmManager
+from src.swarm_backend import ScreenBackend, SessionBackend, TmuxBackend, detect_backend
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -170,7 +170,7 @@ class TestPrompts:
 
 class TestRegistration:
     def test_ensure_registered_creates_session_in_db(self, mgr):
-        from lib.board_db import BoardDB
+        from src.board_db import BoardDB
 
         mgr.ensure_registered(["newbie"])
         db = BoardDB(mgr._env.board_db)
@@ -186,7 +186,7 @@ class TestRegistration:
     def test_ensure_registered_idempotent(self, mgr):
         mgr.ensure_registered(["alice"])
         mgr.ensure_registered(["alice"])
-        from lib.board_db import BoardDB
+        from src.board_db import BoardDB
 
         db = BoardDB(mgr._env.board_db)
         count = db.scalar("SELECT COUNT(*) FROM sessions WHERE name='alice'")
@@ -216,7 +216,7 @@ class TestAttendance:
         assert "clock-in" in log.read_text()
 
     def test_clock_in_records_engine(self, mgr):
-        from lib.board_db import BoardDB
+        from src.board_db import BoardDB
 
         mgr.cfg.agent = "codex"
         mgr.clock_in("alice")
@@ -231,7 +231,7 @@ class TestAttendance:
         assert row["ended_at"] is None
 
     def test_clock_out_records_run_end(self, mgr):
-        from lib.board_db import BoardDB
+        from src.board_db import BoardDB
 
         mgr.cfg.agent = "codex"
         mgr.clock_in("alice")
@@ -249,7 +249,7 @@ class TestAttendance:
         assert mgr.recorded_engine("alice") == "codex"
 
     def test_recorded_engine_falls_back_to_startup_log(self, mgr):
-        from lib.board_db import BoardDB
+        from src.board_db import BoardDB
 
         mgr.cfg.agent = "codex"
         mgr.log_startup("alice")

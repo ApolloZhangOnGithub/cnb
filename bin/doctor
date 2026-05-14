@@ -16,7 +16,7 @@ _self = Path(__file__).resolve()
 CLAUDES_HOME = _self.parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
-from lib.common import ClaudesEnv
+from src.common import ClaudesEnv
 
 
 def _ok(msg: str) -> None:
@@ -194,7 +194,7 @@ def check_schema_version(path: Path) -> bool:
 
 def check_migrations_pending(env: ClaudesEnv) -> bool:
     try:
-        from lib.migrate import run_migrations
+        from src.migrate import run_migrations
 
         applied = run_migrations(env.board_db, env.install_home)
         if applied:
@@ -277,7 +277,7 @@ def check_sessions(env: ClaudesEnv) -> bool:
 def check_global_registry() -> bool:
     """Check global project registry for stale projects and expired credentials."""
     try:
-        from lib.global_registry import list_projects
+        from src.global_registry import list_projects
 
         ok = True
 
@@ -300,7 +300,7 @@ def check_global_registry() -> bool:
             _ok("所有项目路径有效")
 
         # Check credentials for expired ones
-        from lib.global_registry import _read_credentials
+        from src.global_registry import _read_credentials
 
         creds = _read_credentials()
         expired = [name for name, info in creds.items() if isinstance(info, dict) and info.get("status") == "expired"]

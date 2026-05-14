@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.board_maintenance import _days_ago_ts, _parse_days, cmd_backup, cmd_prune, cmd_restore
+from src.board_maintenance import _days_ago_ts, _parse_days, cmd_backup, cmd_prune, cmd_restore
 
 
 @pytest.fixture

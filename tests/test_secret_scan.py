@@ -114,7 +114,7 @@ class TestSkipLogic:
         assert secret_scan._should_skip("tests/test_crypto.py") is True
 
     def test_skips_pubkeys(self):
-        from lib.paths import REGISTRY_DIR, PROJECT_ROOT
+        from src.paths import REGISTRY_DIR, PROJECT_ROOT
         rel = str((REGISTRY_DIR / "pubkeys.json").relative_to(PROJECT_ROOT))
         assert secret_scan._should_skip(rel) is True
 

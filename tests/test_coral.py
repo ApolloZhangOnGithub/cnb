@@ -4,8 +4,8 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-from lib.concerns.config import DispatcherConfig
-from lib.concerns.coral import CoralManager, CoralPoker
+from src.concerns.config import DispatcherConfig
+from src.concerns.coral import CoralManager, CoralPoker
 
 PREFIX = "cc-test"
 

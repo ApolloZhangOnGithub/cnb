@@ -9,7 +9,7 @@ of duplicating SQL logic.
 
 import pytest
 
-from lib.board_task import _promote_next, _task_add, _task_done, _task_list, _task_next, cmd_task
+from src.board_task import _promote_next, _task_add, _task_done, _task_list, _task_next, cmd_task
 
 
 class TestTaskAdd:

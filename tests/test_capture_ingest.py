@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.capture_ingest import CaptureError, cmd_capture, ingest_capture, list_captures
+from src.capture_ingest import CaptureError, cmd_capture, ingest_capture, list_captures
 
 
 def _init_board(cnb_dir: Path) -> None:

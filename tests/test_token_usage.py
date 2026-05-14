@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.token_usage import (
+from src.token_usage import (
     _project_slug,
     aggregate_by_name,
     cmd_usage,

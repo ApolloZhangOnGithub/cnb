@@ -18,7 +18,7 @@ exec(compile(_script.read_text(), _script, "exec"), notify_mod.__dict__)
 
 
 def _make_env(tmp_path):
-    from lib.common import ClaudesEnv
+    from src.common import ClaudesEnv
 
     cd = tmp_path / ".claudes"
     cd.mkdir(exist_ok=True)

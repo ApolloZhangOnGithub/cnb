@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib.paths import REGISTRY_DIR
+from src.paths import REGISTRY_DIR
 
 
 def _content_hash_for_json_mode(entry: dict, *, ensure_ascii: bool) -> str:

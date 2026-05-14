@@ -10,7 +10,7 @@ class TestCliMain:
     def test_finds_checkout_bin_cnb(self):
         with patch("os.execvp") as mock_exec:
             mock_exec.side_effect = SystemExit(0)
-            from lib.cli import main
+            from src.cli import main
 
             with pytest.raises(SystemExit):
                 main()
@@ -21,7 +21,7 @@ class TestCliMain:
             assert args[1][1].endswith("bin/cnb")
 
     def test_fatal_when_nothing_found(self, tmp_path):
-        import lib.cli as cli_mod
+        import src.cli as cli_mod
 
         orig_file = cli_mod.__file__
         try:
@@ -37,7 +37,7 @@ class TestCliMain:
             cli_mod.__file__ = orig_file
 
     def test_path_fallback(self, tmp_path):
-        import lib.cli as cli_mod
+        import src.cli as cli_mod
 
         orig_file = cli_mod.__file__
         try:

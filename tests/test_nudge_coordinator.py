@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lib.concerns.base import Concern
-from lib.concerns.config import DispatcherConfig
+from src.concerns.base import Concern
+from src.concerns.config import DispatcherConfig
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -62,7 +62,7 @@ def make_idle(idle_sessions: set[str] | None = None):
 @pytest.fixture
 def NudgeCoordinator():
     try:
-        from lib.concerns.nudge_coordinator import NudgeCoordinator as NC
+        from src.concerns.nudge_coordinator import NudgeCoordinator as NC
     except ImportError:
         pytest.skip("NudgeCoordinator not implemented yet")
     return NC

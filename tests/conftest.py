@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from lib.common import ts  # noqa: F401 — re-export for tests
-from lib.concerns.config import DispatcherConfig
-from lib.migrate import latest_migration_version
+from src.common import ts  # noqa: F401 — re-export for tests
+from src.concerns.config import DispatcherConfig
+from src.migrate import latest_migration_version
 
 # ---------------------------------------------------------------------------
 # Schema path (relative to this file's location)
@@ -42,13 +42,13 @@ def _clear_module_state():
     """Clear module-level caches and signals to prevent cross-test leaks."""
     yield
     try:
-        from lib.concerns.helpers import _db_cache
+        from src.concerns.helpers import _db_cache
 
         _db_cache.clear()
     except ImportError:
         pass
     try:
-        from lib.board_db import inbox_delivered
+        from src.board_db import inbox_delivered
 
         inbox_delivered.clear()
     except ImportError:
@@ -123,8 +123,8 @@ def db(tmp_project):
     This ensures db.env is populated, so commands that access the filesystem
     (attachments, ack markers) work correctly in tests.
     """
-    from lib.board_db import BoardDB
-    from lib.common import ClaudesEnv
+    from src.board_db import BoardDB
+    from src.common import ClaudesEnv
 
     cd = tmp_project / ".claudes"
     env = ClaudesEnv(

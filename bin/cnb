@@ -246,7 +246,7 @@ print(' '.join(names))
                 list)
                     python3 -c "
 import sys; sys.path.insert(0, '$CLAUDES_HOME')
-from lib.global_registry import list_projects
+from src.global_registry import list_projects
 projects = list_projects()
 if not projects:
     print('没有已注册的项目')
@@ -257,7 +257,7 @@ else:
                 cleanup)
                     python3 -c "
 import sys; sys.path.insert(0, '$CLAUDES_HOME')
-from lib.global_registry import cleanup
+from src.global_registry import cleanup
 removed = cleanup()
 if not removed:
     print('没有需要清理的项目')
@@ -269,7 +269,7 @@ else:
                 scan)
                     python3 - "$@" <<PY
 import sys; sys.path.insert(0, '$CLAUDES_HOME')
-from lib.global_registry import cmd_projects_scan
+from src.global_registry import cmd_projects_scan
 cmd_projects_scan(sys.argv[1:])
 PY
                     ;;
@@ -283,7 +283,7 @@ PY
             python3 -c "
 import sys; sys.path.insert(0, '$CLAUDES_HOME')
 from pathlib import Path
-from lib.token_usage import cmd_usage
+from src.token_usage import cmd_usage
 cmd_usage(Path('$CNB_PROJECT'), sys.argv[1:])
 " "$@"
             exit 0 ;;
