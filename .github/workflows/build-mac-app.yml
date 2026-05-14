@@ -1,0 +1,94 @@
+name: Build Mac DMG
+
+on:
+  push:
+    tags:
+      - 'mac-v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/mac
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build app
+        run: |
+          APP_NAME="CNBMacCompanion"
+          BUILD_DIR="$RUNNER_TEMP/build"
+          APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
+          mkdir -p "$BUILD_DIR"
+
+          swift build --product "$APP_NAME" -c release
+
+          # Create .app bundle
+          mkdir -p "$APP_BUNDLE/Contents/MacOS"
+          mkdir -p "$APP_BUNDLE/Contents/Resources"
+          cp "$(swift build --product "$APP_NAME" -c release --show-bin-path)/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/"
+
+          # Info.plist
+          cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>$APP_NAME</string>
+            <key>CFBundleIdentifier</key><string>dev.cnb.maccompanion</string>
+            <key>CFBundleName</key><string>cnb Mac Companion</string>
+            <key>CFBundleVersion</key><string>${{ steps.version.outputs.version }}</string>
+            <key>CFBundleShortVersionString</key><string>${{ steps.version.outputs.version }}</string>
+            <key>LSMinimumSystemVersion</key><string>14.0</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>LSUIElement</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          echo "APP_BUNDLE=$APP_BUNDLE" >> "$GITHUB_ENV"
+          echo "BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
+
+      - name: Create DMG
+        run: |
+          DMG_NAME="CNBMacCompanion-${{ steps.version.outputs.version }}.dmg"
+          DMG_PATH="$RUNNER_TEMP/$DMG_NAME"
+
+          hdiutil create -volname "cnb Mac Companion" \
+            -srcfolder "$BUILD_DIR" \
+            -ov -format UDZO \
+            "$DMG_PATH"
+
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+          echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: ${{ env.DMG_PATH }}
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.DMG_PATH }}
+          name: "Mac Companion ${{ steps.version.outputs.version }}"
+          body: |
+            ## cnb Mac Companion ${{ steps.version.outputs.version }}
+
+            Native macOS companion app for cnb device supervisor.
+
+            ### Install
+            1. Download `${{ env.DMG_NAME }}`
+            2. Open the DMG
+            3. Drag to Applications
+            4. Launch from Applications
+
+            Requires macOS 14+.

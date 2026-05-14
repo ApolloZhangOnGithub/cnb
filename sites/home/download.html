@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Download cnb</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <script>
+      var defined_urls = {
+        repo: 'https://github.com/ApolloZhangOnGithub/cnb',
+        blog: '//blog.c-n-b.space',
+        docs: '//platform.c-n-b.space/docs',
+      };
+    </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
       *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -67,9 +74,9 @@
         </svg>
         cnb
       </a>
-      <a href="//blog.c-n-b.space/feed">blog</a>
-      <a href="//platform.c-n-b.space/docs/en">docs</a>
-      <a href="https://github.com/ApolloZhangOnGithub/cnb">github</a>
+      <a data-url="blog:/feed">blog</a>
+      <a data-url="docs:/en">docs</a>
+      <a data-url="repo:">github</a>
     </nav>
 
     <section class="hero">
@@ -91,7 +98,7 @@
         <div class="platform-desc">
           Native SwiftUI desktop app. Reads local board state, displays team status in a window and menu bar extra.
         </div>
-        <a href="https://github.com/ApolloZhangOnGithub/cnb/tree/master/apps/mac" class="download-btn download-btn-primary">
+        <a data-url="repo:/releases/latest" class="download-btn download-btn-primary">
           Download for Mac
         </a>
       </div>
@@ -109,7 +116,7 @@
         <div class="platform-desc">
           Live Activity bridge. Shows device supervisor status on your lock screen via ActivityKit.
         </div>
-        <a href="https://github.com/ApolloZhangOnGithub/cnb/tree/master/apps/island" class="download-btn download-btn-secondary">
+        <a data-url="repo:/tree/master/apps/island" class="download-btn download-btn-secondary">
           Download for iPhone
         </a>
       </div>
@@ -127,7 +134,7 @@
         <div class="platform-desc">
           Native SwiftUI visionOS viewer. Aggregates Feishu messages from all device supervisors in a spatial interface.
         </div>
-        <a href="https://github.com/ApolloZhangOnGithub/cnb/tree/master/apps/island" class="download-btn download-btn-secondary">
+        <a data-url="repo:/tree/master/apps/island" class="download-btn download-btn-secondary">
           Download for Vision Pro
         </a>
       </div>
@@ -142,5 +149,11 @@
     <footer class="footer">
       cnb is open source, local-first software.
     </footer>
+    <script>
+      document.querySelectorAll('[data-url]').forEach(function(el) {
+        var parts = el.dataset.url.split(':');
+        el.href = defined_urls[parts[0]] + (parts[1] || '');
+      });
+    </script>
   </body>
 </html>

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { REPO_URL } from '@/lib/urls';
 
 const triggerStyle = {
   display: 'inline-flex',
@@ -73,7 +74,7 @@ export function ResourcesDropdown({ lang }: { lang: string }) {
             Templates & Docs
           </Link>
           <div style={{ height: '0.5px', background: 'var(--color-fd-border)', margin: '0.25rem 0.5rem' }} />
-          <a href="https://github.com/ApolloZhangOnGithub/cnb" target="_blank" rel="noreferrer" style={itemStyle} onClick={() => setOpen(false)}>
+          <a href={REPO_URL} target="_blank" rel="noreferrer" style={itemStyle} onClick={() => setOpen(false)}>
             GitHub
           </a>
           <a href="https://www.npmjs.com/package/claude-nb" target="_blank" rel="noreferrer" style={itemStyle} onClick={() => setOpen(false)}>

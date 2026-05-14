@@ -13,3 +13,10 @@ MIGRATIONS_DIR = PROJECT_ROOT / "config" / "migrations"
 REGISTRY_DIR = PROJECT_ROOT / "config" / "registry"
 COMMANDS_DIR = PROJECT_ROOT / "config" / "commands"
 DOCS_DIR = PROJECT_ROOT / "docs"
+
+# URLs
+REPO_URL = "https://github.com/ApolloZhangOnGithub/cnb"
+SITE_URL = "https://c-n-b.space"
+DOCS_URL = "https://platform.c-n-b.space/docs"
+BLOG_URL = "https://blog.c-n-b.space"
+NPM_URL = "https://www.npmjs.com/package/claude-nb"
