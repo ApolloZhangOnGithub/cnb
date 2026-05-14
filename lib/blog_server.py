@@ -111,7 +111,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._send_html(login_page(lang))
             return
         if route == "/auth/github":
-            self._handle_github_redirect(lang)
+            self._handle_github_redirect(lang, params)
             return
         if route == "/auth/callback":
             self._handle_github_callback(params, lang)
@@ -260,6 +260,11 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._handle_comment(int(m.group(1)))
             return
 
+        m = re.match(r"^/api/message/([a-z0-9][a-z0-9_-]*)$", route)
+        if m:
+            self._handle_api_message(m.group(1))
+            return
+
         if route == "/api/docs-feedback":
             self._handle_docs_feedback()
             return
@@ -405,19 +410,25 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
     # ── GitHub OAuth ──
 
-    def _handle_github_redirect(self, lang: str) -> None:
+    def _handle_github_redirect(self, lang: str, params: dict | None = None) -> None:
         if not GITHUB_CLIENT_ID:
             self._send_html(error_page(500, "GitHub OAuth not configured", lang), status=HTTPStatus.INTERNAL_SERVER_ERROR)
             return
         state = secrets.token_urlsafe(16)
+        redirect_after = ""
+        if params and params.get("redirect"):
+            redirect_after = params["redirect"][0]
         url = (
             f"https://github.com/login/oauth/authorize"
             f"?client_id={GITHUB_CLIENT_ID}"
-            f"&redirect_uri=https://blog.c-n-b.space/auth/callback"
+            f"&redirect_uri=https://platform.c-n-b.space/docs/auth/callback"
             f"&scope=read:user"
             f"&state={state}"
         )
-        self._redirect(url, [("Set-Cookie", f"oauth_state={state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600")])
+        cookies = [("Set-Cookie", f"oauth_state={state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600")]
+        if redirect_after:
+            cookies.append(("Set-Cookie", f"oauth_redirect={redirect_after}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600"))
+        self._redirect(url, cookies)
 
     def _handle_github_callback(self, params: dict, lang: str) -> None:
         code = (params.get("code") or [""])[0]
@@ -469,10 +480,16 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
 
         user = self.server.db.get_or_create_github_user(github_id, login, name, gh_user.get("avatar_url"))
-        lp = "?lang=en" if lang == "en" else ""
-        self._redirect(f"/posts{lp}", [
-            (f"Set-Cookie", f"token={user['token']}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000"),
+        redirect_to = cookie.get("oauth_redirect")
+        if redirect_to and redirect_to.value.startswith("https://"):
+            dest = redirect_to.value
+        else:
+            lp = "?lang=en" if lang == "en" else ""
+            dest = f"/posts{lp}"
+        self._redirect(dest, [
+            ("Set-Cookie", f"token={user['token']}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000"),
             ("Set-Cookie", "oauth_state=; Path=/; Max-Age=0"),
+            ("Set-Cookie", "oauth_redirect=; Path=/; Max-Age=0"),
         ])
 
     # ── form handlers ──
@@ -757,6 +774,27 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             parent_id = int(parent_id)
         comment_id = self.server.db.add_comment(post_id, user["id"], text, parent_id)
         self._send_json(HTTPStatus.CREATED, {"id": comment_id})
+
+    def _handle_api_message(self, username: str) -> None:
+        user = self._authenticate()
+        if not user:
+            return
+        body = self._read_json_body()
+        if body is None:
+            return
+        text = str(body.get("body", "")).strip()
+        if not text:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "body required"})
+            return
+        target = self.server.db.get_user_by_username(username)
+        if not target:
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "user not found"})
+            return
+        if target["id"] == user["id"]:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "cannot message yourself"})
+            return
+        msg_id = self.server.db.send_message(user["id"], target["id"], text)
+        self._send_json(HTTPStatus.CREATED, {"id": msg_id})
 
     # ── auth ──
 
