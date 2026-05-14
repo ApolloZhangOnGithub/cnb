@@ -72,7 +72,7 @@ jobs:
           branch="release/v$RELEASE_VERSION"
           git checkout -B "$branch"
           printf '%s\n' "$RELEASE_VERSION" > VERSION
-          python bin/sync-version
+          python scripts/sync-version
 
           python - <<'PY'
           import os
@@ -90,10 +90,10 @@ jobs:
           path.write_text(prefix + section + text[len(prefix):])
           PY
 
-          python bin/sync-version --check
-          python bin/check-branding
-          python bin/check-changelog
-          bin/check-npm-package --install-smoke
+          python scripts/sync-version --check
+          python scripts/check-branding
+          python scripts/check-changelog
+          scripts/check-npm-package --install-smoke
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

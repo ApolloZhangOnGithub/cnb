@@ -96,9 +96,9 @@ jobs:
             exit 1
           fi
 
-          python bin/sync-version --check
-          python bin/check-branding
-          python bin/check-changelog
+          python scripts/sync-version --check
+          python scripts/check-branding
+          python scripts/check-changelog
 
           PKG_NAME="$(node -p "require('./package.json').name")"
           PKG_VERSION="$(node -p "require('./package.json').version")"
@@ -124,7 +124,7 @@ jobs:
           fi
 
       - name: Pack release tarball
-        run: bin/check-npm-package --install-smoke
+        run: scripts/check-npm-package --install-smoke
 
       - name: Publish to npmjs
         if: steps.options.outputs.dry_run != 'true' && steps.npmjs.outputs.exists != 'true'

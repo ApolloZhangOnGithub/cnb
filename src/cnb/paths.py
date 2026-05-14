@@ -6,7 +6,8 @@ When directories move, update only this file.
 
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# __file__ is src/cnb/paths.py → .parent.parent.parent = project root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 ROLES_DIR = PROJECT_ROOT / "config" / "roles"
 MIGRATIONS_DIR = PROJECT_ROOT / "config" / "migrations"

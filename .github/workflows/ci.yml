@@ -19,8 +19,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
-      - run: ruff check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding bin/check-site-docs bin/check-registry-pr-guard tests/
-      - run: ruff format --check lib/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry bin/secret-scan bin/sync-version bin/check-changelog bin/check-branding bin/check-site-docs bin/check-registry-pr-guard tests/
+      - run: ruff check src/cnb/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry scripts/secret-scan scripts/sync-version scripts/check-changelog scripts/check-branding scripts/check-site-docs scripts/check-registry-pr-guard tests/
+      - run: ruff format --check src/cnb/ bin/board bin/swarm bin/dispatcher bin/dispatcher-watchdog bin/doctor bin/init bin/notify bin/registry scripts/secret-scan scripts/sync-version scripts/check-changelog scripts/check-branding scripts/check-site-docs scripts/check-registry-pr-guard tests/
 
   typecheck:
     runs-on: ubuntu-latest
@@ -44,11 +44,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - run: python bin/sync-version --check
-      - run: python bin/check-branding
-      - run: python bin/check-readme-sync
-      - run: python bin/check-site-docs
-      - run: python bin/check-registry-pr-guard
+      - run: python scripts/sync-version --check
+      - run: python scripts/check-branding
+      - run: python scripts/check-readme-sync
+      - run: python scripts/check-site-docs
+      - run: python scripts/check-registry-pr-guard
       - name: Version must change on every push
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
@@ -84,7 +84,7 @@ jobs:
             exit 1
           fi
       - name: Changelog required for release versions
-        run: python bin/check-changelog
+        run: python scripts/check-changelog
       - name: Check npm publish status
         run: |
           LOCAL=$(cat VERSION)
@@ -102,7 +102,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - run: python bin/secret-scan --all
+      - run: python scripts/secret-scan --all
 
   package-smoke:
     runs-on: ubuntu-latest
@@ -113,7 +113,7 @@ jobs:
           node-version: "24"
           package-manager-cache: false
       - name: Verify npm package tarball
-        run: bin/check-npm-package --install-smoke
+        run: scripts/check-npm-package --install-smoke
 
   test:
     runs-on: ubuntu-latest
