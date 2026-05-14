@@ -216,12 +216,28 @@ def markdown_to_html(text: str) -> str:
 
     text = re.sub(r"(?:^\|.+\|$\n?){2,}", _table, text, flags=re.MULTILINE)
 
-    # images
-    text = re.sub(
-        r"!\[([^\]]*)\]\(([^)]+)\)",
-        r"<figure><img src='\2' alt='\1' loading='lazy'><figcaption>\1</figcaption></figure>",
-        text,
-    )
+    # images — ![alt](url) or ![alt|small](url) or ![alt|200px](url)
+    def _img(m: re.Match) -> str:
+        raw_alt = m.group(1)
+        url = m.group(2)
+        size_cls = "img-medium"
+        caption = raw_alt
+        if "|" in raw_alt:
+            caption, size = raw_alt.rsplit("|", 1)
+            size = size.strip().lower()
+            if size in ("small", "sm", "s"):
+                size_cls = "img-small"
+            elif size in ("large", "lg", "l", "full"):
+                size_cls = "img-large"
+            elif size.endswith("px"):
+                blocks.append(f"<figure class='fig-custom'><img src='{url}' alt='{caption}' loading='lazy' style='max-width:{size}'><figcaption>{caption}</figcaption></figure>")
+                return f"\x00BLOCK{len(blocks) - 1}\x00"
+            else:
+                size_cls = "img-medium"
+        blocks.append(f"<figure class='{size_cls}'><img src='{url}' alt='{caption}' loading='lazy'><figcaption>{caption}</figcaption></figure>")
+        return f"\x00BLOCK{len(blocks) - 1}\x00"
+
+    text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", _img, text)
 
     # headings
     for i, tag in [(6, "h6"), (5, "h5"), (4, "h4"), (3, "h3"), (2, "h2"), (1, "h1")]:
@@ -295,9 +311,12 @@ table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;
 th { text-align: left; font-weight: 600; padding: 8px; border-bottom: 1px solid var(--muted); }
 td { padding: 8px; border-bottom: 1px solid var(--line); }
 figure { margin: 16px 0; }
-figure img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); }
-figcaption { color: var(--dim); font-size: 12px; margin-top: 6px; text-align: center; }
+figure img { max-width: 100%; height: auto; border-radius: 6px; }
+figcaption { color: var(--dim); font-size: 12px; margin-top: 6px; }
 figcaption:empty { display: none; }
+.img-small img { max-width: 120px; }
+.img-medium img { max-width: 360px; }
+.img-large img { max-width: 100%; }
 ol, ul { padding-left: 20px; margin: 8px 0; }
 blockquote { border-left: 2px solid var(--line); padding-left: 12px; color: var(--muted); margin: 8px 0; }
 hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
@@ -508,9 +527,8 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
         if full:
             title_html = f"<div class='post-title'>{escape(post['title'])}</div>"
         else:
-            slug = post.get("slug", "")
-            post_path = slug or str(post.get("id", ""))
-            href = f"/blog/{escape(post['username'])}/{escape(post_path)}" if post_path else ""
+            post_id = post.get("id", "")
+            href = f"/blog/{escape(post['username'])}/{post_id}" if post_id else ""
             if href:
                 title_html = f"<div class='post-title'><a href='{href}'>{escape(post['title'])}</a></div>"
             else:

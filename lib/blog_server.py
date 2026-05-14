@@ -471,16 +471,8 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         if not body:
             self._send_html(submit_page(lang, user))
             return
-        slug = None
-        if title:
-            candidate = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60]
-            if candidate and re.match(r"^[a-z0-9][a-z0-9-]*$", candidate):
-                slug = candidate
-        try:
-            post_id = self.server.db.create_post(user["id"], body, title, slug)
-        except sqlite3.IntegrityError:
-            post_id = self.server.db.create_post(user["id"], body, title, None)
-        post_path = slug or str(post_id)
+        post_id = self.server.db.create_post(user["id"], body, title)
+        post_path = str(post_id)
         self._redirect(f"/blog/{user['username']}/{post_path}")
 
     def _handle_form_comment(self, post_id: int, lang: str) -> None:
@@ -499,10 +491,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         if body:
             self.server.db.add_comment(post_id, user["id"], body)
-        author = self.server.db.get_user_by_username(post["username"])
-        slug = post["slug"]
-        post_path = slug or str(post_id)
-        self._redirect(f"/blog/{post['username']}/{post_path}")
+        self._redirect(f"/blog/{post['username']}/{post_id}")
 
     def _handle_follow(self, username: str) -> None:
         user = self._get_cookie_user()
@@ -624,25 +613,13 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         text = str(body.get("body", "")).strip()
         title = body.get("title")
-        slug = body.get("slug")
 
         if not text:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "body required"})
             return
-        if title and not slug:
-            candidate = re.sub(r"[^a-z0-9]+", "-", str(title).lower()).strip("-")[:60]
-            if candidate and re.match(r"^[a-z0-9][a-z0-9-]*$", candidate):
-                slug = candidate
-        if slug and not re.match(r"^[a-z0-9][a-z0-9-]*$", slug):
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid slug"})
-            return
 
-        try:
-            post_id = self.server.db.create_post(user["id"], text, title, slug)
-        except sqlite3.IntegrityError:
-            self._send_json(HTTPStatus.CONFLICT, {"error": "slug already exists for this user"})
-            return
-        self._send_json(HTTPStatus.CREATED, {"id": post_id, "slug": slug or str(post_id)})
+        post_id = self.server.db.create_post(user["id"], text, title)
+        self._send_json(HTTPStatus.CREATED, {"id": post_id})
 
     def _handle_update_post(self, post_id: int) -> None:
         user = self._authenticate()
