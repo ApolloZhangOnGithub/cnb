@@ -1444,6 +1444,31 @@ def mark_activity_done(cfg: FeishuBridgeConfig, message_id: str, *, reason: str 
     item["done_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     if reason:
         item["closed_reason"] = reason
+    item.pop("blocked_at", None)
+    item.pop("blocked_reason", None)
+    _write_activity_state(path, payload)
+
+
+def record_final_reply_receipt(cfg: FeishuBridgeConfig, message_id: str, result: BridgeResult) -> None:
+    if not message_id:
+        return
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+    item = messages.get(message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[message_id] = item
+    item["final_reply_sent_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    item["final_reply_transport"] = cfg.transport
+    item["final_reply_result"] = result.detail
+    item["done_at"] = item["final_reply_sent_at"]
+    item["closed_reason"] = "final Feishu reply sent"
+    item.pop("blocked_at", None)
+    item.pop("blocked_reason", None)
     _write_activity_state(path, payload)
 
 
@@ -2948,9 +2973,9 @@ def send_short_reply(cfg: FeishuBridgeConfig, message_id: str, text: str) -> Bri
 
 
 def send_final_reply(cfg: FeishuBridgeConfig, message_id: str, text: str) -> BridgeResult:
-    result = send_reply(cfg, message_id, text)
+    result = send_reply(cfg, message_id, text, idempotency_key=_final_reply_key(message_id, text))
     if result.handled:
-        mark_activity_done(cfg, message_id, reason="final Feishu reply sent")
+        record_final_reply_receipt(cfg, message_id, result)
         return BridgeResult(True, "final reply sent; activity marked done")
     detail = f"final Feishu reply failed: {result.detail}"
     mark_activity_blocked(cfg, message_id, reason=detail)
@@ -3619,6 +3644,11 @@ def _ack_key(message_id: str) -> str:
 def _short_reply_key(message_id: str, text: str) -> str:
     digest = hashlib.sha256(f"{message_id}\n{text}".encode()).hexdigest()[:16]
     return f"cnb-feishu-ask-{_message_digest(message_id)}-{digest}"
+
+
+def _final_reply_key(message_id: str, text: str) -> str:
+    digest = hashlib.sha256(f"{message_id}\n{text}".encode()).hexdigest()[:16]
+    return f"cnb-feishu-final-{_message_digest(message_id)}-{digest}"
 
 
 def _message_digest(message_id: str) -> str:
