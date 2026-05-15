@@ -480,8 +480,59 @@ class TestRouting:
         assert feishu_bridge.is_bridge_command("/cnb_watch")
         assert feishu_bridge.is_bridge_command("/cnb_status")
         assert feishu_bridge.is_bridge_command("/c_status")
+        assert feishu_bridge.is_bridge_command("/goal 处理项目管理")
         assert not feishu_bridge.is_bridge_command("/tui")
         assert not feishu_bridge.is_bridge_command("/watch")
+
+    def test_goal_command_sets_and_reports_active_goal(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        replies = []
+        event = FeishuInboundEvent(
+            text="/goal 把 issue 逐个处理并提交",
+            message_id="om_goal",
+            chat_id="oc_allowed",
+            sender_id="ou_user",
+        )
+
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_reply",
+            lambda cfg, message_id, text: (
+                replies.append((message_id, text)) or feishu_bridge.BridgeResult(True, "sent")
+            ),
+        )
+
+        result = feishu_bridge.handle_bridge_command(event, cfg)
+
+        assert result.handled is True
+        assert replies == [("om_goal", "当前目标已设置：把 issue 逐个处理并提交")]
+        assert feishu_bridge.current_goal_text(cfg) == "把 issue 逐个处理并提交"
+
+        formatted = feishu_bridge.format_for_pilot(
+            FeishuInboundEvent(text="继续", message_id="om_next", chat_id="oc_allowed"),
+            cfg,
+        )
+
+        assert "[CNB active goal]" in formatted
+        assert "当前目标：把 issue 逐个处理并提交" in formatted
+
+    def test_goal_command_can_show_and_clear_goal(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        replies = []
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_reply",
+            lambda cfg, message_id, text: (
+                replies.append((message_id, text)) or feishu_bridge.BridgeResult(True, "sent")
+            ),
+        )
+
+        feishu_bridge.handle_bridge_command(FeishuInboundEvent(text="/goal 做 A", message_id="om_set"), cfg)
+        feishu_bridge.handle_bridge_command(FeishuInboundEvent(text="/goal", message_id="om_get"), cfg)
+        feishu_bridge.handle_bridge_command(FeishuInboundEvent(text="/goal done", message_id="om_done"), cfg)
+
+        assert replies[-2:] == [("om_get", "当前目标：做 A"), ("om_done", "当前目标已清除。")]
+        assert feishu_bridge.current_goal_text(cfg) == ""
 
     def test_terminal_supervisor_prompt_describes_async_reply_protocol(self, tmp_path):
         cfg = _cfg(tmp_path)
