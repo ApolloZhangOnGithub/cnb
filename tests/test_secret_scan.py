@@ -1,6 +1,7 @@
 """Tests for bin/secret-scan — pre-commit hook to block sensitive files."""
 
 import importlib.util
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -58,6 +59,12 @@ class TestSensitiveContent:
         findings = secret_scan._scan_content(str(f))
         assert len(findings) >= 1
         assert findings[0][1] == "private key"
+
+    def test_detects_generic_pkcs8_private_key(self, tmp_path):
+        f = tmp_path / "test.txt"
+        f.write_text("-----BEGIN PRIVATE KEY-----\ndata\n-----END PRIVATE KEY-----\n")
+        findings = secret_scan._scan_content(str(f))
+        assert any("private key" in label for _, label in findings)
 
     def test_detects_api_key(self, tmp_path):
         f = tmp_path / "config.py"
@@ -165,6 +172,18 @@ class TestMain:
         out = capsys.readouterr().out
         assert "config.py:5" in out
         assert "API key" in out
+
+    def test_staged_scan_uses_index_content(self, tmp_path, monkeypatch):
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+        staged_file = tmp_path / "config.txt"
+        staged_file.write_text("-----BEGIN PRIVATE KEY-----\nstaged\n-----END PRIVATE KEY-----\n")
+        subprocess.run(["git", "add", "config.txt"], cwd=tmp_path, check=True)
+        staged_file.write_text("clean working tree content\n")
+
+        monkeypatch.chdir(tmp_path)
+        findings = secret_scan._scan_staged_content("config.txt")
+
+        assert any("private key" in label for _, label in findings)
 
 
 class TestContentEdgeCases:

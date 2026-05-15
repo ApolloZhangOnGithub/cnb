@@ -78,13 +78,8 @@ def scan_filename(filepath: str) -> str | None:
     return None
 
 
-def scan_content(filepath: str | Path) -> list[tuple[int, str]]:
+def scan_text(content: str) -> list[tuple[int, str]]:
     findings: list[tuple[int, str]] = []
-    try:
-        content = Path(filepath).read_text(errors="replace")
-    except (OSError, UnicodeDecodeError):
-        return findings
-
     for lineno, line in enumerate(content.splitlines(), 1):
         for pattern, label in SENSITIVE_CONTENT:
             if pattern.search(line):
@@ -95,6 +90,14 @@ def scan_content(filepath: str | Path) -> list[tuple[int, str]]:
             if match and looks_like_secret_literal(match.group("value")):
                 findings.append((lineno, "secret/password"))
     return findings
+
+
+def scan_content(filepath: str | Path) -> list[tuple[int, str]]:
+    try:
+        content = Path(filepath).read_text(errors="replace")
+    except (OSError, UnicodeDecodeError):
+        return []
+    return scan_text(content)
 
 
 def looks_like_secret_literal(value: str) -> bool:
