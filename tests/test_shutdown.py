@@ -277,9 +277,14 @@ class TestRunShutdown:
         assert result is None
         out = capsys.readouterr().out
         assert "PREVIEW ONLY / NO ACTION TAKEN" in out
-        assert "WOULD SAVE: dailies/001/" in out
-        assert "NOT SAVED: _meta.md + 2 份个人日报" in out
-        assert "sessions not stopped" in out
+        assert "SIMULATED SHUTDOWN SUMMARY: dailies/001/" in out
+        assert "SIMULATED ONLY: _meta.md + 2 份个人日报" in out
+        assert "NO FILES WRITTEN: dailies/001/ was not created or updated" in out
+        assert "would stop sessions; no stop command sent" in out
+        assert "alice: SIMULATED" in out
+        assert "bob: SIMULATED" in out
+        assert "alice: OK" not in out
+        assert "bob: OK" not in out
         assert "收工完成" not in out
         assert "alice" in out
         assert not (env.claudes_dir / "dailies").exists()
