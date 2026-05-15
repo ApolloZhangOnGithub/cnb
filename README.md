@@ -55,6 +55,7 @@ Feishu: `cnb feishu setup && cnb feishu start`. See [Feishu bridge](docs/feishu-
 | Switch LLM models | [Model management](docs/cnb-model.md) |
 | Contribute code | [Contributing](CONTRIBUTING.md) |
 | Browse all docs | [Full docs index](docs/index.md) |
+| Understand where project knowledge lives | [Knowledge surfaces](docs/knowledge-surfaces.md) |
 
 Architecture, design decisions, and internal docs: [`docs/dev/`](docs/dev/).
 
