@@ -55,6 +55,7 @@ Codex：`cnb codex` 或 `CNB_AGENT=codex cnb`。详见 [Codex 引擎](docs/codex
 | 切换 LLM 模型 | [模型管理](docs/cnb-model.md) |
 | 贡献代码 | [贡献指南](CONTRIBUTING.md) |
 | 浏览全部文档 | [完整文档索引](docs/index.md) |
+| 理解项目知识放在哪里 | [Knowledge surfaces](docs/knowledge-surfaces.md) |
 
 架构、设计决策和内部文档：[`docs/dev/`](docs/dev/)。
 
