@@ -28,6 +28,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from lib.agent_sessions import describe_foreground_agent_sessions as describe_foreground_agent_sessions
+from lib.agent_sessions import foreground_agent_sessions as foreground_agent_sessions
 from lib.swarm import CODEX_PERMISSION_FLAGS
 from lib.tmux_utils import has_session, tmux_send
 
@@ -150,7 +152,7 @@ DEFAULT_READBACK_LIMIT = 12
 MAX_READBACK_LIMIT = 50
 DEFAULT_RESOURCE_HANDOFF_MAX_BYTES = 25 * 1024 * 1024
 MAX_RESOURCE_HANDOFF_BYTES = 100 * 1024 * 1024
-CAFFEINATE_ARGS = ("-dims",)
+CAFFEINATE_ARGS = ("-di",)
 SHORT_REPLY_MAX_CHARS = 280
 SHORT_REPLY_MAX_LINES = 4
 ACK_PREFIX = SUPERVISOR_ROLE.ack_prefix
@@ -170,7 +172,6 @@ DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS = 600
 ACTIVITY_STALE_SECONDS = 600
 ACTIVITY_WORK_RE = re.compile(r"^\s*[•●◦]\s*(Working|Thinking|Running)\b", re.IGNORECASE | re.MULTILINE)
 ACTIVITY_PROMPT_RE = re.compile(r"^\s*[›❯>]\s*", re.MULTILINE)
-AGENT_PROCESS_RE = re.compile(r"(^|/|\s)(codex|claude)(\s|$)", re.IGNORECASE)
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 CODE_FENCE_RE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n.*?```", re.DOTALL)
 MARKDOWN_REPLY_RE = re.compile(
@@ -281,7 +282,6 @@ class FeishuBridgeConfig:
     readback_max_limit: int = MAX_READBACK_LIMIT
     resource_handoff_enabled: bool = True
     resource_handoff_max_bytes: int = DEFAULT_RESOURCE_HANDOFF_MAX_BYTES
-    caffeine_enabled: bool = True
     standby_enabled: bool = False
     standby_agent: str = DEFAULT_STANDBY_AGENT
     standby_pilot_tmux: str = ""
@@ -440,7 +440,9 @@ class FeishuBridgeConfig:
             standby_enabled=_bool(section.get("standby_enabled"), False),
             standby_agent=_standby_agent(section.get("standby_agent"), agent),
             standby_pilot_tmux=str(section.get("standby_pilot_tmux") or ""),
-            heartbeat_interval_seconds=max(10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)),
+            heartbeat_interval_seconds=max(
+                10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)
+            ),
         )
 
 
@@ -1195,7 +1197,9 @@ def run_heartbeat_check(cfg: FeishuBridgeConfig) -> BridgeResult:
         if result.handled:
             start_standby_if_needed(cfg)
         return result
-    return BridgeResult(True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})")
+    return BridgeResult(
+        True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})"
+    )
 
 
 def check_tunnel_health(cfg: FeishuBridgeConfig) -> BridgeResult:
@@ -1861,149 +1865,6 @@ def _format_project_activity(project: dict[str, Any]) -> str:
     elif project.get("latest_message"):
         bits.append("最近 " + str(project["latest_message"]))
     return "，".join(bits)
-
-
-def describe_foreground_agent_sessions(*, limit: int = 6) -> str:
-    sessions = foreground_agent_sessions(limit=limit)
-    if not sessions:
-        return "未发现用户前台操作的非 tmux Codex/Claude Code 会话。"
-    lines = [_format_foreground_session(session) for session in sessions[:limit]]
-    if len(sessions) > limit:
-        lines.append(f"另有 {len(sessions) - limit} 个未展开")
-    return "；".join(lines)
-
-
-def foreground_agent_sessions(*, limit: int = 12) -> list[dict[str, str]]:
-    rows = _process_rows()
-    by_pid = {row["pid"]: row for row in rows}
-    sessions: list[dict[str, str]] = []
-    for row in rows:
-        engine = _agent_engine(row)
-        if not engine or _is_child_agent_process(row, by_pid) or _is_under_tmux(row, by_pid):
-            continue
-        tty = row.get("tty", "")
-        if tty in {"", "?", "??"}:
-            continue
-        cwd = _extract_cd_path(row.get("args", "")) or _process_cwd(row["pid"])
-        sessions.append(
-            {
-                "engine": engine,
-                "pid": str(row["pid"]),
-                "tty": tty,
-                "cwd": cwd,
-                "command": _short_agent_command(row.get("args", "")),
-            }
-        )
-    return sessions[:limit]
-
-
-def _process_rows() -> list[dict[str, Any]]:
-    try:
-        result = subprocess.run(
-            ["ps", "-axo", "pid=,ppid=,tty=,stat=,comm=,args="],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    if result.returncode != 0:
-        return []
-    rows: list[dict[str, Any]] = []
-    for line in result.stdout.splitlines():
-        parts = line.strip().split(None, 5)
-        if len(parts) < 6:
-            continue
-        try:
-            pid = int(parts[0])
-            ppid = int(parts[1])
-        except ValueError:
-            continue
-        rows.append({"pid": pid, "ppid": ppid, "tty": parts[2], "stat": parts[3], "comm": parts[4], "args": parts[5]})
-    return rows
-
-
-def _agent_engine(row: dict[str, Any]) -> str:
-    comm = Path(str(row.get("comm", ""))).name.lower()
-    args = str(row.get("args", ""))
-    lowered = f"{comm} {args}".lower()
-    if "codex computer use.app" in lowered:
-        return ""
-    if "rg -i" in lowered or "ps -axo" in lowered:
-        return ""
-    if "codex" in comm or re.search(r"(^|\s|/)codex(\s|$)", lowered):
-        return "codex"
-    if "claude" in comm or (AGENT_PROCESS_RE.search(lowered) and "codex" not in lowered):
-        return "claude"
-    return ""
-
-
-def _is_child_agent_process(row: dict[str, Any], by_pid: dict[int, dict[str, Any]]) -> bool:
-    engine = _agent_engine(row)
-    parent = by_pid.get(int(row.get("ppid", 0)))
-    return bool(engine and parent and _agent_engine(parent) == engine)
-
-
-def _is_under_tmux(row: dict[str, Any], by_pid: dict[int, dict[str, Any]]) -> bool:
-    ppid = int(row.get("ppid", 0))
-    for _ in range(12):
-        parent = by_pid.get(ppid)
-        if not parent:
-            return False
-        comm = Path(str(parent.get("comm", ""))).name.lower()
-        args = str(parent.get("args", "")).lower()
-        if comm == "tmux" or args.startswith("tmux "):
-            return True
-        ppid = int(parent.get("ppid", 0))
-    return False
-
-
-def _extract_cd_path(args: str) -> str:
-    try:
-        parts = shlex.split(args)
-    except ValueError:
-        return ""
-    for index, part in enumerate(parts[:-1]):
-        if part == "--cd":
-            return parts[index + 1]
-    return ""
-
-
-def _process_cwd(pid: int) -> str:
-    if not shutil.which("lsof"):
-        return ""
-    try:
-        result = subprocess.run(
-            ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    if result.returncode != 0:
-        return ""
-    for line in result.stdout.splitlines():
-        if line.startswith("n"):
-            return line[1:]
-    return ""
-
-
-def _short_agent_command(args: str) -> str:
-    text = " ".join(args.split())
-    if " resume " in f" {text} ":
-        return "resume"
-    if " --cd " in f" {text} ":
-        return "--cd"
-    return _truncate_inline(text, 64)
-
-
-def _format_foreground_session(session: dict[str, str]) -> str:
-    cwd = session.get("cwd", "")
-    cwd_bit = f" cwd={cwd}" if cwd else ""
-    command = session.get("command", "")
-    command_bit = f" {command}" if command else ""
-    return f"{session.get('engine')} pid={session.get('pid')} tty={session.get('tty')}{cwd_bit}{command_bit}"
 
 
 def referenced_message_id(event: FeishuInboundEvent) -> str:
@@ -2713,12 +2574,15 @@ def _split_activity_card_lines(body: str) -> list[str]:
 
 
 def _activity_card_screen_markdown(section: ActivitySection) -> str:
-    lines, _omitted = _activity_card_screen_lines(section.body)
+    lines, omitted = _activity_card_screen_lines(section.body)
     if not lines:
         return "(当前 TUI 没有可见内容)"
     rendered: list[str] = []
-    for line in lines:
-        rendered.append(_render_activity_line(line))
+    rendered.append(f"<font color='grey'>{_card_escape_terminal_line(section.title)} · 最后 {len(lines)} 行</font>")
+    if omitted:
+        rendered.append(f"<font color='grey'>… 已省略上方 {omitted} 行；完整实时画面用 /cnb_watch</font>")
+    for index, line in enumerate(lines, start=1):
+        rendered.append(f"<font color='grey'>{index:02d}</font> {_render_activity_line(line)}")
     return "\n".join(rendered)
 
 
@@ -2787,23 +2651,7 @@ def _is_noise_screen_line(line: str, noise_blob: str) -> bool:
         )
     ):
         return True
-    if line.startswith(
-        (
-            "• ",
-            "◦ ",
-            "● ",
-            "› ",
-            "> ",
-            "Working",
-            "Run ",
-            "gpt-",
-            "background terminal running",
-            "/ps to view",
-            "esc to interrupt",
-        )
-    ):
-        return True
-    if line in {"Codex screen", "Claude Code screen"}:
+    if line.startswith(("› ", "> ", "Working", "Run ", "gpt-", "background terminal running", "/ps to view")):
         return True
     if line in noise_blob:
         return True
@@ -3702,7 +3550,6 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "readback_max_limit": base.readback_max_limit,
         "resource_handoff_enabled": base.resource_handoff_enabled,
         "resource_handoff_max_bytes": base.resource_handoff_max_bytes,
-        "caffeine_enabled": base.caffeine_enabled,
     }
     if role is CHIEF_ROLE:
         section["device_chief_name"] = pilot_name
@@ -4051,7 +3898,7 @@ def serve_webhook(
         print(f"ERROR: failed to bind Feishu webhook server: {exc}", file=sys.stderr)
         return 1
     url = cfg.webhook_public_url or f"http://{cfg.webhook_host}:{cfg.webhook_port}/"
-    heartbeat_thread = start_heartbeat_daemon(cfg)
+    start_heartbeat_daemon(cfg)
     hb_interval = cfg.heartbeat_interval_seconds if cfg.standby_enabled else DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     features = ["tunnel"]
     if cfg.standby_enabled:
@@ -4165,7 +4012,7 @@ def consume_events(
 
 
 def caffeine_pid_file(cfg: FeishuBridgeConfig) -> Path:
-    return cfg.config_path.parent / f"{_safe_path_part(cfg.bridge_tmux)}.caffeinate.pid"
+    return cfg.config_path.parent / "run" / f"{_safe_path_part(cfg.bridge_tmux)}.caffeinate.pid"
 
 
 def _read_caffeine_pid(path: Path) -> int | None:
@@ -4199,7 +4046,7 @@ def _remove_caffeine_pid_file(path: Path) -> None:
         return
 
 
-def caffeine_status(cfg: FeishuBridgeConfig) -> tuple[str, str]:
+def _caffeine_companion_state(cfg: FeishuBridgeConfig) -> tuple[str, str]:
     if not cfg.caffeine_enabled:
         return "disabled", "caffeine_enabled=false"
     if sys.platform != "darwin":
@@ -4220,13 +4067,13 @@ def caffeine_status(cfg: FeishuBridgeConfig) -> tuple[str, str]:
 
 
 def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
-    state, detail = caffeine_status(cfg)
+    state, detail = _caffeine_companion_state(cfg)
     if state == "disabled":
-        return BridgeResult(True, "keep-awake disabled")
+        return BridgeResult(True, "disabled")
     if state == "unavailable":
-        return BridgeResult(True, f"keep-awake unavailable ({detail})")
+        return BridgeResult(True, f"unavailable ({detail})")
     if state == "active":
-        return BridgeResult(True, f"keep-awake active ({detail})")
+        return BridgeResult(True, _format_caffeine_status(state, detail))
     if state == "stale":
         _remove_caffeine_pid_file(caffeine_pid_file(cfg))
 
@@ -4235,7 +4082,7 @@ def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
         return BridgeResult(True, "keep-awake unavailable (caffeinate not found)")
     try:
         proc = subprocess.Popen(
-            [executable, *CAFFEINATE_ARGS],
+            ["caffeinate", *CAFFEINATE_ARGS],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -4247,14 +4094,14 @@ def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
     path = caffeine_pid_file(cfg)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"{proc.pid}\n")
+        path.write_text(str(proc.pid))
     except OSError as exc:
         try:
             proc.terminate()
         except OSError:
             pass
         return BridgeResult(False, f"failed to record keep-awake pid: {exc}")
-    return BridgeResult(True, f"keep-awake active (pid={proc.pid})")
+    return BridgeResult(True, f"active (pid {proc.pid})")
 
 
 def stop_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
@@ -4280,6 +4127,29 @@ def stop_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
         return BridgeResult(False, f"failed to stop keep-awake pid={pid}: {exc}")
     _remove_caffeine_pid_file(path)
     return BridgeResult(True, f"stopped keep-awake pid={pid}")
+
+
+def _format_caffeine_status(state: str, detail: str) -> str:
+    if state == "disabled":
+        return "disabled"
+    if state == "unavailable":
+        if detail == "not macOS":
+            return "unavailable (non-macOS)"
+        return f"unavailable ({detail})"
+    if state == "active" and detail.startswith("pid="):
+        return f"active (pid {detail.removeprefix('pid=')})"
+    if state == "stopped":
+        return "inactive"
+    return state
+
+
+def caffeine_status(cfg: FeishuBridgeConfig) -> str:
+    state, detail = _caffeine_companion_state(cfg)
+    return _format_caffeine_status(state, detail)
+
+
+def caffeine_pid_path(cfg: FeishuBridgeConfig) -> Path:
+    return caffeine_pid_file(cfg)
 
 
 def _with_companion_detail(base: str, companion: BridgeResult) -> str:
@@ -4333,111 +4203,12 @@ def stop_bridge_daemon(cfg: FeishuBridgeConfig) -> BridgeResult:
     return BridgeResult(False, f"failed to stop {cfg.bridge_tmux}: {detail}")
 
 
-def caffeine_pid_path(cfg: FeishuBridgeConfig) -> Path:
-    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", cfg.bridge_tmux).strip("-") or "bridge"
-    return cfg.config_path.expanduser().parent / "run" / f"feishu-caffeinate-{safe_name}.pid"
-
-
-def _read_pid(path: Path) -> int | None:
-    try:
-        return int(path.read_text().strip())
-    except (OSError, ValueError):
-        return None
-
-
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
-
-
-def _pid_command(pid: int) -> str:
-    try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "comm="],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    if result.returncode != 0:
-        return ""
-    return result.stdout.strip()
-
-
-def _caffeine_platform_state(cfg: FeishuBridgeConfig) -> str:
-    if not cfg.caffeine_enabled:
-        return "disabled"
-    if sys.platform != "darwin":
-        return "unavailable (non-macOS)"
-    if shutil.which("caffeinate") is None:
-        return "unavailable (caffeinate not found)"
-    return "available"
-
-
-def caffeine_status(cfg: FeishuBridgeConfig) -> str:
-    platform_state = _caffeine_platform_state(cfg)
-    if platform_state != "available":
-        return platform_state
-    path = caffeine_pid_path(cfg)
-    pid = _read_pid(path)
-    if pid is None:
-        return "inactive"
-    command = _pid_command(pid)
-    if _pid_alive(pid) and command.endswith("caffeinate"):
-        return f"active (pid {pid})"
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
-    except OSError:
-        return "stale"
-    return "inactive"
-
-
 def start_caffeine_if_needed(cfg: FeishuBridgeConfig) -> BridgeResult:
-    status = caffeine_status(cfg)
-    if status.startswith("active"):
-        return BridgeResult(True, status)
-    if status.startswith("disabled") or status.startswith("unavailable"):
-        return BridgeResult(True, status)
-    path = caffeine_pid_path(cfg)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        process = subprocess.Popen(
-            ["caffeinate", "-di"],
-            cwd=str(cfg.project_root),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        path.write_text(str(process.pid))
-    except OSError as exc:
-        return BridgeResult(True, f"unavailable ({exc})")
-    return BridgeResult(True, f"active (pid {process.pid})")
+    return start_caffeine_companion(cfg)
 
 
 def stop_caffeine(cfg: FeishuBridgeConfig) -> BridgeResult:
-    path = caffeine_pid_path(cfg)
-    pid = _read_pid(path)
-    if pid is None:
-        return BridgeResult(True, caffeine_status(cfg))
-    command = _pid_command(pid)
-    if _pid_alive(pid) and command.endswith("caffeinate"):
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError as exc:
-            return BridgeResult(True, f"stale ({exc})")
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
-    except OSError as exc:
-        return BridgeResult(True, f"stopped but pid cleanup failed: {exc}")
-    return BridgeResult(True, "stopped")
+    return stop_caffeine_companion(cfg)
 
 
 def stop_watch_viewer(cfg: FeishuBridgeConfig) -> BridgeResult:
