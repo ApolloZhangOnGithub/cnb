@@ -11,6 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def default_base_ref() -> str:
+    return f"origin/{os.environ.get('GITHUB_BASE_REF') or 'master'}"
+
+
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
@@ -41,7 +45,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--base-ref",
-        default=f"origin/{os.environ.get('GITHUB_BASE_REF', 'master')}",
+        default=default_base_ref(),
         help="base ref to compare against (default: origin/${GITHUB_BASE_REF:-master})",
     )
     parser.add_argument("--no-fetch", action="store_true", help="do not refresh origin/<base> before checking")
