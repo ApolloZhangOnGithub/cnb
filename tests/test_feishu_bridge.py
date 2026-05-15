@@ -1899,6 +1899,58 @@ class TestRouting:
             }
         ]
 
+    def test_describe_prompt_freshness_detects_current_and_stale_hash(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        current = feishu_bridge.get_current_prompt_hash(cfg)
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        assert "未知" in feishu_bridge.describe_prompt_freshness(cfg)
+
+        feishu_bridge._save_prompt_hash(cfg, current)
+        assert "最新" in feishu_bridge.describe_prompt_freshness(cfg)
+
+        feishu_bridge._save_prompt_hash(cfg, "0" * 16)
+        stale = feishu_bridge.describe_prompt_freshness(cfg)
+        assert "过期" in stale
+        assert current in stale
+
+    def test_start_pilot_saves_prompt_hash(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, startup_wait_seconds=0)
+        calls = []
+
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda cmd, **kwargs: calls.append(cmd) or SimpleNamespace(returncode=0, stdout="", stderr=""),
+        )
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_pilot_startup_notification",
+            lambda cfg: feishu_bridge.BridgeResult(True, "notified"),
+        )
+
+        result = feishu_bridge.start_pilot_if_needed(cfg)
+
+        assert result.handled is True
+        assert calls
+        assert feishu_bridge.get_stored_prompt_hash(cfg) == feishu_bridge.get_current_prompt_hash(cfg)
+
+    def test_restart_supervisor_refuses_busy_tui_without_force(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda cmd, **kwargs: SimpleNamespace(returncode=0, stdout="• Working (12s)\n", stderr=""),
+        )
+
+        result = feishu_bridge.restart_supervisor(cfg)
+
+        assert result.handled is False
+        assert "appears busy" in result.detail
+
     def test_reply_command_marks_activity_done(self, tmp_path, monkeypatch):
         path = tmp_path / "config.toml"
         path.write_text("[feishu]\n")

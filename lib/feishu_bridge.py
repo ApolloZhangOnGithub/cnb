@@ -4376,6 +4376,11 @@ def restart_supervisor(cfg: FeishuBridgeConfig, *, force: bool = False) -> Bridg
         )
 
     if not force:
+        if supervisor_appears_busy(cfg):
+            return BridgeResult(
+                False,
+                f"{role_label(cfg)} TUI appears busy; use --force only if you have saved or accepted interrupting work",
+            )
         open_items = open_activity_items(cfg)
         if open_items:
             count = len(open_items)
@@ -4421,6 +4426,24 @@ def restart_supervisor(cfg: FeishuBridgeConfig, *, force: bool = False) -> Bridg
         False,
         f"{cfg.pilot_tmux} stopped but failed to restart: {start_result.detail}",
     )
+
+
+def supervisor_appears_busy(cfg: FeishuBridgeConfig) -> bool:
+    if not has_session(cfg.pilot_tmux):
+        return False
+    try:
+        result = subprocess.run(
+            ["tmux", "capture-pane", "-t", cfg.pilot_tmux, "-p", "-S", "-30"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode != 0:
+        return False
+    tail = "\n".join(result.stdout.splitlines()[-12:])
+    return bool(ACTIVITY_WORK_RE.search(tail) or "Working" in tail or "Running" in tail)
 
 
 def print_status(cfg: FeishuBridgeConfig) -> None:
