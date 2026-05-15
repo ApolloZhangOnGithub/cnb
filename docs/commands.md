@@ -44,7 +44,13 @@ cnb board --as <name> task add "desc"          # add a task
 cnb board --as <name> task done                # finish current task (auto-verify + auto-PR)
 cnb board --as <name> task done --skip-verify  # skip test verification
 cnb board --as <name> view                     # team dashboard
+cnb board --as <name> progress                 # paste-friendly progress snapshot
 ```
+
+Use `view` for a compact team dashboard. Use `progress` when you need a
+board-wide work snapshot for a lead update or handoff: it summarizes active and
+pending tasks, open bugs, pending user actions, unread inbox counts, and each
+session's current status.
 
 #### Ownership
 
@@ -113,6 +119,7 @@ Type `/` in a Claude Code session. cnb commands have two tiers:
 | `/cnb` | Full health check — team status + pending + system health |
 | `/cnb-status` | Team overview — who's doing what |
 | `/cnb-watch <name>` | Focus on one tongxue |
+| `/cnb-progress` | Recent progress summary from inbox and board state |
 | `/cnb-pending` | Actions needing user attention |
 | `/cnb-history` | Message history |
 | `/cnb-supervisor` | Device supervisor runtime status |

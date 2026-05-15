@@ -13,7 +13,7 @@
 | | |
 |---|---|
 | [Feishu bridge](feishu-bridge.md) | Wake the Mac supervisor from Feishu, Web TUI, quiet notifications |
-| [Codex engine](codex-engine.md) | Launch cnb with Codex, permission modes, smoke testing |
+| [Codex engine](codex-engine.md) | Launch cnb with Codex, `/goal` workflow, board nudges, smoke testing |
 | [Model management](cnb-model.md) | Switch LLM providers and model profiles |
 
 ## Project
