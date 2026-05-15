@@ -1654,6 +1654,63 @@ class TestRouting:
 
         assert feishu_bridge.activity_is_done(cfg, "om_1") is True
 
+    def test_followup_message_coalesces_into_active_activity(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, notification_policy="live", ack=True)
+        first = FeishuInboundEvent(text="first", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        feishu_bridge.record_activity_start(cfg, first)
+        feishu_bridge.record_activity_update_message(cfg, "om_1", "om_status")
+        sent = []
+        updates = []
+
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(feishu_bridge, "tmux_send", lambda name, text: sent.append(text) or True)
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_activity_update",
+            lambda cfg, event, elapsed: updates.append((event.message_id, elapsed))
+            or feishu_bridge.BridgeResult(True, "activity card updated"),
+        )
+        monkeypatch.setattr(
+            feishu_bridge,
+            "reply_ack",
+            lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("supplement sent a new ack")),
+        )
+        monkeypatch.setattr(
+            feishu_bridge,
+            "start_activity_monitor",
+            lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("supplement opened a new monitor")),
+        )
+
+        result = feishu_bridge.handle_payload(
+            {
+                "message_id": "om_2",
+                "chat_id": "oc_allowed",
+                "sender_id": "ou_user",
+                "content": '{"text":"second"}',
+            },
+            cfg,
+        )
+
+        assert result.handled is True
+        assert "coalesced into active activity om_1" in result.detail
+        assert updates == [("om_1", 0)]
+        assert "[Feishu active activity thread]" in sent[0]
+        assert "pending_message_ids: om_1, om_2" in sent[0]
+        assert feishu_bridge.activity_root_message_id(cfg, "om_2") == "om_1"
+        assert [item["message_id"] for item in feishu_bridge.open_activity_items(cfg)] == ["om_1"]
+
+    def test_reply_to_coalesced_supplement_closes_root_activity(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        first = FeishuInboundEvent(text="first", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        second = FeishuInboundEvent(text="second", message_id="om_2", chat_id="oc_allowed", sender_id="ou_user")
+        feishu_bridge.record_activity_start(cfg, first)
+        feishu_bridge.record_activity_supplement(cfg, "om_1", second)
+
+        feishu_bridge.mark_activity_done(cfg, "om_2")
+
+        assert feishu_bridge.activity_is_done(cfg, "om_1") is True
+        assert feishu_bridge.activity_is_done(cfg, "om_2") is True
+
     def test_send_activity_update_builds_one_screen_snapshot(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, agent="codex")
         event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")

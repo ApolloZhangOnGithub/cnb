@@ -168,6 +168,7 @@ DEFAULT_ACTIVITY_UPDATE_SECONDS = (1,)
 DEFAULT_ACTIVITY_UPDATE_REPEAT_SECONDS = 1
 DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS = 600
 ACTIVITY_STALE_SECONDS = 600
+ACTIVITY_COALESCE_SECONDS = 1800
 ACTIVITY_WORK_RE = re.compile(r"^\s*[•●◦]\s*(Working|Thinking|Running)\b", re.IGNORECASE | re.MULTILINE)
 ACTIVITY_PROMPT_RE = re.compile(r"^\s*[›❯>]\s*", re.MULTILINE)
 AGENT_PROCESS_RE = re.compile(r"(^|/|\s)(codex|claude)(\s|$)", re.IGNORECASE)
@@ -1276,6 +1277,10 @@ def format_for_pilot(
     if handoff_summary:
         parts.extend(["", "[Feishu resources handed to Claude Code]", handoff_summary])
     if cfg is not None:
+        thread_summary = activity_thread_summary(cfg, event.message_id)
+        if thread_summary:
+            parts.extend(["", "[Feishu active activity thread]", thread_summary])
+    if cfg is not None:
         parts.extend(["", "[CNB bridge affordances]", bridge_affordance_text(cfg)])
     parts.extend(["", event.text])
     return "\n".join(parts)
@@ -1395,6 +1400,106 @@ def record_activity_start(cfg: FeishuBridgeConfig, event: FeishuInboundEvent) ->
     _write_activity_state(path, payload)
 
 
+def activity_root_message_id(cfg: FeishuBridgeConfig, message_id: str) -> str:
+    if not message_id:
+        return ""
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages")
+    if not isinstance(messages, dict):
+        return ""
+    item = messages.get(message_id)
+    if not isinstance(item, dict):
+        return ""
+    root = item.get("coalesced_into")
+    return root if isinstance(root, str) and root else message_id
+
+
+def find_active_activity_root(cfg: FeishuBridgeConfig, event: FeishuInboundEvent, *, now: float | None = None) -> str:
+    if not event.message_id or not event.chat_id or not event.sender_id:
+        return ""
+    now_value = time.time() if now is None else now
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages")
+    if not isinstance(messages, dict):
+        return ""
+    best_id = ""
+    best_started = 0.0
+    for message_id, item in messages.items():
+        if not isinstance(item, dict) or item.get("done_at") or item.get("coalesced_into"):
+            continue
+        if message_id == event.message_id:
+            continue
+        if item.get("chat_id") != event.chat_id or item.get("sender_id") != event.sender_id:
+            continue
+        started_at = _parse_activity_timestamp(item.get("started_at"))
+        if started_at is None or now_value - started_at > ACTIVITY_COALESCE_SECONDS:
+            continue
+        if started_at >= best_started:
+            best_id = str(message_id)
+            best_started = started_at
+    return best_id
+
+
+def record_activity_supplement(cfg: FeishuBridgeConfig, root_message_id: str, event: FeishuInboundEvent) -> None:
+    if not root_message_id or not event.message_id or root_message_id == event.message_id:
+        return
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    root = messages.get(root_message_id)
+    if not isinstance(root, dict):
+        root = {}
+        messages[root_message_id] = root
+    supplements = root.setdefault("supplement_message_ids", [])
+    if not isinstance(supplements, list):
+        supplements = []
+        root["supplement_message_ids"] = supplements
+    if event.message_id not in supplements:
+        supplements.append(event.message_id)
+    root["latest_supplement_message_id"] = event.message_id
+    root["latest_supplement_at"] = now
+
+    item = messages.get(event.message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[event.message_id] = item
+    item.update(
+        {
+            "chat_id": event.chat_id,
+            "sender_id": event.sender_id,
+            "coalesced_into": root_message_id,
+            "supplement_at": now,
+            "done_at": "",
+        }
+    )
+    _write_activity_state(path, payload)
+
+
+def activity_thread_summary(cfg: FeishuBridgeConfig, message_id: str) -> str:
+    root_message_id = activity_root_message_id(cfg, message_id) or message_id
+    if not root_message_id:
+        return ""
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages")
+    if not isinstance(messages, dict):
+        return ""
+    root = messages.get(root_message_id)
+    if not isinstance(root, dict):
+        return ""
+    supplements = [str(mid) for mid in root.get("supplement_message_ids", []) if str(mid)]
+    pending = [root_message_id, *supplements[-8:]]
+    lines = [f"primary_message_id: {root_message_id}", "pending_message_ids: " + ", ".join(pending)]
+    latest = root.get("latest_supplement_message_id")
+    if isinstance(latest, str) and latest:
+        lines.append(f"latest_user_supplement: {latest}")
+        lines.append("这是同一活跃请求中的用户补充/打断；处理时保留这些 message_id，可优先回复最新一条。")
+    return "\n".join(lines)
+
+
 def record_outgoing_reply(cfg: FeishuBridgeConfig, source_message_id: str, reply_message_id: str) -> None:
     if not source_message_id or not reply_message_id:
         return
@@ -1442,6 +1547,13 @@ def mark_activity_done(cfg: FeishuBridgeConfig, message_id: str, *, reason: str 
     item["done_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     if reason:
         item["closed_reason"] = reason
+    root_message_id = item.get("coalesced_into")
+    if isinstance(root_message_id, str) and root_message_id:
+        root = messages.get(root_message_id)
+        if isinstance(root, dict):
+            root["done_at"] = item["done_at"]
+            if reason:
+                root["closed_reason"] = reason
     _write_activity_state(path, payload)
 
 
@@ -1485,7 +1597,13 @@ def activity_is_done(cfg: FeishuBridgeConfig, message_id: str) -> bool:
     if not message_id:
         return True
     payload = _load_activity_state(activity_state_path(cfg))
-    item = payload.get("messages", {}).get(message_id)
+    messages = payload.get("messages", {})
+    item = messages.get(message_id) if isinstance(messages, dict) else None
+    if isinstance(item, dict):
+        root_message_id = item.get("coalesced_into")
+        if isinstance(root_message_id, str) and root_message_id:
+            root = messages.get(root_message_id)
+            return isinstance(root, dict) and bool(root.get("done_at"))
     return isinstance(item, dict) and bool(item.get("done_at"))
 
 
@@ -1558,7 +1676,7 @@ def open_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) ->
 
     items: list[dict[str, Any]] = []
     for message_id, item in messages.items():
-        if not isinstance(item, dict) or item.get("done_at"):
+        if not isinstance(item, dict) or item.get("done_at") or item.get("coalesced_into"):
             continue
         started_at = _parse_activity_timestamp(item.get("started_at"))
         if started_at is None:
@@ -3877,7 +3995,18 @@ def handle_payload(
     if command_result is not None:
         return command_result
 
+    coalesced_root = "" if dry_run else find_active_activity_root(cfg, event)
+    if coalesced_root:
+        record_activity_supplement(cfg, coalesced_root, event)
+
     routed = route_event(event, cfg, dry_run=dry_run)
+    if routed.handled and coalesced_root and not dry_run:
+        root_event = replace(event, message_id=coalesced_root)
+        activity = send_activity_update(cfg, root_event, 0) if activity_update_message_id(cfg, coalesced_root) else None
+        detail = f"{routed.detail}; coalesced into active activity {coalesced_root}"
+        if activity and activity.handled:
+            detail += f"; {activity.detail}"
+        return BridgeResult(True, detail)
     if routed.handled and not dry_run:
         record_activity_start(cfg, event)
     if routed.handled and send_ack and not dry_run:
