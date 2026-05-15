@@ -11,6 +11,32 @@ class TestCmdSend:
         cmd_send(db, "alice", ["bob", "hello world"])
         assert "OK sent" in capsys.readouterr().out
 
+    def test_send_nudges_idle_recipient(self, db, monkeypatch, capsys):
+        sent: list[tuple[str, str]] = []
+
+        monkeypatch.setattr("lib.board_msg.has_session", lambda sess: True)
+        monkeypatch.setattr("lib.board_msg._is_idle", lambda sess: True)
+        monkeypatch.setattr("lib.board_msg.tmux_send", lambda sess, text: sent.append((sess, text)))
+
+        cmd_send(db, "alice", ["bob", "hello world"])
+        capsys.readouterr()
+
+        assert sent == [("cc-test-bob", f"{db.env.install_home}/bin/board --as bob inbox")]
+
+    def test_send_nudges_busy_recipient_with_safe_point_prompt(self, db, monkeypatch, capsys):
+        sent: list[tuple[str, str]] = []
+
+        monkeypatch.setattr("lib.board_msg.has_session", lambda sess: True)
+        monkeypatch.setattr("lib.board_msg._is_idle", lambda sess: False)
+        monkeypatch.setattr("lib.board_msg.tmux_send", lambda sess, text: sent.append((sess, text)))
+
+        cmd_send(db, "alice", ["bob", "hello world"])
+        capsys.readouterr()
+
+        assert sent[0][0] == "cc-test-bob"
+        assert "你有新的 board 消息或任务" in sent[0][1]
+        assert f"{db.env.install_home}/bin/board --as bob inbox" in sent[0][1]
+
     def test_send_creates_message_in_db(self, db, capsys):
         cmd_send(db, "alice", ["bob", "test message"])
         capsys.readouterr()
