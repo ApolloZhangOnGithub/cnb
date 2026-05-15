@@ -78,6 +78,8 @@ New issues auto-route to the right board by label. See [ROADMAP.md](ROADMAP.md) 
 
 **[Silicon Valley Battle](instances/silicon_vally_battle/)** — 10 AI leaders debate Python vs Rust through cnb. 886 messages in 3 hours. Start with the [highlights](instances/silicon_vally_battle/HIGHLIGHTS.md).
 
+**[LeWorldModel / JEPA reproduction plan](https://github.com/ApolloZhangOnGithub/cnb/issues/164)** — planned research demo for reproducing LeCun's LeWM paper with a cnb team split across paper reading, implementation, data, and reporting. The demo target is a board-coordinated path from paper notes to PushT evaluation, not a claimed result yet.
+
 <!-- section:why -->
 ## Why cnb
 
