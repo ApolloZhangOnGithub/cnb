@@ -150,7 +150,6 @@ DEFAULT_READBACK_LIMIT = 12
 MAX_READBACK_LIMIT = 50
 DEFAULT_RESOURCE_HANDOFF_MAX_BYTES = 25 * 1024 * 1024
 MAX_RESOURCE_HANDOFF_BYTES = 100 * 1024 * 1024
-CAFFEINATE_ARGS = ("-dims",)
 SHORT_REPLY_MAX_CHARS = 280
 SHORT_REPLY_MAX_LINES = 4
 ACK_PREFIX = SUPERVISOR_ROLE.ack_prefix
@@ -274,14 +273,13 @@ class FeishuBridgeConfig:
     watch_token: str = ""
     watch_tool: str = "builtin"
     watch_refresh_ms: int = DEFAULT_WATCH_REFRESH_MS
-    caffeine_enabled: bool = DEFAULT_CAFFEINE_ENABLED
     readback_enabled: bool = False
     readback_allow_unlisted_chat: bool = False
     readback_default_limit: int = DEFAULT_READBACK_LIMIT
     readback_max_limit: int = MAX_READBACK_LIMIT
     resource_handoff_enabled: bool = True
     resource_handoff_max_bytes: int = DEFAULT_RESOURCE_HANDOFF_MAX_BYTES
-    caffeine_enabled: bool = True
+    caffeine_enabled: bool = DEFAULT_CAFFEINE_ENABLED
     standby_enabled: bool = False
     standby_agent: str = DEFAULT_STANDBY_AGENT
     standby_pilot_tmux: str = ""
@@ -440,7 +438,9 @@ class FeishuBridgeConfig:
             standby_enabled=_bool(section.get("standby_enabled"), False),
             standby_agent=_standby_agent(section.get("standby_agent"), agent),
             standby_pilot_tmux=str(section.get("standby_pilot_tmux") or ""),
-            heartbeat_interval_seconds=max(10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)),
+            heartbeat_interval_seconds=max(
+                10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)
+            ),
         )
 
 
@@ -1195,7 +1195,9 @@ def run_heartbeat_check(cfg: FeishuBridgeConfig) -> BridgeResult:
         if result.handled:
             start_standby_if_needed(cfg)
         return result
-    return BridgeResult(True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})")
+    return BridgeResult(
+        True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})"
+    )
 
 
 def check_tunnel_health(cfg: FeishuBridgeConfig) -> BridgeResult:
@@ -2713,12 +2715,14 @@ def _split_activity_card_lines(body: str) -> list[str]:
 
 
 def _activity_card_screen_markdown(section: ActivitySection) -> str:
-    lines, _omitted = _activity_card_screen_lines(section.body)
+    lines, omitted = _activity_card_screen_lines(section.body)
     if not lines:
         return "(当前 TUI 没有可见内容)"
-    rendered: list[str] = []
-    for line in lines:
-        rendered.append(_render_activity_line(line))
+    rendered: list[str] = [f"<font color='grey'>最后 {len(lines)} 行</font>"]
+    if omitted:
+        rendered.append(f"<font color='grey'>已省略上方 {omitted} 行</font>")
+    for idx, line in enumerate(lines, start=omitted + 1):
+        rendered.append(f"<font color='grey'>{idx:02d}</font> {_render_activity_line(line)}")
     return "\n".join(rendered)
 
 
@@ -2787,6 +2791,8 @@ def _is_noise_screen_line(line: str, noise_blob: str) -> bool:
         )
     ):
         return True
+    if line.startswith("• ") and "Working" in line:
+        return False
     if line.startswith(
         (
             "• ",
@@ -2794,7 +2800,6 @@ def _is_noise_screen_line(line: str, noise_blob: str) -> bool:
             "● ",
             "› ",
             "> ",
-            "Working",
             "Run ",
             "gpt-",
             "background terminal running",
@@ -2802,8 +2807,6 @@ def _is_noise_screen_line(line: str, noise_blob: str) -> bool:
             "esc to interrupt",
         )
     ):
-        return True
-    if line in {"Codex screen", "Claude Code screen"}:
         return True
     if line in noise_blob:
         return True
@@ -3695,14 +3698,12 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "watch_public_url": watch_public_url,
         "watch_token": watch_token,
         "watch_refresh_ms": base.watch_refresh_ms,
-        "caffeine_enabled": base.caffeine_enabled,
         "readback_enabled": base.readback_enabled,
         "readback_allow_unlisted_chat": base.readback_allow_unlisted_chat,
         "readback_default_limit": base.readback_default_limit,
         "readback_max_limit": base.readback_max_limit,
         "resource_handoff_enabled": base.resource_handoff_enabled,
         "resource_handoff_max_bytes": base.resource_handoff_max_bytes,
-        "caffeine_enabled": base.caffeine_enabled,
     }
     if role is CHIEF_ROLE:
         section["device_chief_name"] = pilot_name
@@ -4051,7 +4052,7 @@ def serve_webhook(
         print(f"ERROR: failed to bind Feishu webhook server: {exc}", file=sys.stderr)
         return 1
     url = cfg.webhook_public_url or f"http://{cfg.webhook_host}:{cfg.webhook_port}/"
-    heartbeat_thread = start_heartbeat_daemon(cfg)
+    start_heartbeat_daemon(cfg)
     hb_interval = cfg.heartbeat_interval_seconds if cfg.standby_enabled else DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     features = ["tunnel"]
     if cfg.standby_enabled:
@@ -4162,132 +4163,6 @@ def consume_events(
         )
     print(f"ERROR: unsupported Feishu transport: {cfg.transport}", file=sys.stderr)
     return 1
-
-
-def caffeine_pid_file(cfg: FeishuBridgeConfig) -> Path:
-    return cfg.config_path.parent / f"{_safe_path_part(cfg.bridge_tmux)}.caffeinate.pid"
-
-
-def _read_caffeine_pid(path: Path) -> int | None:
-    try:
-        text = path.read_text().strip()
-    except OSError:
-        return None
-    try:
-        pid = int(text)
-    except ValueError:
-        return None
-    return pid if pid > 0 else None
-
-
-def _pid_is_running(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
-
-
-def _remove_caffeine_pid_file(path: Path) -> None:
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        return
-    except OSError:
-        return
-
-
-def caffeine_status(cfg: FeishuBridgeConfig) -> tuple[str, str]:
-    if not cfg.caffeine_enabled:
-        return "disabled", "caffeine_enabled=false"
-    if sys.platform != "darwin":
-        return "unavailable", "not macOS"
-    executable = shutil.which("caffeinate")
-    if not executable:
-        return "unavailable", "caffeinate not found"
-
-    path = caffeine_pid_file(cfg)
-    pid = _read_caffeine_pid(path)
-    if pid is None:
-        if path.exists():
-            return "stale", f"invalid pid file {path}"
-        return "stopped", f"{executable} available"
-    if _pid_is_running(pid):
-        return "active", f"pid={pid}"
-    return "stale", f"pid={pid}"
-
-
-def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
-    state, detail = caffeine_status(cfg)
-    if state == "disabled":
-        return BridgeResult(True, "keep-awake disabled")
-    if state == "unavailable":
-        return BridgeResult(True, f"keep-awake unavailable ({detail})")
-    if state == "active":
-        return BridgeResult(True, f"keep-awake active ({detail})")
-    if state == "stale":
-        _remove_caffeine_pid_file(caffeine_pid_file(cfg))
-
-    executable = shutil.which("caffeinate")
-    if not executable:
-        return BridgeResult(True, "keep-awake unavailable (caffeinate not found)")
-    try:
-        proc = subprocess.Popen(
-            [executable, *CAFFEINATE_ARGS],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    except OSError as exc:
-        return BridgeResult(False, f"failed to start keep-awake companion: {exc}")
-
-    path = caffeine_pid_file(cfg)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"{proc.pid}\n")
-    except OSError as exc:
-        try:
-            proc.terminate()
-        except OSError:
-            pass
-        return BridgeResult(False, f"failed to record keep-awake pid: {exc}")
-    return BridgeResult(True, f"keep-awake active (pid={proc.pid})")
-
-
-def stop_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
-    path = caffeine_pid_file(cfg)
-    pid = _read_caffeine_pid(path)
-    if pid is None:
-        if path.exists():
-            _remove_caffeine_pid_file(path)
-            return BridgeResult(True, "cleared stale keep-awake pid file")
-        return BridgeResult(True, "keep-awake not running")
-    if not _pid_is_running(pid):
-        _remove_caffeine_pid_file(path)
-        return BridgeResult(True, f"cleared stale keep-awake pid={pid}")
-
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        _remove_caffeine_pid_file(path)
-        return BridgeResult(True, f"cleared stale keep-awake pid={pid}")
-    except PermissionError as exc:
-        return BridgeResult(False, f"failed to stop keep-awake pid={pid}: {exc}")
-    except OSError as exc:
-        return BridgeResult(False, f"failed to stop keep-awake pid={pid}: {exc}")
-    _remove_caffeine_pid_file(path)
-    return BridgeResult(True, f"stopped keep-awake pid={pid}")
-
-
-def _with_companion_detail(base: str, companion: BridgeResult) -> str:
-    if not companion.detail:
-        return base
-    if companion.handled:
-        return f"{base}; {companion.detail}"
-    return f"{base}; keep-awake warning: {companion.detail}"
 
 
 def start_bridge_daemon(cfg: FeishuBridgeConfig) -> BridgeResult:

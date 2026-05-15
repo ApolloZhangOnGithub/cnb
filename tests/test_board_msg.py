@@ -63,6 +63,30 @@ class TestCmdSend:
         row = db.query_one("SELECT body FROM messages WHERE sender='alice'")
         assert "分享文件" in row["body"]
 
+    def test_send_nudges_idle_recipient_with_inbox_command(self, db, monkeypatch, capsys):
+        sent = []
+        monkeypatch.setattr("lib.board_msg.has_session", lambda sess: True)
+        monkeypatch.setattr("lib.board_msg._is_idle", lambda sess: True)
+        monkeypatch.setattr("lib.board_msg.tmux_send", lambda sess, text: sent.append((sess, text)) or True)
+
+        cmd_send(db, "alice", ["bob", "check inbox"])
+        capsys.readouterr()
+
+        assert sent == [("cc-test-bob", f"{db.env.install_home}/bin/board --as bob inbox")]
+
+    def test_send_nudges_busy_recipient_with_safe_point_prompt(self, db, monkeypatch, capsys):
+        sent = []
+        monkeypatch.setattr("lib.board_msg.has_session", lambda sess: True)
+        monkeypatch.setattr("lib.board_msg._is_idle", lambda sess: False)
+        monkeypatch.setattr("lib.board_msg.tmux_send", lambda sess, text: sent.append((sess, text)) or True)
+
+        cmd_send(db, "alice", ["bob", "check inbox"])
+        capsys.readouterr()
+
+        assert sent and sent[0][0] == "cc-test-bob"
+        assert "next safe point" in sent[0][1]
+        assert "--as bob inbox" in sent[0][1]
+
 
 class TestCmdInbox:
     def test_empty_inbox(self, db, capsys):

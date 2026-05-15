@@ -3,6 +3,7 @@
 import os
 import re
 import shlex
+import subprocess
 import threading
 import time
 import tomllib
@@ -20,6 +21,22 @@ SUPPORTED_AGENTS = frozenset({"claude", "codex", "trae", "qwen"})
 # conflicts with explicit --ask-for-approval or --sandbox flags, so keep it
 # standalone instead of trying to restate the implied "never ask/no sandbox".
 CODEX_PERMISSION_FLAGS = ("--dangerously-bypass-approvals-and-sandbox",)
+
+
+def codex_goal_feature_command() -> str:
+    return "codex features enable goals >/dev/null 2>&1 || true"
+
+
+def enable_codex_goals_best_effort() -> None:
+    try:
+        subprocess.run(
+            ["codex", "features", "enable", "goals"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 @dataclass
@@ -86,7 +103,10 @@ class SwarmManager:
             initial = self.build_initial_prompt(name, standby=standby)
             combined_prompt = f"{prompt}\n\n{initial}"
             flags = " ".join(CODEX_PERMISSION_FLAGS)
-            return f"codex {flags} --cd {shlex.quote(str(self._env.project_root))} {shlex.quote(combined_prompt)}"
+            return (
+                f"{codex_goal_feature_command()}; "
+                f"codex {flags} --cd {shlex.quote(str(self._env.project_root))} {shlex.quote(combined_prompt)}"
+            )
         elif self.cfg.agent == "trae":
             return "trae-cli"
         elif self.cfg.agent == "qwen":
@@ -122,6 +142,7 @@ class SwarmManager:
             )
         return (
             f"你是 {name}。你正在使用 {engine_label} 引擎。"
+            f"如果当前是 Codex CLI，并且开始处理一个明确任务，先用 /goal <目标> 固定本轮目标；"
             f"按 CLAUDE.md 的启动流程执行："
             f"1. 读取 {sd}/{name}.md，"
             f"2. 读取 {cv}/{name}.md（如果存在），"

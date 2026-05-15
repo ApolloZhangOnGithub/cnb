@@ -2,6 +2,7 @@
 
 from lib.board_db import BoardDB, ts
 from lib.board_display import print_task_queue
+from lib.board_msg import nudge_session
 from lib.board_own import auto_pr, verify_task
 from lib.common import is_privileged, is_terminal_task_status, parse_flags, validate_identity
 
@@ -69,6 +70,8 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
         if target != name:
             db.post_message(name, target, f"[TASK #{task_id}] {desc}", deliver=True, c=c)
             print(f"OK notified {target}")
+    if target != name:
+        nudge_session(db, target)
     print_task_queue(db, target)
 
 

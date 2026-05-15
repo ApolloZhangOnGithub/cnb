@@ -133,12 +133,14 @@ class TestPrompts:
     def test_agent_cmd_codex_highest_permissions(self, mgr):
         mgr.cfg.agent = "codex"
         cmd = mgr.build_agent_cmd("alice")
-        assert cmd.startswith("codex ")
+        assert cmd.startswith("codex features enable goals")
+        assert "; codex " in cmd
         assert "--dangerously-bypass-approvals-and-sandbox" in cmd
         assert "--ask-for-approval" not in cmd
         assert "--sandbox" not in cmd
         assert "--cd" in cmd
         assert "alice" in cmd
+        assert "/goal <目标>" in cmd
         assert "--append-system-prompt" not in cmd
 
     def test_agent_cmd_codex_standby_does_not_resume_historical_work(self, mgr):

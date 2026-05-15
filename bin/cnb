@@ -590,5 +590,6 @@ case "$_LEAD_AGENT" in
     claude)
         exec claude --name "${ME}" --append-system-prompt "$SYSPROMPT" ;;
     codex)
+        codex features enable goals >/dev/null 2>&1 || true
         exec codex --dangerously-bypass-approvals-and-sandbox --cd "$CNB_PROJECT" "$SYSPROMPT" ;;
 esac
