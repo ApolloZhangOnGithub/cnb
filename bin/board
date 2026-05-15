@@ -93,6 +93,15 @@ COMMANDS: list[Command] = [
         hidden=True,
     ),
     Command(
+        "checkpoint",
+        "lib.board_view",
+        "cmd_checkpoint",
+        "guard long-running sessions against unsaved worktree state",
+        "checkpoint",
+        needs_identity=False,
+        takes_rest=False,
+    ),
+    Command(
         "files",
         "lib.board_files",
         "cmd_files",
