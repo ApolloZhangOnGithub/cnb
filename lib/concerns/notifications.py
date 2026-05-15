@@ -121,6 +121,7 @@ class ProductionLineIntake(Concern):
     interval = 300
     STACK_LIMIT = 3
     GH_LIMIT = 80
+    DRAINED_NOTICE_COOLDOWN = 3600
     ISSUE_RE = re.compile(r"#(\d+)\b")
     PRIORITY: ClassVar[dict[str, int]] = {
         "priority:p0": 100,
@@ -135,6 +136,7 @@ class ProductionLineIntake(Concern):
         super().__init__()
         self.cfg = cfg
         self.last_error: str = ""
+        self._last_drained_notice: int = -self.DRAINED_NOTICE_COOLDOWN
 
     def _manager(self) -> str:
         names = [name.lower() for name in self.cfg.dev_sessions]
@@ -194,6 +196,7 @@ class ProductionLineIntake(Concern):
         except json.JSONDecodeError as exc:
             self.last_error = str(exc)
             return []
+        self.last_error = ""
         return data if isinstance(data, list) else []
 
     def _issue_priority(self, issue: dict) -> int:
@@ -249,19 +252,33 @@ class ProductionLineIntake(Concern):
             board.post_message("dispatcher", manager, f"[TASK #{task_id}] {desc}", deliver=True, c=conn)
         return task_id
 
+    def _maybe_send_drained_notice(self, manager: str, now: int) -> None:
+        if now - self._last_drained_notice < self.DRAINED_NOTICE_COOLDOWN:
+            return
+        board = db(self.cfg)
+        board.post_message(
+            "dispatcher",
+            manager,
+            "production-line queue drained：没有 active/pending manager task，也没有可 intake 的 open GitHub issue。请明确收工、handoff，或让 lead 指定下一批工作。",
+            deliver=True,
+        )
+        self._last_drained_notice = now
+
     def tick(self, now: int) -> None:
         if not self.cfg.board_db.exists():
             return
         manager = self._manager()
         if not manager:
             return
-        if self._open_task_count(manager) >= self.STACK_LIMIT:
+        open_count = self._open_task_count(manager)
+        if open_count >= self.STACK_LIMIT:
             return
 
-        slots = self.STACK_LIMIT - self._open_task_count(manager)
+        slots = self.STACK_LIMIT - open_count
         routed = self._routed_issue_numbers()
         added = 0
-        for issue in self._ranked_candidates(routed)[:slots]:
+        candidates = self._ranked_candidates(routed)
+        for issue in candidates[:slots]:
             priority = self._issue_priority(issue)
             task_id = self._add_manager_task(manager, issue, priority)
             routed.add(int(issue["number"]))
@@ -269,6 +286,8 @@ class ProductionLineIntake(Concern):
             log(f"PRODUCTION-LINE: added issue #{issue['number']} to {manager} task #{task_id}")
         if added == 0 and self.last_error:
             log(f"PRODUCTION-LINE: no intake ({self.last_error})")
+        elif added == 0 and open_count == 0 and not candidates:
+            self._maybe_send_drained_notice(manager, now)
 
 
 class TimeAnnouncer(Concern):
