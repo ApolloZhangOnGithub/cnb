@@ -24,6 +24,7 @@ from lib.board_view import (
     cmd_overview,
     cmd_p0,
     cmd_prebuild,
+    cmd_progress,
     cmd_relations,
     cmd_roster,
     cmd_view,
@@ -320,6 +321,35 @@ class TestCmdDashboard:
         cmd_dashboard(db)
         output = capsys.readouterr().out
         assert "dispatcher" in output
+
+
+class TestCmdProgress:
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_tracked_tasks_and_summary(self, _mock, db, capsys):
+        db.execute(
+            "INSERT INTO tasks(session, description, status, priority) VALUES ('alice', 'ship queue fix', 'active', 5)"
+        )
+        db.execute(
+            "INSERT INTO tasks(session, description, status, priority) VALUES ('bob', 'write tracker', 'pending', 1)"
+        )
+        db.execute(
+            "INSERT INTO bugs(id, severity, sla, reporter, assignee, description) VALUES "
+            "('P1-1', 'P1', 'today', 'alice', 'bob', 'missing tracking')"
+        )
+        db.execute(
+            "INSERT INTO pending_actions(type, command, reason, created_by) VALUES ('merge', 'gh pr merge', 'review', 'alice')"
+        )
+
+        cmd_progress(db)
+        output = capsys.readouterr().out
+
+        assert "Progress Tracking" in output
+        assert "1 active tasks" in output
+        assert "1 pending tasks" in output
+        assert "ship queue fix" in output
+        assert "write tracker" in output
+        assert "missing tracking" in output
+        assert "pending actions" in output
 
 
 class TestCmdDirty:
