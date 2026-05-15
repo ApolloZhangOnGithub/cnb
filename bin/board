@@ -71,6 +71,15 @@ COMMANDS: list[Command] = [
         takes_rest=False,
         aliases=["dash"],
     ),
+    Command(
+        "progress",
+        "lib.board_view",
+        "cmd_progress",
+        "tracked tasks and blockers",
+        "progress",
+        needs_identity=False,
+        takes_rest=False,
+    ),
     Command("p0", "lib.board_view", "cmd_p0", "P0 lock status", "p0", needs_identity=False, takes_rest=False),
     Command(
         "pre-build",

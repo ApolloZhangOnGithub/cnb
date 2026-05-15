@@ -300,6 +300,79 @@ def cmd_dashboard(db: BoardDB) -> None:
         print("  dispatcher: NOT RUNNING")
 
 
+def cmd_progress(db: BoardDB) -> None:
+    """Show the work that is currently tracked in board tables."""
+    assert db.env is not None
+    prefix = db.env.prefix
+    now = datetime.now().strftime("%H:%M")
+
+    active_count = db.scalar("SELECT COUNT(*) FROM tasks WHERE status='active'") or 0
+    pending_count = db.scalar("SELECT COUNT(*) FROM tasks WHERE status='pending'") or 0
+    unread_count = db.scalar("SELECT COUNT(*) FROM inbox WHERE read=0") or 0
+    bug_count = db.scalar("SELECT COUNT(*) FROM bugs WHERE status != 'FIXED'") or 0
+    pending_actions = db.scalar("SELECT COUNT(*) FROM pending_actions WHERE status='pending'") or 0
+
+    print(f"=== Progress Tracking {now} ===\n")
+    print(
+        f"Summary: {active_count} active tasks, {pending_count} pending tasks, "
+        f"{bug_count} open bugs, {pending_actions} pending actions, {unread_count} unread messages"
+    )
+    print()
+
+    print("Sessions:")
+    rows = db.query(
+        "SELECT s.name, s.status, s.last_heartbeat, "
+        "(SELECT COUNT(*) FROM inbox i WHERE i.session=s.name AND i.read=0), "
+        "(SELECT COUNT(*) FROM tasks t WHERE t.session=s.name AND t.status='active'), "
+        "(SELECT COUNT(*) FROM tasks t WHERE t.session=s.name AND t.status='pending') "
+        "FROM sessions s WHERE s.name != 'all' ORDER BY s.name"
+    )
+    if not rows:
+        print("  (no sessions)")
+    for name, status_text, last_hb, inbox_count, active_tasks, pending_tasks in rows:
+        state, ago = _heartbeat_status(last_hb, prefix, name)
+        status_text = (status_text or "(no status)")[:68]
+        ago_text = f" {ago}" if ago else ""
+        print(
+            f"  {name:<12s} {state:<14s}{ago_text:<10s} "
+            f"tasks {active_tasks}/{pending_tasks} inbox {inbox_count}: {status_text}"
+        )
+
+    print()
+    print("Active Tasks:")
+    task_rows = db.query(
+        "SELECT id, session, priority, description FROM tasks WHERE status='active' "
+        "ORDER BY session, priority DESC, id ASC LIMIT 12"
+    )
+    if not task_rows:
+        print("  (none)")
+    for task_id, session, priority, desc in task_rows:
+        print(f"  #{task_id:<4d} {session:<12s} p{priority:<3d} {desc}")
+
+    print()
+    print("Pending Queue:")
+    pending_rows = db.query(
+        "SELECT id, session, priority, description FROM tasks WHERE status='pending' "
+        "ORDER BY priority DESC, id ASC LIMIT 12"
+    )
+    if not pending_rows:
+        print("  (none)")
+    for task_id, session, priority, desc in pending_rows:
+        print(f"  #{task_id:<4d} {session:<12s} p{priority:<3d} {desc}")
+
+    print()
+    print("Open Bugs:")
+    bug_rows = db.query(
+        "SELECT id, severity, assignee, description FROM bugs WHERE status != 'FIXED' "
+        "ORDER BY severity, reported_at LIMIT 8"
+    )
+    if not bug_rows:
+        print("  (none)")
+    for bug_id, severity, assignee, desc in bug_rows:
+        owner = assignee or "unassigned"
+        print(f"  {bug_id:<8s} {severity:<3s} {owner:<12s} {desc}")
+
+
 def cmd_freshness(db: BoardDB) -> None:
     print("=== 数据新鲜度 ===\n")
     print(f"  {'Session':<8s}  {'Last status':<20s}  {'Last heartbeat':<20s}  {'Unread'}")
