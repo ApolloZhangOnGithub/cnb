@@ -2,6 +2,36 @@
 
 cnb can run Claude by default or Codex as the second engine option.
 
+## Operational Workflow
+
+cnb enables Codex goals best-effort before launching Codex sessions:
+
+```bash
+codex features enable goals
+```
+
+When a Codex tongxue starts a concrete task, set the turn objective first:
+
+```text
+/goal <one-sentence task objective>
+```
+
+Use the goal as the active contract for the current turn: keep it specific to the
+assigned task, update it if the assignment changes, and keep board messages in
+sync with the current goal by posting status when work starts, blocks, or
+finishes.
+
+Codex does not have Claude's Monitor tool. After assigning work, the device
+supervisor should poll the board directly:
+
+```bash
+cnb board --as <name> inbox
+```
+
+Background Codex tongxue also start by checking their inbox. If there is no
+explicit assignment, they should read the session file and roadmap before
+choosing autonomous docs or maintenance work.
+
 ## Launch Forms
 
 ```bash
@@ -73,3 +103,19 @@ In smoke mode the startup prompt tells the tongxue to read its session/CV and
 inbox, report readiness, and then wait. It explicitly forbids continuing the
 session file, reading `ROADMAP.md` for autonomous work, editing files, running
 tests, or commenting on issues/PRs.
+
+## Board Delivery Nudges
+
+Board delivery is not only passive database state. When `board send` delivers a
+message to a running session, cnb tries to nudge that tmux pane:
+
+- Idle recipients receive the direct inbox command, so the pane opens unread
+  messages immediately.
+- Busy recipients receive a safe-point prompt telling them to run their inbox
+  command at the next safe point.
+- `board task add --to <session> ...` posts the task notification and uses the
+  same nudge path.
+
+This matters for Codex because an active run may be busy editing, testing, or
+reasoning when the board message arrives. Do not assume a sent message has been
+handled until the recipient reports status, acks the inbox, or updates the task.

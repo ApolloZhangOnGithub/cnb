@@ -38,7 +38,7 @@ cd your-project
 cnb           # initializes .cnb/, launches tongxue team, starts dispatcher
 ```
 
-Codex: `cnb codex` or `CNB_AGENT=codex cnb`. See [Codex engine notes](docs/codex-engine.md).
+Codex: `cnb codex` or `CNB_AGENT=codex cnb`. See [Codex engine notes](docs/codex-engine.md) for launch flags, `/goal` workflow, board nudges, and smoke testing.
 
 Feishu: `cnb feishu setup && cnb feishu start`. See [Feishu bridge](docs/feishu-bridge.md).
 

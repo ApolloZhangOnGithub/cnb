@@ -38,7 +38,7 @@ cd your-project
 cnb           # 初始化 .cnb/、启动同学团队、启动 dispatcher
 ```
 
-Codex：`cnb codex` 或 `CNB_AGENT=codex cnb`。详见 [Codex 引擎](docs/codex-engine.md)。
+Codex：`cnb codex` 或 `CNB_AGENT=codex cnb`。启动参数、`/goal` 工作流、看板 nudge 和 smoke test 详见 [Codex 引擎](docs/codex-engine.md)。
 
 飞书：`cnb feishu setup && cnb feishu start`。详见 [飞书 bridge](docs/feishu-bridge.md)。
 
