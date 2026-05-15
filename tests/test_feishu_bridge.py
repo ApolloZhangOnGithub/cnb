@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import itertools
 import json
+import time
 import urllib.error
 from types import SimpleNamespace
 
@@ -581,10 +582,7 @@ class TestRouting:
         assert result.handled is True
         assert len(notifications) == 1
 
-    def test_standby_agent_defaults_to_opposite_engine(self, tmp_path):
-        cfg_claude = _cfg(tmp_path, agent="claude")
-        cfg_codex = _cfg(tmp_path, agent="codex")
-
+    def test_standby_agent_defaults_to_opposite_engine(self):
         assert feishu_bridge._standby_agent(None, "claude") == "codex"
         assert feishu_bridge._standby_agent(None, "codex") == "claude"
         assert feishu_bridge._standby_agent("codex", "claude") == "codex"
@@ -660,7 +658,9 @@ class TestRouting:
             return name == standby
 
         monkeypatch.setattr(feishu_bridge, "has_session", fake_has_session)
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
 
         def fake_run(cmd, **kwargs):
             if "rename-session" in cmd:
@@ -687,11 +687,13 @@ class TestRouting:
             "check_pilot_health",
             lambda c, s=None: feishu_bridge.BridgeResult(False, "stuck at trust prompt"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(
             feishu_bridge,
             "dispatch_diagnosis_to_standby",
-            lambda c, issue: (dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched")),
+            lambda c, issue: dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched"),
         )
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
 
@@ -711,7 +713,9 @@ class TestRouting:
             "check_pilot_health",
             lambda c, s=None: feishu_bridge.BridgeResult(False, "still stuck"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(
             feishu_bridge,
             "failover_to_standby",
@@ -748,16 +752,20 @@ class TestRouting:
         assert "non-ngrok" in result.detail
 
     def test_tunnel_health_restarts_dead_ngrok(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787)
+        cfg = _cfg(
+            tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787
+        )
         restarts = []
 
         monkeypatch.setattr(feishu_bridge, "ngrok_public_url_for", lambda h, p: "")
         monkeypatch.setattr(
             feishu_bridge,
             "ensure_tunnel",
-            lambda h, p: (restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app")),
+            lambda h, p: restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(feishu_bridge, "_update_config_url", lambda c, u: None)
 
         result = feishu_bridge.check_tunnel_health(cfg)
@@ -1927,6 +1935,76 @@ class TestRouting:
         assert code == 0
         assert calls == [("om_1", "need input")]
         assert feishu_bridge.activity_is_done(cfg, "om_1") is False
+
+    def test_stalled_activity_items_include_stale_and_blocked_requests(self, tmp_path):
+        cfg = _cfg(tmp_path, activity_update_max_seconds=60)
+        now = 1_800_000_000
+        payload = {
+            "messages": {
+                "om_stale": {"started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 90))},
+                "om_fresh": {"started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 10))},
+                "om_blocked": {
+                    "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 5)),
+                    "blocked_at": "2026-05-15 16:00:00",
+                    "blocked_reason": "final reply failed",
+                },
+                "om_done": {
+                    "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 120)),
+                    "done_at": "2026-05-15 16:00:00",
+                },
+            }
+        }
+        feishu_bridge.activity_state_path(cfg).write_text(json.dumps(payload), encoding="utf-8")
+
+        stalled = feishu_bridge.stalled_activity_items(cfg, now=now)
+
+        assert [item["message_id"] for item in stalled] == ["om_stale", "om_blocked"]
+
+    def test_recover_stalled_supervisor_dry_run_does_not_restart(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, activity_update_max_seconds=60)
+        old = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() - 90))
+        feishu_bridge.activity_state_path(cfg).write_text(
+            json.dumps({"messages": {"om_stale": {"started_at": old}}}),
+            encoding="utf-8",
+        )
+        called = False
+
+        def fake_restart(cfg, *, force=False):
+            nonlocal called
+            called = True
+            return feishu_bridge.BridgeResult(True, "restarted")
+
+        monkeypatch.setattr(feishu_bridge, "restart_supervisor", fake_restart)
+
+        result = feishu_bridge.recover_stalled_supervisor(cfg)
+
+        assert result.handled is True
+        assert "未执行重启" in result.detail
+        assert "om_stale" in result.detail
+        assert called is False
+
+    def test_recover_stalled_supervisor_apply_restarts_with_force(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, activity_update_max_seconds=60)
+        old = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() - 90))
+        feishu_bridge.activity_state_path(cfg).write_text(
+            json.dumps({"messages": {"om_stale": {"started_at": old}}}),
+            encoding="utf-8",
+        )
+        calls = []
+
+        def fake_restart(cfg, *, force=False):
+            calls.append(force)
+            return feishu_bridge.BridgeResult(True, "restarted")
+
+        monkeypatch.setattr(feishu_bridge, "restart_supervisor", fake_restart)
+
+        result = feishu_bridge.recover_stalled_supervisor(cfg, apply=True)
+
+        assert result.handled is True
+        assert calls == [True]
+        assert "已为疑似卡住请求重启" in result.detail
+        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
+        assert state["messages"]["om_stale"]["blocked_reason"] == "external supervisor stall recovery requested"
 
     def test_url_verification_returns_challenge(self, tmp_path):
         cfg = _cfg(tmp_path, verification_token="token")
