@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 
 from lib.board_db import BoardDB
 from lib.common import find_claudes_dir
+from lib.wechat_article import WechatArticle, fetch_wechat_article
 
 VALID_CAPTURE_MODES = frozenset({"selection", "article", "page", "snapshot", "visual-only", "redacted"})
 PROJECT_MARKERS = (".cnb", ".claudes")
@@ -316,6 +317,23 @@ def _read_payload(path: str) -> dict[str, Any]:
     return data
 
 
+def _wechat_payload(article: WechatArticle) -> dict[str, Any]:
+    return {
+        "source": f"wechat-{article.method or 'unknown'}",
+        "mode": "article",
+        "title": article.title,
+        "url": article.url,
+        "article_text": article.text,
+        "html": article.html,
+        "metadata": {
+            "wechat_status": article.status,
+            "fetch_method": article.method,
+            "author": article.author,
+            "publish_time": article.publish_time,
+        },
+    }
+
+
 def cmd_capture(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="cnb capture")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -341,6 +359,16 @@ def cmd_capture(argv: list[str] | None = None) -> None:
     show.add_argument("--global", dest="global_store", action="store_true", help="read from ~/.cnb/captures")
     show.add_argument("--json", action="store_true", help="print manifest JSON")
     show.add_argument("--path", action="store_true", help="print capture directory path")
+
+    wechat = sub.add_parser("wechat", help="fetch and ingest a WeChat public-account article URL")
+    wechat.add_argument("url")
+    wechat.add_argument("--project", help="target cnb project root or .cnb/.claudes directory")
+    wechat.add_argument("--global", dest="global_store", action="store_true", help="write to ~/.cnb/captures")
+    wechat.add_argument("--toolbase", help="override fetch_wechat_articles toolbase path")
+    wechat.add_argument("--notify", default="lead", help="board recipient to notify; default: lead")
+    wechat.add_argument("--no-notify", action="store_true", help="write artifacts without sending a board message")
+    wechat.add_argument("--sender", default="dispatcher", help="board sender identity")
+    wechat.add_argument("--json", action="store_true", help="print machine-readable JSON")
 
     args = parser.parse_args(argv)
     try:
@@ -379,6 +407,26 @@ def cmd_capture(argv: list[str] | None = None) -> None:
                 print(path)
                 return
             print((path / "content.md").read_text())
+            return
+        if args.cmd == "wechat":
+            article = fetch_wechat_article(
+                args.url, toolbase=Path(args.toolbase).expanduser() if args.toolbase else None
+            )
+            if not article.ok:
+                raise CaptureError(article.message or f"微信文章读取失败: {article.status}")
+            result = ingest_capture(
+                _wechat_payload(article),
+                project=args.project,
+                global_store=args.global_store,
+                notify=None if args.no_notify else args.notify,
+                sender=args.sender,
+            )
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+                return
+            print(f"OK WeChat article 已保存: {result['path']}")
+            print(f"   id: {result['manifest']['id']}")
+            print(f"   method: {article.method}")
     except CaptureError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
