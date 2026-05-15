@@ -1542,6 +1542,26 @@ def record_activity_update_message(cfg: FeishuBridgeConfig, source_message_id: s
         messages[source_message_id] = item
     item["activity_update_message_id"] = update_message_id
     item["activity_update_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    item.pop("activity_update_error_at", None)
+    item.pop("activity_update_error", None)
+    _write_activity_state(path, payload)
+
+
+def record_activity_update_failure(cfg: FeishuBridgeConfig, source_message_id: str, result: BridgeResult) -> None:
+    if not source_message_id:
+        return
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+    item = messages.get(source_message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[source_message_id] = item
+    item["activity_update_error_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    item["activity_update_error"] = result.detail
     _write_activity_state(path, payload)
 
 
@@ -1566,11 +1586,15 @@ def describe_request_activity(cfg: FeishuBridgeConfig, *, now: float | None = No
     threshold = activity_stale_seconds(cfg)
     stale = [item for item in open_items if item["age_seconds"] >= threshold]
     blocked = [item for item in open_items if item.get("blocked_at")]
+    update_errors = [item for item in open_items if item.get("activity_update_error")]
     oldest = open_items[0]
     parts = [f"{len(open_items)} 个未完成", f"最久 {_format_duration(oldest['age_seconds'])}"]
     if blocked:
         reason = _truncate_inline(str(blocked[0].get("blocked_reason") or "需要人工处理"), 96)
         parts.append(f"{len(blocked)} 个阻塞：{reason}")
+    if update_errors:
+        reason = _truncate_inline(str(update_errors[0].get("activity_update_error") or "unknown"), 96)
+        parts.append(f"{len(update_errors)} 个活动更新失败：{reason}")
     if stale:
         parts.append(f"{len(stale)} 个超过 {_format_duration(threshold)}，需要检查{role_label(cfg)}是否卡住")
     return "；".join(parts) + "。"
@@ -1600,6 +1624,8 @@ def open_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) ->
                 "age_seconds": age,
                 "blocked_at": item.get("blocked_at") or "",
                 "blocked_reason": item.get("blocked_reason") or "",
+                "activity_update_error_at": item.get("activity_update_error_at") or "",
+                "activity_update_error": item.get("activity_update_error") or "",
             }
         )
     return sorted(items, key=lambda item: item["age_seconds"], reverse=True)
@@ -2842,7 +2868,10 @@ def send_activity_update(cfg: FeishuBridgeConfig, event: FeishuInboundEvent, ela
     if activity_is_done(cfg, event.message_id):
         return BridgeResult(False, "activity already done")
     snapshot = build_activity_snapshot(cfg, elapsed_seconds)
-    return send_activity_card(cfg, event, snapshot)
+    result = send_activity_card(cfg, event, snapshot)
+    if not result.handled:
+        record_activity_update_failure(cfg, event.message_id, result)
+    return result
 
 
 def should_send_ack(cfg: FeishuBridgeConfig) -> bool:
