@@ -22,26 +22,66 @@ class DigestScheduler(Concern):
         self.cfg = cfg
         self._last_daily_date: str = ""
         self._last_weekly_date: str = ""
+        self._reserved_digests: set[tuple[str, str, str]] = set()
 
     def _config_path(self) -> Path:
         return self.cfg.claudes_dir / "notifications.toml"
 
-    def _already_sent_today(self, notif_type: str, date_str: str) -> bool:
+    @staticmethod
+    def _ref_id(date_str: str) -> str:
+        return f"digest-{date_str}"
+
+    @classmethod
+    def _reservation_key(cls, notif_type: str, recipient: str, date_str: str) -> str:
+        return f"notification:{notif_type}:{recipient}:{cls._ref_id(date_str)}"
+
+    def _already_sent(self, notif_type: str, recipient: str, date_str: str) -> bool:
         try:
             count = db(self.cfg).scalar(
-                "SELECT COUNT(*) FROM notification_log WHERE notif_type=? AND ref_id=?",
-                (notif_type, f"digest-{date_str}"),
+                "SELECT COUNT(*) FROM notification_log WHERE notif_type=? AND recipient=? AND ref_id=?",
+                (notif_type, recipient, self._ref_id(date_str)),
             )
             return bool(count)
         except Exception:
+            return (notif_type, recipient, date_str) in self._reserved_digests
+
+    def _reserve_digest(self, notif_type: str, recipient: str, date_str: str) -> bool:
+        """Atomically reserve one recipient/day before delivery.
+
+        notification_log remains the human-visible audit trail, but it is not
+        unique in older databases. meta.key is primary-keyed, so INSERT OR
+        IGNORE gives the dispatcher a durable per-recipient cooldown even if
+        the daemon restarts or two dispatcher loops overlap.
+        """
+        token = (notif_type, recipient, date_str)
+        if token in self._reserved_digests:
             return False
+        if self._already_sent(notif_type, recipient, date_str):
+            self._reserved_digests.add(token)
+            return False
+        try:
+            with db(self.cfg).conn() as c:
+                c.execute(
+                    "INSERT OR IGNORE INTO meta(key, value) VALUES (?, ?)",
+                    (
+                        self._reservation_key(notif_type, recipient, date_str),
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    ),
+                )
+                reserved = int(c.execute("SELECT changes()").fetchone()[0]) == 1
+        except Exception as e:
+            warn(f"digest reserve: {e}")
+            reserved = True
+        if reserved:
+            self._reserved_digests.add(token)
+        return reserved
 
     def _record_digest(self, notif_type: str, recipient: str, date_str: str, channel: str) -> None:
         try:
             with db(self.cfg).conn() as c:
                 c.execute(
                     "INSERT INTO notification_log(notif_type, recipient, ref_type, ref_id, channel) VALUES(?,?,?,?,?)",
-                    (notif_type, recipient, "digest", f"digest-{date_str}", channel),
+                    (notif_type, recipient, "digest", self._ref_id(date_str), channel),
                 )
         except Exception as e:
             warn(f"digest record: {e}")
@@ -62,10 +102,6 @@ class DigestScheduler(Concern):
             self._last_weekly_date = date_str
 
     def _send_daily(self, date_str: str) -> None:
-        if self._already_sent_today("daily-digest", date_str):
-            log(f"Daily digest already sent for {date_str}, skipping")
-            return
-
         config = load_config(self._config_path())
         members = get_dev_sessions(self.cfg)
         subscribers = config.subscribers_for("daily-digest", members)
@@ -80,25 +116,27 @@ class DigestScheduler(Concern):
             warn(f"digest generation failed: {e}")
             return
 
+        sent = 0
         for member in subscribers:
+            if not self._reserve_digest("daily-digest", member, date_str):
+                log(f"Daily digest already sent to {member} for {date_str}, skipping")
+                continue
             channel = config.channel_for(member)
             if channel == "board-inbox":
                 board_send(self.cfg, member, digest_text)
                 self._record_digest("daily-digest", member, date_str, channel)
+                sent += 1
                 continue
 
             result = deliver_external(config, member, channel, "daily-digest", digest_text, f"digest-{date_str}")
             if result.delivered:
                 self._record_digest("daily-digest", member, date_str, channel)
+                sent += 1
             log(f"[digest] {member}: {result.detail}")
 
-        log(f"Daily digest sent to {len(subscribers)} subscribers")
+        log(f"Daily digest sent to {sent}/{len(subscribers)} subscribers")
 
     def _send_weekly(self, date_str: str) -> None:
-        if self._already_sent_today("weekly-report", date_str):
-            log(f"Weekly report already sent for {date_str}, skipping")
-            return
-
         config = load_config(self._config_path())
         members = get_dev_sessions(self.cfg)
         subscribers = config.subscribers_for("weekly-report", members)
@@ -113,16 +151,22 @@ class DigestScheduler(Concern):
             warn(f"weekly report generation failed: {e}")
             return
 
+        sent = 0
         for member in subscribers:
+            if not self._reserve_digest("weekly-report", member, date_str):
+                log(f"Weekly report already sent to {member} for {date_str}, skipping")
+                continue
             channel = config.channel_for(member)
             if channel == "board-inbox":
                 board_send(self.cfg, member, report_text)
                 self._record_digest("weekly-report", member, date_str, channel)
+                sent += 1
                 continue
 
             result = deliver_external(config, member, channel, "weekly-report", report_text, f"digest-{date_str}")
             if result.delivered:
                 self._record_digest("weekly-report", member, date_str, channel)
+                sent += 1
             log(f"[digest] {member}: {result.detail}")
 
-        log(f"Weekly report sent to {len(subscribers)} subscribers")
+        log(f"Weekly report sent to {sent}/{len(subscribers)} subscribers")

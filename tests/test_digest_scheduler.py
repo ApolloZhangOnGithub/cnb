@@ -133,6 +133,72 @@ class TestDailyDigest:
         sched._send_daily("2026-05-08")
         assert mock_send.call_count == first_count
 
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice", "bob"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    def test_deduplicates_per_recipient(self, mock_send, mock_sessions, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        conn = _init_db(cfg.board_db)
+        conn.execute(
+            "INSERT INTO notification_log(notif_type, recipient, ref_type, ref_id, channel) VALUES(?,?,?,?,?)",
+            ("daily-digest", "alice", "digest", "digest-2026-05-08", "board-inbox"),
+        )
+        conn.commit()
+        sched = DigestScheduler(cfg)
+
+        sched._send_daily("2026-05-08")
+
+        assert mock_send.call_count == 1
+        assert mock_send.call_args[0][1] == "bob"
+
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    def test_reserves_before_delivery(self, mock_send, mock_sessions, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        conn = _init_db(cfg.board_db)
+        sched = DigestScheduler(cfg)
+
+        sched._send_daily("2026-05-08")
+
+        row = conn.execute(
+            "SELECT value FROM meta WHERE key=?",
+            ("notification:daily-digest:alice:digest-2026-05-08",),
+        ).fetchone()
+        assert row is not None
+        assert mock_send.call_count == 1
+        conn.close()
+
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    def test_reservation_survives_scheduler_restart(self, mock_send, mock_sessions, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        _init_db(cfg.board_db)
+
+        DigestScheduler(cfg)._send_daily("2026-05-08")
+        DigestScheduler(cfg)._send_daily("2026-05-08")
+
+        assert mock_send.call_count == 1
+
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send", side_effect=RuntimeError("boom"))
+    def test_failed_delivery_still_cools_down(self, mock_send, mock_sessions, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        conn = _init_db(cfg.board_db)
+        sched = DigestScheduler(cfg)
+
+        try:
+            sched._send_daily("2026-05-08")
+        except RuntimeError:
+            pass
+        DigestScheduler(cfg)._send_daily("2026-05-08")
+
+        assert mock_send.call_count == 1
+        row = conn.execute(
+            "SELECT value FROM meta WHERE key=?",
+            ("notification:daily-digest:alice:digest-2026-05-08",),
+        ).fetchone()
+        assert row is not None
+        conn.close()
+
     @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=[])
     @patch("lib.concerns.digest_scheduler.board_send")
     def test_no_subscribers_no_send(self, mock_send, mock_sessions, tmp_path):
@@ -229,6 +295,19 @@ class TestWeeklyReport:
         first_count = mock_send.call_count
         sched._send_weekly("2026-05-11")
         assert mock_send.call_count == first_count
+
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    def test_weekly_reservation_survives_scheduler_restart(self, mock_send, mock_sessions, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        _init_db(cfg.board_db)
+        toml = cfg.claudes_dir / "notifications.toml"
+        toml.write_text("[defaults]\nweekly-report = true\n")
+
+        DigestScheduler(cfg)._send_weekly("2026-05-11")
+        DigestScheduler(cfg)._send_weekly("2026-05-11")
+
+        assert mock_send.call_count == 1
 
     @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
     @patch("lib.concerns.digest_scheduler.board_send")
