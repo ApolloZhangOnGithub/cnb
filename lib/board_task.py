@@ -70,8 +70,7 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
         if target != name:
             db.post_message(name, target, f"[TASK #{task_id}] {desc}", deliver=True, c=c)
             print(f"OK notified {target}")
-    if target != name:
-        nudge_session(db, target)
+    nudge_session(db, target)
     print_task_queue(db, target)
 
 

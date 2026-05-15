@@ -52,15 +52,15 @@ class TestTaskAdd:
         out = capsys.readouterr().out
         assert "OK task #" in out
 
-    def test_task_add_to_another_session_nudges_assignee(self, db, monkeypatch, capsys):
-        """Task assignment uses the same delivery nudge path as board send."""
-        nudges = []
-        monkeypatch.setattr("lib.board_task.nudge_session", lambda db_arg, target: nudges.append(target))
+    def test_task_add_nudges_assigned_session(self, db, monkeypatch, capsys):
+        calls: list[tuple[object, str]] = []
+
+        monkeypatch.setattr("lib.board_task.nudge_session", lambda db_arg, target: calls.append((db_arg, target)))
 
         _task_add(db, "alice", ["--to", "bob", "task from alice"])
         capsys.readouterr()
 
-        assert nudges == ["bob"]
+        assert calls == [(db, "bob")]
 
     def test_negative_priority(self, db, capsys):
         """Negative priority values are valid and sort lower."""
