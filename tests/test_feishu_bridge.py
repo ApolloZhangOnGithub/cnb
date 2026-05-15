@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import itertools
 import json
+import time
 import urllib.error
 from types import SimpleNamespace
 
@@ -42,6 +43,7 @@ auto_bind_chat = true
 activity_updates = true
 activity_update_seconds = [1, 2]
 activity_update_repeat_seconds = 45
+activity_stale_seconds = 120
 activity_render_style = "codex"
 caffeine_enabled = false
 """
@@ -61,6 +63,7 @@ caffeine_enabled = false
         assert cfg.activity_updates is True
         assert cfg.activity_update_seconds == (1, 2)
         assert cfg.activity_update_repeat_seconds == 45
+        assert cfg.activity_stale_seconds == 120
         assert cfg.activity_render_style == "codex"
         assert cfg.caffeine_enabled is False
         assert cfg.transport == "local_openapi"
@@ -581,10 +584,7 @@ class TestRouting:
         assert result.handled is True
         assert len(notifications) == 1
 
-    def test_standby_agent_defaults_to_opposite_engine(self, tmp_path):
-        cfg_claude = _cfg(tmp_path, agent="claude")
-        cfg_codex = _cfg(tmp_path, agent="codex")
-
+    def test_standby_agent_defaults_to_opposite_engine(self):
         assert feishu_bridge._standby_agent(None, "claude") == "codex"
         assert feishu_bridge._standby_agent(None, "codex") == "claude"
         assert feishu_bridge._standby_agent("codex", "claude") == "codex"
@@ -660,7 +660,9 @@ class TestRouting:
             return name == standby
 
         monkeypatch.setattr(feishu_bridge, "has_session", fake_has_session)
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
 
         def fake_run(cmd, **kwargs):
             if "rename-session" in cmd:
@@ -687,11 +689,13 @@ class TestRouting:
             "check_pilot_health",
             lambda c, s=None: feishu_bridge.BridgeResult(False, "stuck at trust prompt"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(
             feishu_bridge,
             "dispatch_diagnosis_to_standby",
-            lambda c, issue: (dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched")),
+            lambda c, issue: dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched"),
         )
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
 
@@ -711,7 +715,9 @@ class TestRouting:
             "check_pilot_health",
             lambda c, s=None: feishu_bridge.BridgeResult(False, "still stuck"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(
             feishu_bridge,
             "failover_to_standby",
@@ -748,16 +754,20 @@ class TestRouting:
         assert "non-ngrok" in result.detail
 
     def test_tunnel_health_restarts_dead_ngrok(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787)
+        cfg = _cfg(
+            tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787
+        )
         restarts = []
 
         monkeypatch.setattr(feishu_bridge, "ngrok_public_url_for", lambda h, p: "")
         monkeypatch.setattr(
             feishu_bridge,
             "ensure_tunnel",
-            lambda h, p: (restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app")),
+            lambda h, p: restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(feishu_bridge, "_update_config_url", lambda c, u: None)
 
         result = feishu_bridge.check_tunnel_health(cfg)
@@ -1654,12 +1664,47 @@ class TestRouting:
 
         assert feishu_bridge.activity_is_done(cfg, "om_1") is True
 
+    def test_describe_request_activity_lists_stale_message_ids(self, tmp_path):
+        cfg = _cfg(tmp_path, activity_stale_seconds=60)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        feishu_bridge.record_activity_start(cfg, event)
+        path = feishu_bridge.activity_state_path(cfg)
+        payload = json.loads(path.read_text())
+        payload["messages"]["om_1"]["started_at"] = "2026-05-10 06:00:00"
+        path.write_text(json.dumps(payload))
+        now = time.mktime(time.strptime("2026-05-10 06:02:00", "%Y-%m-%d %H:%M:%S"))
+
+        summary = feishu_bridge.describe_request_activity(cfg, now=now)
+
+        assert "1 个超过 1m00s：om_1" in summary
+        assert "需要检查" in summary
+
+    def test_done_activity_is_not_reported_stale(self, tmp_path):
+        cfg = _cfg(tmp_path, activity_stale_seconds=60)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        feishu_bridge.record_activity_start(cfg, event)
+        feishu_bridge.mark_activity_done(cfg, "om_1")
+
+        assert feishu_bridge.stale_activity_items(cfg, now=time.time() + 3600) == []
+
+    def test_stale_activity_notice_records_once(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        feishu_bridge.record_activity_start(cfg, event)
+
+        assert feishu_bridge.record_stale_activity_notice(cfg, "om_1") is True
+        assert feishu_bridge.record_stale_activity_notice(cfg, "om_1") is False
+
     def test_send_activity_update_builds_one_screen_snapshot(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, agent="codex")
         event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
         snapshots = []
 
         feishu_bridge.record_activity_start(cfg, event)
+        path = feishu_bridge.activity_state_path(cfg)
+        payload = json.loads(path.read_text())
+        payload["messages"]["om_1"]["started_at"] = "2026-05-10 06:00:00"
+        path.write_text(json.dumps(payload))
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
 
         def fake_run(cmd, **kwargs):
@@ -1685,6 +1730,36 @@ class TestRouting:
         assert "Working" in text
         assert "CNB tmux" not in text
         assert "团队工作面" not in text
+
+    def test_activity_update_marks_stale_card_once(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, agent="codex", activity_stale_seconds=60)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        snapshots = []
+
+        feishu_bridge.record_activity_start(cfg, event)
+        path = feishu_bridge.activity_state_path(cfg)
+        payload = json.loads(path.read_text())
+        payload["messages"]["om_1"]["started_at"] = "2026-05-10 06:00:00"
+        path.write_text(json.dumps(payload))
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="idle\n", stderr=""),
+        )
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_activity_card",
+            lambda cfg, event, snapshot: snapshots.append(snapshot) or feishu_bridge.BridgeResult(True, "sent"),
+        )
+
+        first = feishu_bridge.send_activity_update(cfg, event, 60)
+        second = feishu_bridge.send_activity_update(cfg, event, 120)
+
+        assert first.detail == "sent; stale activity surfaced"
+        assert second.detail == "sent"
+        assert snapshots[0].sections[0].title == "飞书请求可能卡住"
+        assert "om_1" in snapshots[0].sections[0].body
 
     def test_activity_card_uses_feishu_interactive_schema(self, tmp_path):
         cfg = _cfg(tmp_path, activity_render_style="claude")
