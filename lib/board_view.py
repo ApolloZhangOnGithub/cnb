@@ -13,6 +13,7 @@ SHELL_COMMANDS = {"zsh", "bash", "sh", "-zsh", "-bash", ""}
 SPINNER_RE = re.compile(r"^\s*(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|●)", re.MULTILINE)
 WORK_LABEL_RE = re.compile(r"^\s*[•●]\s+(Working|Thinking|Running)\b", re.IGNORECASE | re.MULTILINE)
 PROMPT_WITH_INPUT_RE = re.compile(r"^\s*❯ .{3,}", re.MULTILINE)
+STALL_HEARTBEAT_SECONDS = 10 * 60
 
 
 def _git(project_root: Path, *args: str) -> str:
@@ -83,6 +84,59 @@ def _heartbeat_status(last_heartbeat: str | None, prefix: str, name: str) -> tup
     if tmux_state:
         return tmux_state
     return "· offline", ago
+
+
+def _parse_board_time(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _age_seconds(value: str | None, now: datetime) -> int | None:
+    parsed = _parse_board_time(value)
+    if parsed is None:
+        return None
+    return max(0, int((now - parsed).total_seconds()))
+
+
+def _format_age(seconds: int | None) -> str:
+    if seconds is None:
+        return "unknown"
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    return f"{seconds // 3600}h"
+
+
+def _latest_unread_message_age(db: BoardDB, session: str, now: datetime) -> int | None:
+    row = db.query_one(
+        "SELECT m.ts FROM inbox i JOIN messages m ON i.message_id=m.id "
+        "WHERE i.session=? AND i.read=0 ORDER BY m.id DESC LIMIT 1",
+        (session,),
+    )
+    if row is None:
+        return None
+    return _age_seconds(row[0], now)
+
+
+def _stall_reason(status: str, heartbeat_age: int | None, unread: int, latest_unread_age: int | None) -> str | None:
+    if unread <= 0:
+        return None
+    heartbeat_stale = heartbeat_age is None or heartbeat_age >= STALL_HEARTBEAT_SECONDS
+    unread_waiting = latest_unread_age is None or latest_unread_age >= 60
+    if heartbeat_stale and unread_waiting and status.startswith("● working"):
+        return "working pane has unread inbox and stale heartbeat"
+    if heartbeat_stale and unread_waiting and status.startswith("● alive"):
+        return "live pane has unread inbox and stale heartbeat"
+    if heartbeat_stale and unread_waiting and "pulse stale" in status:
+        return "stale heartbeat with unread inbox"
+    return None
 
 
 def cmd_overview(db: BoardDB) -> None:
@@ -311,6 +365,42 @@ def cmd_freshness(db: BoardDB) -> None:
     )
     for name, updated, heartbeat, inbox_count in rows:
         print(f"  {name:<8s}  {updated or '(never)':<20s}  {heartbeat or '(never)':<20s}  {inbox_count}")
+
+
+def cmd_stalls(db: BoardDB) -> None:
+    """Show externally visible supervisor stalls that need recovery attention."""
+    assert db.env is not None
+    now = datetime.now()
+    prefix = db.env.prefix
+    rows = db.query(
+        "SELECT s.name, s.status, s.updated_at, s.last_heartbeat, "
+        "(SELECT COUNT(*) FROM inbox i WHERE i.session=s.name AND i.read=0) AS unread "
+        "FROM sessions s WHERE s.name != 'all' ORDER BY s.name"
+    )
+
+    print("=== Supervisor Stall Diagnostics ===\n")
+    print(f"Threshold: heartbeat >= {STALL_HEARTBEAT_SECONDS // 60}m old with unread inbox >= 1m old")
+    print()
+    suspects = 0
+    for name, task, _updated, heartbeat, unread in rows:
+        status, _ago = _heartbeat_status(heartbeat, prefix, name)
+        hb_age = _age_seconds(heartbeat, now)
+        unread_age = _latest_unread_message_age(db, name, now)
+        reason = _stall_reason(status, hb_age, unread or 0, unread_age)
+        if reason is None:
+            continue
+        suspects += 1
+        task = (task or "(no status)")[:72]
+        print(f"- {name}: {reason}")
+        print(
+            f"  state={status}; heartbeat_age={_format_age(hb_age)}; unread={unread}; newest_unread_age={_format_age(unread_age)}"
+        )
+        print(f"  status={task}")
+        print(
+            f"  action=inspect {prefix}-{name} tmux pane, then nudge inbox or restart/replace supervisor if unchanged"
+        )
+    if suspects == 0:
+        print("No supervisor stall suspects.")
 
 
 def cmd_relations(db: BoardDB) -> None:

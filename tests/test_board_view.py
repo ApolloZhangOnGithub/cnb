@@ -26,6 +26,7 @@ from lib.board_view import (
     cmd_prebuild,
     cmd_relations,
     cmd_roster,
+    cmd_stalls,
     cmd_view,
 )
 
@@ -112,6 +113,59 @@ class TestCmdP0:
         cmd_p0(db)
         output = capsys.readouterr().out
         assert "P0 CLEAR" in output
+
+
+class TestCmdStalls:
+    def test_no_suspects_when_inbox_empty(self, db, capsys):
+        db.execute(
+            "UPDATE sessions SET last_heartbeat=?, status='watching' WHERE name='alice'",
+            ((datetime.now() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S"),),
+        )
+
+        cmd_stalls(db)
+
+        output = capsys.readouterr().out
+        assert "No supervisor stall suspects" in output
+
+    @patch("lib.board_view.capture_pane", return_value="• Working (12m • esc to interrupt)")
+    @patch("lib.board_view.pane_command", return_value="node")
+    @patch("lib.board_view.has_session", return_value=True)
+    def test_flags_live_working_session_with_stale_heartbeat_and_unread(self, _has, _cmd, _pane, db, capsys):
+        stale = (datetime.now() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
+        msg_ts = (datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+        db.execute(
+            "UPDATE sessions SET last_heartbeat=?, status='handling Feishu inbound' WHERE name='alice'", (stale,)
+        )
+        msg_id = db.execute(
+            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'user', 'alice', 'reply now')",
+            (msg_ts,),
+        )
+        db.execute("INSERT INTO inbox(session, message_id, read) VALUES ('alice', ?, 0)", (msg_id,))
+
+        cmd_stalls(db)
+
+        output = capsys.readouterr().out
+        assert "alice" in output
+        assert "working pane has unread inbox and stale heartbeat" in output
+        assert "restart/replace supervisor" in output
+
+    @patch("lib.board_view.capture_pane", return_value="• Working (12m • esc to interrupt)")
+    @patch("lib.board_view.pane_command", return_value="node")
+    @patch("lib.board_view.has_session", return_value=True)
+    def test_ignores_recent_unread_message(self, _has, _cmd, _pane, db, capsys):
+        stale = (datetime.now() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
+        msg_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.execute("UPDATE sessions SET last_heartbeat=? WHERE name='alice'", (stale,))
+        msg_id = db.execute(
+            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, 'user', 'alice', 'new')",
+            (msg_ts,),
+        )
+        db.execute("INSERT INTO inbox(session, message_id, read) VALUES ('alice', ?, 0)", (msg_id,))
+
+        cmd_stalls(db)
+
+        output = capsys.readouterr().out
+        assert "No supervisor stall suspects" in output
 
 
 class TestCmdGet:

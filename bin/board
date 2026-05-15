@@ -151,6 +151,15 @@ COMMANDS: list[Command] = [
         hidden=True,
     ),
     Command(
+        "stalls",
+        "lib.board_view",
+        "cmd_stalls",
+        "external supervisor stall diagnostics",
+        "stalls",
+        needs_identity=False,
+        takes_rest=False,
+    ),
+    Command(
         "relations",
         "lib.board_view",
         "cmd_relations",
