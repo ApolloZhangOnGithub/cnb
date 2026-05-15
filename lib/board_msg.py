@@ -8,6 +8,7 @@ from pathlib import Path
 from lib.board_db import BoardDB, ts
 from lib.board_display import print_task_queue, print_unread_inbox
 from lib.common import escape_like, parse_flags, validate_identity
+from lib.fmt import error, heading, ok
 from lib.tmux_utils import capture_pane, has_session, tmux_send
 
 
@@ -71,7 +72,7 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     msg = " ".join(send_args[1:]) if len(send_args) > 1 else ""
 
     if not msg and not attach_file:
-        print("ERROR: 消息不能为空")
+        print(error("ERROR: 消息不能为空"))
         raise SystemExit(1)
 
     attach_ref = ""
@@ -80,7 +81,7 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     if attach_file:
         path = Path(str(attach_file))
         if not path.is_file():
-            print(f"ERROR: file not found: {attach_file}")
+            print(error(f"ERROR: file not found: {attach_file}"))
             raise SystemExit(1)
         data = path.read_bytes()
         h = hashlib.sha256(data).hexdigest()[:12]
@@ -115,7 +116,7 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
         )
         db.deliver_to_inbox(name, to, msg_id, c=c)
 
-    print("OK sent")
+    print(ok("OK sent"))
     if attach_ref:
         print(f"  附件已存储: {stored_path}")
 
@@ -135,7 +136,7 @@ def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
         "UPDATE sessions SET status=?, updated_at=? WHERE name=?",
         (full_status, now, name),
     )
-    print("OK status updated")
+    print(ok("OK status updated"))
 
 
 def cmd_inbox(db: BoardDB, identity: str) -> None:
@@ -177,7 +178,7 @@ def cmd_ack(db: BoardDB, identity: str) -> None:
     else:
         db.execute("UPDATE inbox SET read=1 WHERE session=? AND read=0", (name,))
 
-    print(f"OK {count} 条已清空（完整记录在 messages.log）")
+    print(ok(f"OK {count} 条已清空（完整记录在 messages.log）"))
     marker.unlink(missing_ok=True)
 
 
@@ -218,10 +219,10 @@ def cmd_history(db: BoardDB, args: list[str]) -> None:
     try:
         limit = int(args[1]) if len(args) > 1 else 20
     except ValueError:
-        print(f"ERROR: 无效的数字: {args[1]}")
+        print(error(f"ERROR: 无效的数字: {args[1]}"))
         raise SystemExit(1)
 
-    print(f"=== History: {args[0]} ===\n")
+    print(heading(f"=== History: {args[0]} ===") + "\n")
     print(f"Messages involving {args[0]} (last {limit}):")
     rows = db.query(
         "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 100) "

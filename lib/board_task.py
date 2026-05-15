@@ -4,6 +4,7 @@ from lib.board_db import BoardDB, ts
 from lib.board_display import print_task_queue
 from lib.board_own import auto_pr, verify_task
 from lib.common import is_privileged, is_terminal_task_status, parse_flags, validate_identity
+from lib.fmt import error, heading, ok, warn
 
 
 def _promote_next(db: BoardDB, target: str) -> None:
@@ -64,11 +65,11 @@ def _task_add(db: BoardDB, identity: str, args: list[str]) -> None:
             (target, desc, status, priority),
             c=c,
         )
-        print(f"OK task #{task_id} added to {target} ({status})")
+        print(ok(f"OK task #{task_id} added to {target} ({status})"))
 
         if target != name:
             db.post_message(name, target, f"[TASK #{task_id}] {desc}", deliver=True, c=c)
-            print(f"OK notified {target}")
+            print(ok(f"OK notified {target}"))
     print_task_queue(db, target)
 
 
@@ -86,27 +87,27 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
             (name,),
         )
     if not raw_id:
-        print(f"No active task for {name}.")
+        print(warn(f"No active task for {name}."))
         print_task_queue(db, name)
         return
 
     try:
         task_id = int(raw_id)
     except (ValueError, TypeError):
-        print(f"ERROR: 无效的任务 ID: {raw_id}")
+        print(error(f"ERROR: 无效的任务 ID: {raw_id}"))
         raise SystemExit(1)
     row = db.query_one("SELECT session, status, description FROM tasks WHERE id=?", (task_id,))
     if not row:
-        print(f"ERROR: task #{task_id} not found")
+        print(error(f"ERROR: task #{task_id} not found"))
         raise SystemExit(1)
 
     assignee, status, desc = row
     if assignee != name and not is_privileged(name):
-        print(f"ERROR: task #{task_id} belongs to {assignee}; only owner, Orca, or Coral can mark it done")
+        print(error(f"ERROR: task #{task_id} belongs to {assignee}; only owner, Orca, or Coral can mark it done"))
         raise SystemExit(1)
 
     if is_terminal_task_status(status):
-        print(f"Task #{task_id} is already done.")
+        print(warn(f"Task #{task_id} is already done."))
         print_task_queue(db, assignee)
         return
 
@@ -116,7 +117,7 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
         print("验证中: 运行测试...", flush=True)
         passed, summary = verify_task(env.project_root)
         if not passed:
-            print(f"ERROR: 测试未通过，task #{task_id} 未标记完成")
+            print(error(f"ERROR: 测试未通过，task #{task_id} 未标记完成"))
             print(f"  {summary}")
             print("  使用 --skip-verify 强制跳过")
             return
@@ -125,13 +126,13 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
 
     now = ts()
     db.execute("UPDATE tasks SET status='done', done_at=? WHERE id=?", (now, task_id))
-    print(f"OK task #{task_id} done: {desc}")
+    print(ok(f"OK task #{task_id} done: {desc}"))
 
     # --- Auto-PR: create PR if on a feature branch ---
     if env:
         pr_url = auto_pr(env.project_root, desc, name)
         if pr_url:
-            print(f"OK PR created: {pr_url}")
+            print(ok(f"OK PR created: {pr_url}"))
 
     _promote_next(db, assignee)
     nxt = db.query_one(
@@ -139,9 +140,9 @@ def _task_done(db: BoardDB, identity: str, args: list[str]) -> None:
         (assignee,),
     )
     if nxt:
-        print(f"Next: #{nxt[0]} {nxt[1]}")
+        print(ok(f"Next: #{nxt[0]} {nxt[1]}"))
     else:
-        print(f"No remaining active/pending tasks for {assignee}.")
+        print(warn(f"No remaining active/pending tasks for {assignee}."))
     print_task_queue(db, assignee)
 
 
@@ -162,7 +163,7 @@ def _task_list(db: BoardDB, identity: str, args: list[str]) -> None:
             raise SystemExit(1)
 
     if all_sessions:
-        print("=== Task Queue ===")
+        print(heading("=== Task Queue ==="))
         if include_done:
             rows = db.query(
                 "SELECT session, id, status, priority, description FROM tasks "
