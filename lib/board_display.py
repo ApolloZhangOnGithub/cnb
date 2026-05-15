@@ -1,6 +1,7 @@
 """Shared display helpers for inbox and task queue rendering."""
 
 from lib.board_db import BoardDB
+from lib.fmt import active, done, heading, pending
 
 
 def print_unread_inbox(db: BoardDB, target: str, *, write_ack_marker: bool = False) -> None:
@@ -44,13 +45,18 @@ def print_task_queue(db: BoardDB, target: str, *, include_done: bool = False) ->
             (target,),
         )
 
-    print("\n任务队列:")
+    print("\n" + heading("任务队列:"))
     if not rows:
         print("  (无待办任务)")
         return
     for tid, status, priority, desc, _created, done_at in rows:
         marker = "*" if status == "active" else " "
+        status_text = {
+            "active": active(status),
+            "pending": pending(status),
+            "done": done(status),
+        }.get(status, status)
         if status == "done":
-            print(f"  {marker} #{tid} [{status} p{priority}] {desc} (done {done_at})")
+            print(f"  {marker} #{tid} [{status_text} p{priority}] {desc} (done {done_at})")
         else:
-            print(f"  {marker} #{tid} [{status} p{priority}] {desc}")
+            print(f"  {marker} #{tid} [{status_text} p{priority}] {desc}")
