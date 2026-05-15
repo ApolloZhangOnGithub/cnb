@@ -1674,8 +1674,9 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_activity_update",
-            lambda cfg, event, elapsed: updates.append((event.message_id, elapsed))
-            or feishu_bridge.BridgeResult(True, "activity card updated"),
+            lambda cfg, event, elapsed: (
+                updates.append((event.message_id, elapsed)) or feishu_bridge.BridgeResult(True, "activity card updated")
+            ),
         )
         monkeypatch.setattr(
             feishu_bridge,
