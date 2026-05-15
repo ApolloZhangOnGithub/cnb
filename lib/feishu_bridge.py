@@ -168,6 +168,7 @@ DEFAULT_ACTIVITY_UPDATE_SECONDS = (1,)
 DEFAULT_ACTIVITY_UPDATE_REPEAT_SECONDS = 1
 DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS = 600
 ACTIVITY_STALE_SECONDS = 600
+DEFAULT_ACTIVITY_STALE_SECONDS = 600
 ACTIVITY_WORK_RE = re.compile(r"^\s*[•●◦]\s*(Working|Thinking|Running)\b", re.IGNORECASE | re.MULTILINE)
 ACTIVITY_PROMPT_RE = re.compile(r"^\s*[›❯>]\s*", re.MULTILINE)
 AGENT_PROCESS_RE = re.compile(r"(^|/|\s)(codex|claude)(\s|$)", re.IGNORECASE)
@@ -265,6 +266,7 @@ class FeishuBridgeConfig:
     activity_update_seconds: tuple[int, ...] = DEFAULT_ACTIVITY_UPDATE_SECONDS
     activity_update_repeat_seconds: int = DEFAULT_ACTIVITY_UPDATE_REPEAT_SECONDS
     activity_update_max_seconds: int = DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS
+    activity_stale_seconds: int = DEFAULT_ACTIVITY_STALE_SECONDS
     activity_render_style: str = "auto"
     tui_capture_lines: int = 120
     watch_tmux: str = DEFAULT_WATCH_TMUX
@@ -410,6 +412,13 @@ class FeishuBridgeConfig:
                 _int(
                     _first_value(section, "activity_update_max_seconds", "activity_max_seconds"),
                     DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS,
+                ),
+            ),
+            activity_stale_seconds=max(
+                60,
+                _int(
+                    _first_value(section, "activity_stale_seconds", "stale_activity_seconds"),
+                    DEFAULT_ACTIVITY_STALE_SECONDS,
                 ),
             ),
             activity_render_style=_activity_render_style(
@@ -1484,6 +1493,23 @@ def mark_activity_monitor_closed(cfg: FeishuBridgeConfig, message_id: str, *, re
     _write_activity_state(path, payload)
 
 
+def record_stale_activity_notice(cfg: FeishuBridgeConfig, message_id: str) -> bool:
+    if not message_id:
+        return False
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+    item = messages.get(message_id)
+    if not isinstance(item, dict) or item.get("done_at") or item.get("stale_notice_at"):
+        return False
+    item["stale_notice_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    _write_activity_state(path, payload)
+    return True
+
+
 def activity_is_done(cfg: FeishuBridgeConfig, message_id: str) -> bool:
     if not message_id:
         return True
@@ -1548,8 +1574,17 @@ def describe_request_activity(cfg: FeishuBridgeConfig, *, now: float | None = No
         reason = _truncate_inline(str(blocked[0].get("blocked_reason") or "需要人工处理"), 96)
         parts.append(f"{len(blocked)} 个阻塞：{reason}")
     if stale:
-        parts.append(f"{len(stale)} 个超过 {_format_duration(threshold)}，需要检查{role_label(cfg)}是否卡住")
+        stale_ids = ", ".join(item["message_id"] for item in stale[:5])
+        suffix = f" 等 {len(stale)} 个" if len(stale) > 5 else ""
+        parts.append(
+            f"{len(stale)} 个超过 {_format_duration(threshold)}：{stale_ids}{suffix}，需要检查{role_label(cfg)}是否卡住"
+        )
     return "；".join(parts) + "。"
+
+
+def stale_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) -> list[dict[str, Any]]:
+    threshold = activity_stale_seconds(cfg)
+    return [item for item in open_activity_items(cfg, now=now) if item["age_seconds"] >= threshold]
 
 
 def open_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) -> list[dict[str, Any]]:
@@ -1576,13 +1611,14 @@ def open_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) ->
                 "age_seconds": age,
                 "blocked_at": item.get("blocked_at") or "",
                 "blocked_reason": item.get("blocked_reason") or "",
+                "stale_notice_at": item.get("stale_notice_at") or "",
             }
         )
     return sorted(items, key=lambda item: item["age_seconds"], reverse=True)
 
 
 def activity_stale_seconds(cfg: FeishuBridgeConfig) -> int:
-    return max(60, cfg.activity_update_max_seconds or ACTIVITY_STALE_SECONDS)
+    return max(60, cfg.activity_stale_seconds or ACTIVITY_STALE_SECONDS)
 
 
 def _parse_activity_timestamp(value: Any) -> float | None:
@@ -1608,13 +1644,27 @@ def _format_duration(seconds: int) -> str:
 def build_activity_snapshot(cfg: FeishuBridgeConfig, elapsed_seconds: int = 0) -> ActivitySnapshot:
     style = resolve_activity_render_style(cfg)
     title = f"{elapsed_seconds}s" if elapsed_seconds > 0 else "活动"
+    sections: list[ActivitySection] = []
+    stale = stale_activity_items(cfg)
+    if stale:
+        threshold = _format_duration(activity_stale_seconds(cfg))
+        ids = ", ".join(item["message_id"] for item in stale[:5])
+        suffix = f" 等 {len(stale)} 个" if len(stale) > 5 else ""
+        sections.append(
+            ActivitySection(
+                "飞书请求可能卡住",
+                f"{len(stale)} 个请求超过 {threshold} 尚未 final reply：{ids}{suffix}；可用 cnb feishu activity 或 readback 排障。",
+                "stale",
+            )
+        )
     captured = capture_current_tui_screen(cfg)
     body = captured.detail.strip() if captured.handled else f"无法读取当前 TUI：{captured.detail}"
     body = _truncate_text(body or "(tmux pane has no visible content)", SNAPSHOT_MAX_CHARS)
+    sections.append(ActivitySection("当前一屏", body, "screen"))
     return ActivitySnapshot(
         title=title,
         subtitle="",
-        sections=(ActivitySection("当前一屏", body, "screen"),),
+        sections=tuple(sections),
         style=style,
         elapsed_seconds=elapsed_seconds,
         updated_at=time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -2804,7 +2854,14 @@ def send_activity_update(cfg: FeishuBridgeConfig, event: FeishuInboundEvent, ela
     if activity_is_done(cfg, event.message_id):
         return BridgeResult(False, "activity already done")
     snapshot = build_activity_snapshot(cfg, elapsed_seconds)
-    return send_activity_card(cfg, event, snapshot)
+    result = send_activity_card(cfg, event, snapshot)
+    if (
+        result.handled
+        and elapsed_seconds >= activity_stale_seconds(cfg)
+        and record_stale_activity_notice(cfg, event.message_id)
+    ):
+        return BridgeResult(True, f"{result.detail}; stale activity surfaced")
+    return result
 
 
 def should_send_ack(cfg: FeishuBridgeConfig) -> bool:
@@ -3674,6 +3731,7 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "activity_update_seconds": list(base.activity_update_seconds),
         "activity_update_repeat_seconds": base.activity_update_repeat_seconds,
         "activity_update_max_seconds": base.activity_update_max_seconds,
+        "activity_stale_seconds": base.activity_stale_seconds,
         "activity_render_style": base.activity_render_style,
         "auto_start": True,
         "startup_wait_seconds": base.startup_wait_seconds,
@@ -4469,7 +4527,8 @@ def print_status(cfg: FeishuBridgeConfig) -> None:
     print(
         "活动反馈: "
         f"{activity} ({', '.join(str(v) + 's' for v in cfg.activity_update_seconds)}; "
-        f"之后每 {cfg.activity_update_repeat_seconds}s; 最长 {cfg.activity_update_max_seconds}s)"
+        f"之后每 {cfg.activity_update_repeat_seconds}s; 最长 {cfg.activity_update_max_seconds}s; "
+        f"卡住阈值 {activity_stale_seconds(cfg)}s)"
     )
     print(f"活动渲染: {resolve_activity_render_style(cfg)}")
     readback_scope = "允许 chat" if not cfg.readback_allow_unlisted_chat else "允许显式未列 chat"
