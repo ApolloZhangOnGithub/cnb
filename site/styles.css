@@ -414,6 +414,12 @@ h3 {
   border-color: var(--line);
 }
 
+.button-ghost {
+  color: var(--green-dark);
+  background: rgba(255, 255, 255, 0.38);
+  border-color: #d6c69f;
+}
+
 .hero .button-secondary {
   color: white;
   background: rgba(255, 255, 255, 0.08);
@@ -814,7 +820,10 @@ h3 {
   max-width: 760px;
 }
 
-.demo-copy .button {
+.demo-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-top: 24px;
 }
 
