@@ -7,6 +7,7 @@
 | [Getting started](getting-started.md) | Install, first team, first task |
 | [Commands reference](commands.md) | CLI commands and slash commands |
 | [Pricing and usage](pricing.md) | Cost mapping for Claude Code, Codex, credits |
+| [Knowledge surfaces](knowledge-surfaces.md) | Canonical places for docs, issues, projects, and retired Wiki/Discussions surfaces |
 
 ## Guides
 
@@ -35,3 +36,5 @@ Internal architecture, design decisions, operations, and research live in [`dev/
 | [Ownership design](dev/design-ownership-autonomy.md) | Self-managing module owners |
 | [Device chief](dev/device-chief-and-multidevice-supervisors.md) | Multi-device coordination |
 | [Package publishing](dev/package-publishing.md) | npm release and dist-tag rules |
+
+GitHub Wiki and GitHub Discussions are retired as canonical documentation surfaces. Use the website, README, `docs/`, issues, and projects instead; see [Knowledge surfaces](knowledge-surfaces.md).
