@@ -1908,13 +1908,58 @@ class TestRouting:
         monkeypatch.setattr(
             feishu_bridge,
             "send_reply",
-            lambda cfg, mid, text: feishu_bridge.BridgeResult(True, "reply sent"),
+            lambda cfg, mid, text, *, idempotency_key="": feishu_bridge.BridgeResult(True, "reply sent"),
         )
 
         code = feishu_bridge.main(["--config", str(path), "reply", "om_1", "done"])
 
         assert code == 0
         assert feishu_bridge.activity_is_done(cfg, "om_1") is True
+        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
+        item = state["messages"]["om_1"]
+        assert item["final_reply_result"] == "reply sent"
+        assert item["final_reply_transport"] == cfg.transport
+        assert item["done_at"] == item["final_reply_sent_at"]
+
+    def test_reply_command_keeps_activity_open_when_send_fails(self, tmp_path, monkeypatch, capsys):
+        path = tmp_path / "config.toml"
+        path.write_text("[feishu]\n")
+        cfg = FeishuBridgeConfig.load(config_path=path, project_root=tmp_path)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed")
+        feishu_bridge.record_activity_start(cfg, event)
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_reply",
+            lambda cfg, mid, text, *, idempotency_key="": feishu_bridge.BridgeResult(False, "network down"),
+        )
+
+        code = feishu_bridge.main(["--config", str(path), "reply", "om_1", "done"])
+
+        captured = capsys.readouterr()
+        assert code == 1
+        assert feishu_bridge.activity_is_done(cfg, "om_1") is False
+        assert "activity remains open" in captured.out
+        assert "final Feishu reply failed: network down" in captured.err
+        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
+        item = state["messages"]["om_1"]
+        assert item["blocked_at"]
+        assert item["blocked_reason"] == "final Feishu reply failed: network down"
+
+    def test_final_reply_uses_idempotency_key(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        calls = []
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_reply",
+            lambda cfg, mid, text, *, idempotency_key="": (
+                calls.append(idempotency_key) or feishu_bridge.BridgeResult(True, "reply sent")
+            ),
+        )
+
+        result = feishu_bridge.send_final_reply(cfg, "om_1", "done")
+
+        assert result.handled is True
+        assert calls == [feishu_bridge._final_reply_key("om_1", "done")]
 
     def test_ask_command_keeps_activity_open(self, tmp_path, monkeypatch):
         path = tmp_path / "config.toml"
