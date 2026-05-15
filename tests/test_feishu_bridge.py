@@ -581,10 +581,7 @@ class TestRouting:
         assert result.handled is True
         assert len(notifications) == 1
 
-    def test_standby_agent_defaults_to_opposite_engine(self, tmp_path):
-        cfg_claude = _cfg(tmp_path, agent="claude")
-        cfg_codex = _cfg(tmp_path, agent="codex")
-
+    def test_standby_agent_defaults_to_opposite_engine(self):
         assert feishu_bridge._standby_agent(None, "claude") == "codex"
         assert feishu_bridge._standby_agent(None, "codex") == "claude"
         assert feishu_bridge._standby_agent("codex", "claude") == "codex"
@@ -660,7 +657,9 @@ class TestRouting:
             return name == standby
 
         monkeypatch.setattr(feishu_bridge, "has_session", fake_has_session)
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
 
         def fake_run(cmd, **kwargs):
             if "rename-session" in cmd:
@@ -687,11 +686,13 @@ class TestRouting:
             "check_pilot_health",
             lambda c, s=None: feishu_bridge.BridgeResult(False, "stuck at trust prompt"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(
             feishu_bridge,
             "dispatch_diagnosis_to_standby",
-            lambda c, issue: (dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched")),
+            lambda c, issue: dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched"),
         )
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
 
@@ -711,7 +712,9 @@ class TestRouting:
             "check_pilot_health",
             lambda c, s=None: feishu_bridge.BridgeResult(False, "still stuck"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(
             feishu_bridge,
             "failover_to_standby",
@@ -748,16 +751,20 @@ class TestRouting:
         assert "non-ngrok" in result.detail
 
     def test_tunnel_health_restarts_dead_ngrok(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787)
+        cfg = _cfg(
+            tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787
+        )
         restarts = []
 
         monkeypatch.setattr(feishu_bridge, "ngrok_public_url_for", lambda h, p: "")
         monkeypatch.setattr(
             feishu_bridge,
             "ensure_tunnel",
-            lambda h, p: (restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app")),
+            lambda h, p: restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(feishu_bridge, "_update_config_url", lambda c, u: None)
 
         result = feishu_bridge.check_tunnel_health(cfg)
@@ -1891,6 +1898,58 @@ class TestRouting:
                 "command": "resume",
             }
         ]
+
+    def test_describe_prompt_freshness_detects_current_and_stale_hash(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        current = feishu_bridge.get_current_prompt_hash(cfg)
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        assert "未知" in feishu_bridge.describe_prompt_freshness(cfg)
+
+        feishu_bridge._save_prompt_hash(cfg, current)
+        assert "最新" in feishu_bridge.describe_prompt_freshness(cfg)
+
+        feishu_bridge._save_prompt_hash(cfg, "0" * 16)
+        stale = feishu_bridge.describe_prompt_freshness(cfg)
+        assert "过期" in stale
+        assert current in stale
+
+    def test_start_pilot_saves_prompt_hash(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, startup_wait_seconds=0)
+        calls = []
+
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: False)
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda cmd, **kwargs: calls.append(cmd) or SimpleNamespace(returncode=0, stdout="", stderr=""),
+        )
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_pilot_startup_notification",
+            lambda cfg: feishu_bridge.BridgeResult(True, "notified"),
+        )
+
+        result = feishu_bridge.start_pilot_if_needed(cfg)
+
+        assert result.handled is True
+        assert calls
+        assert feishu_bridge.get_stored_prompt_hash(cfg) == feishu_bridge.get_current_prompt_hash(cfg)
+
+    def test_restart_supervisor_refuses_busy_tui_without_force(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda cmd, **kwargs: SimpleNamespace(returncode=0, stdout="• Working (12s)\n", stderr=""),
+        )
+
+        result = feishu_bridge.restart_supervisor(cfg)
+
+        assert result.handled is False
+        assert "appears busy" in result.detail
 
     def test_reply_command_marks_activity_done(self, tmp_path, monkeypatch):
         path = tmp_path / "config.toml"
