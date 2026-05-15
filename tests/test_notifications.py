@@ -272,6 +272,38 @@ class TestProductionLineIntake:
 
         fetch.assert_not_called()
 
+    @patch("lib.concerns.notifications.db")
+    def test_notifies_manager_when_production_line_drained(self, mock_db, tmp_path):
+        cfg = make_cfg(tmp_path, ["project-manager"])
+        fake_db = MagicMock()
+        fake_db.scalar.return_value = 0
+        fake_db.query.return_value = []
+        mock_db.return_value = fake_db
+        intake = ProductionLineIntake(cfg)
+
+        with patch.object(intake, "_fetch_open_issues", return_value=[]):
+            intake.tick(1000)
+
+        fake_db.post_message.assert_called_once()
+        assert fake_db.post_message.call_args[0][0] == "dispatcher"
+        assert fake_db.post_message.call_args[0][1] == "project-manager"
+        assert "production-line queue drained" in fake_db.post_message.call_args[0][2]
+
+    @patch("lib.concerns.notifications.db")
+    def test_drained_notice_is_rate_limited(self, mock_db, tmp_path):
+        cfg = make_cfg(tmp_path, ["project-manager"])
+        fake_db = MagicMock()
+        fake_db.scalar.return_value = 0
+        fake_db.query.return_value = []
+        mock_db.return_value = fake_db
+        intake = ProductionLineIntake(cfg)
+
+        with patch.object(intake, "_fetch_open_issues", return_value=[]):
+            intake.tick(1000)
+            intake.tick(1000 + ProductionLineIntake.DRAINED_NOTICE_COOLDOWN - 1)
+
+        assert fake_db.post_message.call_count == 1
+
 
 # ===========================================================================
 # QueuedMessageFlusher
