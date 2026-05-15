@@ -7,6 +7,7 @@ from pathlib import Path
 
 from lib.board_db import BoardDB
 from lib.common import validate_identity
+from lib.fmt import error, heading, ok, warn
 from lib.tmux_utils import capture_pane, has_session, pane_command
 
 SHELL_COMMANDS = {"zsh", "bash", "sh", "-zsh", "-bash", ""}
@@ -90,7 +91,7 @@ def cmd_overview(db: BoardDB) -> None:
     assert db.env is not None
     prefix = db.env.prefix
     now = datetime.now().strftime("%H:%M")
-    print(f"=== {db.env.project_root.name}  {now} ===")
+    print(heading(f"=== {db.env.project_root.name}  {now} ==="))
     print()
 
     # ── sessions ──
@@ -116,7 +117,7 @@ def cmd_overview(db: BoardDB) -> None:
     rows = db.query("SELECT ts, sender, recipient, substr(body, 1, 80) FROM messages ORDER BY id DESC LIMIT 5")
     if rows:
         print()
-        print("Recent:")
+        print(heading("Recent:"))
         for ts_val, sender, recipient, body in reversed(rows):
             print(f"  [{ts_val}] {sender} → {recipient}: {body}")
 
@@ -124,28 +125,28 @@ def cmd_overview(db: BoardDB) -> None:
     proposals = db.query("SELECT number || '-' || slug FROM proposals WHERE status='OPEN'")
     if proposals:
         print()
-        print(f"Open proposals: {len(proposals)}")
+        print(heading(f"Open proposals: {len(proposals)}"))
 
     # ── dispatcher ──
     dispatcher_sess = f"{prefix}-dispatcher"
     print()
     if has_session(dispatcher_sess):
-        print(f"  dispatcher: running ({dispatcher_sess})")
+        print(ok(f"  dispatcher: running ({dispatcher_sess})"))
     else:
         running = any(
             has_session(f"{prefix}-{n}") for (n,) in db.query("SELECT name FROM sessions WHERE name != 'all'")
         )
         if running:
-            print("  dispatcher: NOT RUNNING — run: cnb dispatcher")
+            print(error("  dispatcher: NOT RUNNING — run: cnb dispatcher"))
         else:
-            print("  No sessions running. Start with: cnb swarm start")
+            print(warn("  No sessions running. Start with: cnb swarm start"))
 
 
 def cmd_view(db: BoardDB, identity: str) -> None:
     if identity:
         validate_identity(db, identity)
     assert db.env is not None
-    print("=== Board ===\n")
+    print(heading("=== Board ===\n"))
 
     roadmap = db.env.project_root / "ROADMAP.md"
     p0_locked = False
@@ -154,17 +155,17 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         m = re.search(r"端到端状态.*?(?=\n## [A-Z]|\Z)", text, re.DOTALL)
         if m and re.search(r"从未|未验证|阻塞", m.group()):
             p0_locked = True
-            print("!!! P0 LOCKED — 端到端未验证，全员聚焦 P0 !!!")
+            print(error("!!! P0 LOCKED — 端到端未验证，全员聚焦 P0 !!!"))
             print("    运行 ./board p0 查看详情\n")
 
     if identity:
         me = identity.lower()
         count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (me,))
         if count:
-            print(f">>> 你有 {count} 条未读消息，运行 ./board inbox 查看 <<<\n")
+            print(warn(f">>> 你有 {count} 条未读消息，运行 ./board inbox 查看 <<<\n"))
 
     prefix = db.env.prefix
-    print("Status:")
+    print(heading("Status:"))
     for name, task, last_hb in db.query("SELECT name, status, last_heartbeat FROM sessions ORDER BY name"):
         cap = name[0].upper() + name[1:] if name else name
         status, ago = _heartbeat_status(last_hb, prefix, name)
@@ -178,7 +179,7 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         print(f"  {status:12s} {cap:<10s} {task}{tag}{ago_str}")
     print()
 
-    print("Recent messages:")
+    print(heading("Recent messages:"))
     rows = db.query(
         "SELECT '[' || ts || '] ' || sender || ' → ' || recipient || ': ' || substr(body, 1, 80) "
         "FROM messages ORDER BY id DESC LIMIT 8"
@@ -187,7 +188,7 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         print(f"  {line}")
     print()
 
-    print("Proposals:")
+    print(heading("Proposals:"))
     rows = db.query(
         "SELECT number || '-' || slug, status, "
         "(SELECT COUNT(*) FROM votes v WHERE v.proposal_id=p.id AND v.decision='SUPPORT'), "
@@ -195,7 +196,7 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         "FROM proposals p WHERE status='OPEN'"
     )
     if not rows:
-        print("  (none)")
+        print(warn("  (none)"))
     else:
         for pname, _, s, o in rows:
             print(f"  {pname} [OPEN] S={s} O={o}")
@@ -205,7 +206,7 @@ def cmd_p0(db: BoardDB) -> None:
     assert db.env is not None
     roadmap = db.env.project_root / "ROADMAP.md"
     if not roadmap.is_file():
-        print("ERROR: ROADMAP.md not found")
+        print(error("ERROR: ROADMAP.md not found"))
         raise SystemExit(1)
 
     text = roadmap.read_text()
@@ -214,74 +215,74 @@ def cmd_p0(db: BoardDB) -> None:
     locked = bool(re.search(r"从未|未验证|阻塞", status_block))
 
     if locked:
-        print("=== P0 LOCKED ===\n")
-        print("Status from ROADMAP.md:")
+        print(error("=== P0 LOCKED ===\n"))
+        print(heading("Status from ROADMAP.md:"))
         for line in status_block.split("\n"):
             print(f"  {line}")
-        print("\nSession alignment:")
+        print(heading("\nSession alignment:"))
         for name, task in db.query("SELECT name, status FROM sessions ORDER BY name"):
             cap = name[0].upper() + name[1:] if name else name
             task = task or "(no status)"
             tag = "[OK]" if "[P0]" in task else "[!!]"
             print(f"  {cap:<8s} {tag} {task}")
     else:
-        print("=== P0 CLEAR ===")
-        print("No active P0 blocker. Normal work allowed.")
+        print(ok("=== P0 CLEAR ==="))
+        print(ok("No active P0 blocker. Normal work allowed."))
 
 
 def cmd_prebuild(db: BoardDB) -> None:
     assert db.env is not None
-    print("=== Pre-build Check ===\n")
+    print(heading("=== Pre-build Check ===\n"))
     has_fail = False
     pr = db.env.project_root
 
     dirty = _git(pr, "status", "--porcelain")
     code = "\n".join(l for l in dirty.splitlines() if not l.startswith("??") and "board/" not in l)
     if code:
-        print("FAIL: uncommitted code changes:")
+        print(error("FAIL: uncommitted code changes:"))
         for l in code.splitlines():
             print(f"  {l}")
         has_fail = True
     else:
-        print("OK: working tree clean (code files)")
+        print(ok("OK: working tree clean (code files)"))
 
-    print("\nLast 3 commits:")
+    print(heading("\nLast 3 commits:"))
     log = _git(pr, "log", "--oneline", "-3")
     for l in log.splitlines():
         print(f"  {l}")
     print()
     if has_fail:
-        print("NOT ready to build. Fix issues above first.")
+        print(error("NOT ready to build. Fix issues above first."))
         raise SystemExit(1)
-    print("Ready to build.")
+    print(ok("Ready to build."))
 
 
 def cmd_dirty(db: BoardDB) -> None:
     assert db.env is not None
-    print("=== Uncommitted Changes ===\n")
+    print(heading("=== Uncommitted Changes ===\n"))
     pr = db.env.project_root
     changes = _git(pr, "status", "--porcelain").strip()
     if not changes:
-        print("Working tree clean.")
+        print(ok("Working tree clean."))
         return
     code = "\n".join(l for l in changes.splitlines() if "board/" not in l)
     if code:
-        print("Code:")
+        print(heading("Code:"))
         for l in code.splitlines():
             print(f"  {l}")
         print()
     board = "\n".join(l for l in changes.splitlines() if "board/" in l)
     if board:
-        print(f"Board: {len(board.splitlines())} files (normal churn)")
+        print(warn(f"Board: {len(board.splitlines())} files (normal churn)"))
     print()
     log = _git(pr, "log", "--oneline", "-1").strip()
-    print(f"Last commit: {log}")
+    print(heading(f"Last commit: {log}"))
 
 
 def cmd_dashboard(db: BoardDB) -> None:
     assert db.env is not None
     prefix = db.env.prefix
-    print(f"=== Team Dashboard {datetime.now().strftime('%H:%M')} ===\n")
+    print(heading(f"=== Team Dashboard {datetime.now().strftime('%H:%M')} ===\n"))
     for row in db.query("SELECT name, status, last_heartbeat FROM sessions ORDER BY name"):
         name, task, last_hb = row[0], row[1], row[2]
         status, ago = _heartbeat_status(last_hb, prefix, name)
@@ -295,13 +296,13 @@ def cmd_dashboard(db: BoardDB) -> None:
     print()
     dispatcher_sess = f"{prefix}-dispatcher"
     if has_session(dispatcher_sess):
-        print(f"  dispatcher: running ({dispatcher_sess})")
+        print(ok(f"  dispatcher: running ({dispatcher_sess})"))
     else:
-        print("  dispatcher: NOT RUNNING")
+        print(error("  dispatcher: NOT RUNNING"))
 
 
 def cmd_freshness(db: BoardDB) -> None:
-    print("=== 数据新鲜度 ===\n")
+    print(heading("=== 数据新鲜度 ===\n"))
     print(f"  {'Session':<8s}  {'Last status':<20s}  {'Last heartbeat':<20s}  {'Unread'}")
     print(f"  {'-------':<8s}  {'-----------':<20s}  {'--------------':<20s}  {'------'}")
     rows = db.query(
@@ -314,7 +315,7 @@ def cmd_freshness(db: BoardDB) -> None:
 
 
 def cmd_relations(db: BoardDB) -> None:
-    print("=== 通信关系图 ===\n")
+    print(heading("=== 通信关系图 ===\n"))
     rows = db.query(
         "SELECT sender, recipient, COUNT(*) as c FROM messages "
         "WHERE sender != 'SYSTEM' GROUP BY sender, recipient ORDER BY c DESC LIMIT 20"
@@ -325,7 +326,7 @@ def cmd_relations(db: BoardDB) -> None:
 
 def cmd_roster(db: BoardDB) -> None:
     assert db.env is not None
-    print("=== 员工状态 ===")
+    print(heading("=== 员工状态 ==="))
     prefix = db.env.prefix
     rows = db.query(
         "SELECT s.name, CASE WHEN su.name IS NOT NULL THEN 'SUSPENDED' ELSE 'active' END "
