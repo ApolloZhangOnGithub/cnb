@@ -49,7 +49,7 @@ cnb codex
 CNB_AGENT=codex cnb
 ```
 
-See [Codex engine notes](codex-engine.md) for launch flags and smoke testing.
+See [Codex engine notes](codex-engine.md) for launch flags, `/goal` workflow, board nudges, and smoke testing.
 
 ### Connecting Feishu
 
@@ -73,7 +73,7 @@ The user-facing session for this Mac. Per-machine (not per-project), it manages 
 
 ### Board
 
-The shared SQLite database (`.cnb/board.db`) where tongxue exchange messages, track tasks, report status, and manage ownership.
+The shared SQLite database (`.cnb/board.db`) where tongxue exchange messages, track tasks, report status, publish progress snapshots, and manage ownership.
 
 ### Ownership
 
