@@ -73,6 +73,16 @@ COMMANDS: list[Command] = [
     ),
     Command("p0", "lib.board_view", "cmd_p0", "P0 lock status", "p0", needs_identity=False, takes_rest=False),
     Command(
+        "progress",
+        "lib.board_progress",
+        "cmd_progress",
+        "single progress tracking view",
+        "progress",
+        needs_identity=False,
+        takes_rest=False,
+        aliases=["tracking"],
+    ),
+    Command(
         "pre-build",
         "lib.board_view",
         "cmd_prebuild",
