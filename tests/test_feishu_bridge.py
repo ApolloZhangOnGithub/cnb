@@ -1693,6 +1693,45 @@ class TestRouting:
         assert "CNB tmux" not in text
         assert "团队工作面" not in text
 
+    def test_send_activity_update_records_send_failure(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path, agent="codex")
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        feishu_bridge.record_activity_start(cfg, event)
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+        monkeypatch.setattr(
+            feishu_bridge, "capture_current_tui_screen", lambda cfg: feishu_bridge.BridgeResult(True, "ok")
+        )
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_activity_card",
+            lambda cfg, event, snapshot: feishu_bridge.BridgeResult(False, "OpenAPI timeout"),
+        )
+
+        result = feishu_bridge.send_activity_update(cfg, event, 20)
+
+        assert result.handled is False
+        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
+        item = state["messages"]["om_1"]
+        assert item["activity_update_error"] == "OpenAPI timeout"
+        assert item["activity_update_error_at"]
+        assert "活动更新失败" in feishu_bridge.describe_request_activity(cfg)
+        assert "OpenAPI timeout" in feishu_bridge.describe_request_activity(cfg)
+
+    def test_activity_update_success_clears_previous_send_failure(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        feishu_bridge.record_activity_start(cfg, event)
+        feishu_bridge.record_activity_update_failure(
+            cfg, event.message_id, feishu_bridge.BridgeResult(False, "first fail")
+        )
+
+        feishu_bridge.record_activity_update_message(cfg, event.message_id, "om_status")
+
+        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
+        item = state["messages"]["om_1"]
+        assert "activity_update_error" not in item
+        assert "activity_update_error_at" not in item
+
     def test_activity_card_uses_feishu_interactive_schema(self, tmp_path):
         cfg = _cfg(tmp_path, activity_render_style="claude")
         snapshot = feishu_bridge.ActivitySnapshot(
