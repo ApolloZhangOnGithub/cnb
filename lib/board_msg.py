@@ -33,7 +33,14 @@ def _is_idle(sess: str) -> bool:
     return "❯" in text or "Press up to edit" in text
 
 
-def _nudge_session(db: BoardDB, recipient: str) -> None:
+def _nudge_text(board: Path, name: str, *, idle: bool) -> str:
+    command = f"{board} --as {name} inbox"
+    if idle:
+        return command
+    return f"你有新的 board 消息或任务。请在当前安全点运行：{command}"
+
+
+def nudge_session(db: BoardDB, recipient: str) -> None:
     assert db.env is not None
     if recipient == "all":
         sessions = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all'")]
@@ -47,9 +54,7 @@ def _nudge_session(db: BoardDB, recipient: str) -> None:
         sess = f"{prefix}-{name}"
         if not has_session(sess):
             continue
-        if not _is_idle(sess):
-            continue
-        tmux_send(sess, f"{board} --as {name} inbox")
+        tmux_send(sess, _nudge_text(board, name, idle=_is_idle(sess)))
 
 
 def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -119,7 +124,7 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     if attach_ref:
         print(f"  附件已存储: {stored_path}")
 
-    _nudge_session(db, to)
+    nudge_session(db, to)
 
 
 def cmd_status(db: BoardDB, identity: str, args: list[str]) -> None:
