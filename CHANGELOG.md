@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.52-dev (unreleased)
+## 0.5.53-dev (unreleased)
 
 ### Features
 
@@ -8,6 +8,7 @@
 - **Mac Companion version management** — Added VERSION file, build_meta.json, version display in settings, externalized build to `~/Applications/` and `~/.cnb/build-cache/`.
 - **Mac Companion app icon** — Generated AppIcon.icns from project favicon and embedded it in the app bundle.
 - **`/cnb-supervisor` command** — New slash command to check device supervisor runtime status.
+- **Feishu `/goal` command** — Added a Feishu-side active-goal shortcut that persists the current work target and includes it in later supervisor messages.
 
 ### Documentation
 
@@ -15,6 +16,7 @@
 - **Docs reorganization** — Separated user docs (docs/) from internal docs (docs/dev/) and research (docs/dev/research/).
 - **New user docs** — Added getting-started.md and commands.md.
 - **CONTRIBUTING fix** — Updated demo instance paths from legacy `.claudes/` to `.cnb/`.
+- **Site contributing redirect** — Restored the compact `site/contributing.html` redirect required by site-doc checks.
 
 ## 0.5.51-dev (unreleased)
 

@@ -258,6 +258,7 @@ Feishu-side commands are optional precise shortcuts:
 
 | Command | Result |
 |---------|--------|
+| `/goal`, `/goal <text>`, or `/goal done` | Show, set, or clear the active work goal that is included with later routed messages. |
 | `/cnb_tui` or `/c_tui` | Reply with the current device supervisor TUI snapshot. |
 | `/cnb_watch` or `/c_watch` | Start the built-in read-only Web TUI viewer and reply with the link. |
 | `/cnb_status` or `/c_status` | Reply with the device, tmux, team, and foreground-session status summary. |

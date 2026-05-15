@@ -150,7 +150,6 @@ DEFAULT_READBACK_LIMIT = 12
 MAX_READBACK_LIMIT = 50
 DEFAULT_RESOURCE_HANDOFF_MAX_BYTES = 25 * 1024 * 1024
 MAX_RESOURCE_HANDOFF_BYTES = 100 * 1024 * 1024
-CAFFEINATE_ARGS = ("-dims",)
 SHORT_REPLY_MAX_CHARS = 280
 SHORT_REPLY_MAX_LINES = 4
 ACK_PREFIX = SUPERVISOR_ROLE.ack_prefix
@@ -160,6 +159,7 @@ TUI_COMMANDS = frozenset({"/cnb_tui", "/c_tui"})
 WATCH_COMMANDS = frozenset({"/cnb_watch", "/c_watch"})
 HELP_COMMANDS = frozenset({"/cnb_help", "/c_help"})
 STATUS_COMMANDS = frozenset({"/cnb_status", "/c_status"})
+GOAL_COMMANDS = frozenset({"/goal", "/cnb_goal", "/c_goal"})
 SNAPSHOT_MAX_CHARS = 3500
 ACTIVITY_CARD_LINE_MAX_CHARS = 360
 ACTIVITY_CARD_SCREEN_MAX_LINES = 12
@@ -281,7 +281,6 @@ class FeishuBridgeConfig:
     readback_max_limit: int = MAX_READBACK_LIMIT
     resource_handoff_enabled: bool = True
     resource_handoff_max_bytes: int = DEFAULT_RESOURCE_HANDOFF_MAX_BYTES
-    caffeine_enabled: bool = True
     standby_enabled: bool = False
     standby_agent: str = DEFAULT_STANDBY_AGENT
     standby_pilot_tmux: str = ""
@@ -440,7 +439,9 @@ class FeishuBridgeConfig:
             standby_enabled=_bool(section.get("standby_enabled"), False),
             standby_agent=_standby_agent(section.get("standby_agent"), agent),
             standby_pilot_tmux=str(section.get("standby_pilot_tmux") or ""),
-            heartbeat_interval_seconds=max(10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)),
+            heartbeat_interval_seconds=max(
+                10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)
+            ),
         )
 
 
@@ -1195,7 +1196,9 @@ def run_heartbeat_check(cfg: FeishuBridgeConfig) -> BridgeResult:
         if result.handled:
             start_standby_if_needed(cfg)
         return result
-    return BridgeResult(True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})")
+    return BridgeResult(
+        True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})"
+    )
 
 
 def check_tunnel_health(cfg: FeishuBridgeConfig) -> BridgeResult:
@@ -1276,6 +1279,9 @@ def format_for_pilot(
     if handoff_summary:
         parts.extend(["", "[Feishu resources handed to Claude Code]", handoff_summary])
     if cfg is not None:
+        goal_summary = active_goal_summary(cfg)
+        if goal_summary:
+            parts.extend(["", "[CNB active goal]", goal_summary])
         parts.extend(["", "[CNB bridge affordances]", bridge_affordance_text(cfg)])
     parts.extend(["", event.text])
     return "\n".join(parts)
@@ -1299,9 +1305,20 @@ def command_name(text: str) -> str:
     return head.lower()
 
 
+def command_args(text: str) -> str:
+    parts = text.strip().split(maxsplit=1)
+    return parts[1].strip() if len(parts) > 1 else ""
+
+
 def is_bridge_command(text: str) -> bool:
     name = command_name(text)
-    return name in TUI_COMMANDS or name in WATCH_COMMANDS or name in HELP_COMMANDS or name in STATUS_COMMANDS
+    return (
+        name in TUI_COMMANDS
+        or name in WATCH_COMMANDS
+        or name in HELP_COMMANDS
+        or name in STATUS_COMMANDS
+        or name in GOAL_COMMANDS
+    )
 
 
 def route_event(event: FeishuInboundEvent, cfg: FeishuBridgeConfig, *, dry_run: bool = False) -> BridgeResult:
@@ -1352,6 +1369,10 @@ def activity_state_path(cfg: FeishuBridgeConfig) -> Path:
     return cfg.config_path.with_name("feishu_activity.json")
 
 
+def goal_state_path(cfg: FeishuBridgeConfig) -> Path:
+    return cfg.config_path.with_name("feishu_goal.json")
+
+
 def _load_activity_state(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"messages": {}}
@@ -1370,6 +1391,48 @@ def _load_activity_state(path: Path) -> dict[str, Any]:
 def _write_activity_state(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+def load_goal_state(cfg: FeishuBridgeConfig) -> dict[str, Any]:
+    path = goal_state_path(cfg)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def current_goal_text(cfg: FeishuBridgeConfig) -> str:
+    text = load_goal_state(cfg).get("text")
+    return text.strip() if isinstance(text, str) else ""
+
+
+def write_goal_state(cfg: FeishuBridgeConfig, event: FeishuInboundEvent, text: str) -> None:
+    payload = {
+        "text": text.strip(),
+        "message_id": event.message_id,
+        "chat_id": event.chat_id,
+        "sender_id": event.sender_id,
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    path = goal_state_path(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+def clear_goal_state(cfg: FeishuBridgeConfig) -> None:
+    path = goal_state_path(cfg)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def active_goal_summary(cfg: FeishuBridgeConfig) -> str:
+    text = current_goal_text(cfg)
+    return f"当前目标：{text}" if text else ""
 
 
 def record_activity_start(cfg: FeishuBridgeConfig, event: FeishuInboundEvent) -> None:
@@ -2713,34 +2776,24 @@ def _split_activity_card_lines(body: str) -> list[str]:
 
 
 def _activity_card_screen_markdown(section: ActivitySection) -> str:
-    lines, _omitted = _activity_card_screen_lines(section.body)
+    lines, omitted = _activity_card_screen_lines(section.body)
     if not lines:
-        return "(当前 TUI 没有可见内容)"
+        return f"**{_card_escape(section.title)}**\n(当前 TUI 没有可见内容)"
+    prefix = f"**{_card_escape(section.title)}（最后 {len(lines)} 行）**"
     rendered: list[str] = []
-    for line in lines:
-        rendered.append(_render_activity_line(line))
-    return "\n".join(rendered)
+    if omitted > 0:
+        rendered.append(f"<font color='grey'>… 已省略上方 {omitted} 行；完整实时画面用 /cnb_watch</font>")
+    for index, line in enumerate(lines, 1):
+        rendered.append(f"<font color='grey'>{index:02d}</font> {_card_escape_terminal_line(line)}")
+    return prefix + "\n" + "\n".join(rendered)
 
 
 def _activity_card_screen_lines(body: str) -> tuple[list[str], int]:
     lines = [ANSI_ESCAPE_RE.sub("", line.expandtabs(2)).rstrip() for line in body.splitlines()]
-    noise_blob = "\n".join(
-        part
-        for part in (
-            bridge_affordance_text(),
-            command_help_text(),
-        )
-        if part
-    )
-    filtered: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if _is_noise_screen_line(stripped, noise_blob):
-            continue
-        filtered.append(line)
-    lines = filtered
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
     omitted = max(0, len(lines) - ACTIVITY_CARD_SCREEN_MAX_LINES)
     tail = lines[-ACTIVITY_CARD_SCREEN_MAX_LINES:]
     return [_truncate_terminal_line(line, ACTIVITY_CARD_SCREEN_LINE_MAX_CHARS) for line in tail], omitted
@@ -3165,6 +3218,8 @@ def handle_bridge_command(
     event: FeishuInboundEvent, cfg: FeishuBridgeConfig, *, dry_run: bool = False
 ) -> BridgeResult | None:
     name = command_name(event.text)
+    if name in GOAL_COMMANDS:
+        return handle_goal_command(event, cfg, dry_run=dry_run)
     if name in TUI_COMMANDS:
         reply = build_tui_snapshot_reply(cfg)
         return reply_to_command(event, cfg, reply, dry_run=dry_run)
@@ -3177,6 +3232,23 @@ def handle_bridge_command(
     if name in STATUS_COMMANDS:
         return reply_to_command(event, cfg, build_status_reply(cfg), dry_run=dry_run)
     return None
+
+
+def handle_goal_command(event: FeishuInboundEvent, cfg: FeishuBridgeConfig, *, dry_run: bool = False) -> BridgeResult:
+    args = command_args(event.text)
+    normalized = args.strip().lower()
+    if not args:
+        current = current_goal_text(cfg)
+        reply = f"当前目标：{current}" if current else "当前没有设置目标。用 /goal <目标> 可以设置。"
+        return reply_to_command(event, cfg, reply, dry_run=dry_run)
+    if normalized in {"done", "clear", "reset", "delete", "完成", "清除", "取消"}:
+        if not dry_run:
+            clear_goal_state(cfg)
+        return reply_to_command(event, cfg, "当前目标已清除。", dry_run=dry_run)
+
+    if not dry_run:
+        write_goal_state(cfg, event, args)
+    return reply_to_command(event, cfg, f"当前目标已设置：{args}", dry_run=dry_run)
 
 
 def reply_to_command(
@@ -3201,6 +3273,7 @@ def command_help_text(cfg: FeishuBridgeConfig | None = None) -> str:
     return (
         f"CNB 飞书可以直接用自然语言说明目标，{label}会自己选择需要的本机能力。\n\n"
         "精确命令是可选兜底：\n"
+        "- /goal：查看当前目标；/goal <目标>：设置当前目标；/goal done：清除当前目标\n"
         f"- /cnb_tui 或 /c_tui：查看{label}当前 TUI 快照\n"
         "- /cnb_watch 或 /c_watch：启动只读 Web TUI 观看链接\n"
         f"- /cnb_status 或 /c_status：查看{status_scope}状态\n"
@@ -3702,7 +3775,6 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "readback_max_limit": base.readback_max_limit,
         "resource_handoff_enabled": base.resource_handoff_enabled,
         "resource_handoff_max_bytes": base.resource_handoff_max_bytes,
-        "caffeine_enabled": base.caffeine_enabled,
     }
     if role is CHIEF_ROLE:
         section["device_chief_name"] = pilot_name
@@ -4051,7 +4123,7 @@ def serve_webhook(
         print(f"ERROR: failed to bind Feishu webhook server: {exc}", file=sys.stderr)
         return 1
     url = cfg.webhook_public_url or f"http://{cfg.webhook_host}:{cfg.webhook_port}/"
-    heartbeat_thread = start_heartbeat_daemon(cfg)
+    start_heartbeat_daemon(cfg)
     hb_interval = cfg.heartbeat_interval_seconds if cfg.standby_enabled else DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     features = ["tunnel"]
     if cfg.standby_enabled:
@@ -4162,132 +4234,6 @@ def consume_events(
         )
     print(f"ERROR: unsupported Feishu transport: {cfg.transport}", file=sys.stderr)
     return 1
-
-
-def caffeine_pid_file(cfg: FeishuBridgeConfig) -> Path:
-    return cfg.config_path.parent / f"{_safe_path_part(cfg.bridge_tmux)}.caffeinate.pid"
-
-
-def _read_caffeine_pid(path: Path) -> int | None:
-    try:
-        text = path.read_text().strip()
-    except OSError:
-        return None
-    try:
-        pid = int(text)
-    except ValueError:
-        return None
-    return pid if pid > 0 else None
-
-
-def _pid_is_running(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
-
-
-def _remove_caffeine_pid_file(path: Path) -> None:
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        return
-    except OSError:
-        return
-
-
-def caffeine_status(cfg: FeishuBridgeConfig) -> tuple[str, str]:
-    if not cfg.caffeine_enabled:
-        return "disabled", "caffeine_enabled=false"
-    if sys.platform != "darwin":
-        return "unavailable", "not macOS"
-    executable = shutil.which("caffeinate")
-    if not executable:
-        return "unavailable", "caffeinate not found"
-
-    path = caffeine_pid_file(cfg)
-    pid = _read_caffeine_pid(path)
-    if pid is None:
-        if path.exists():
-            return "stale", f"invalid pid file {path}"
-        return "stopped", f"{executable} available"
-    if _pid_is_running(pid):
-        return "active", f"pid={pid}"
-    return "stale", f"pid={pid}"
-
-
-def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
-    state, detail = caffeine_status(cfg)
-    if state == "disabled":
-        return BridgeResult(True, "keep-awake disabled")
-    if state == "unavailable":
-        return BridgeResult(True, f"keep-awake unavailable ({detail})")
-    if state == "active":
-        return BridgeResult(True, f"keep-awake active ({detail})")
-    if state == "stale":
-        _remove_caffeine_pid_file(caffeine_pid_file(cfg))
-
-    executable = shutil.which("caffeinate")
-    if not executable:
-        return BridgeResult(True, "keep-awake unavailable (caffeinate not found)")
-    try:
-        proc = subprocess.Popen(
-            [executable, *CAFFEINATE_ARGS],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    except OSError as exc:
-        return BridgeResult(False, f"failed to start keep-awake companion: {exc}")
-
-    path = caffeine_pid_file(cfg)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"{proc.pid}\n")
-    except OSError as exc:
-        try:
-            proc.terminate()
-        except OSError:
-            pass
-        return BridgeResult(False, f"failed to record keep-awake pid: {exc}")
-    return BridgeResult(True, f"keep-awake active (pid={proc.pid})")
-
-
-def stop_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
-    path = caffeine_pid_file(cfg)
-    pid = _read_caffeine_pid(path)
-    if pid is None:
-        if path.exists():
-            _remove_caffeine_pid_file(path)
-            return BridgeResult(True, "cleared stale keep-awake pid file")
-        return BridgeResult(True, "keep-awake not running")
-    if not _pid_is_running(pid):
-        _remove_caffeine_pid_file(path)
-        return BridgeResult(True, f"cleared stale keep-awake pid={pid}")
-
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        _remove_caffeine_pid_file(path)
-        return BridgeResult(True, f"cleared stale keep-awake pid={pid}")
-    except PermissionError as exc:
-        return BridgeResult(False, f"failed to stop keep-awake pid={pid}: {exc}")
-    except OSError as exc:
-        return BridgeResult(False, f"failed to stop keep-awake pid={pid}: {exc}")
-    _remove_caffeine_pid_file(path)
-    return BridgeResult(True, f"stopped keep-awake pid={pid}")
-
-
-def _with_companion_detail(base: str, companion: BridgeResult) -> str:
-    if not companion.detail:
-        return base
-    if companion.handled:
-        return f"{base}; {companion.detail}"
-    return f"{base}; keep-awake warning: {companion.detail}"
 
 
 def start_bridge_daemon(cfg: FeishuBridgeConfig) -> BridgeResult:
