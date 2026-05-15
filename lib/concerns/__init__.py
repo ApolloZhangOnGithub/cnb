@@ -7,6 +7,7 @@ from .adaptive_throttle import AdaptiveThrottle
 from .base import Concern
 from .config import DispatcherConfig
 from .coral import CoralManager, CoralPoker
+from .digest_scheduler import DigestScheduler
 from .health import HealthChecker, ResourceMonitor, SessionKeepAlive
 from .helpers import log, tmux_ok, warn
 from .idle import IdleDetector, IdleKiller, IdleNudger
@@ -26,6 +27,7 @@ __all__ = [
     "Concern",
     "CoralManager",
     "CoralPoker",
+    "DigestScheduler",
     "DispatcherConfig",
     "HealthChecker",
     "IdleDetector",

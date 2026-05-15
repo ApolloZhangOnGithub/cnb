@@ -12,6 +12,7 @@ Concerns (each with independent check intervals):
   CoralPoker         — periodic heartbeat to dispatcher session
   HealthChecker      — periodic full status report + team idle detection
   BugSLAChecker      — check overdue bugs
+  DigestScheduler    — daily/weekly digest delivery with per-recipient cooldown
   ResourceMonitor    — battery/memory/CPU
   TimeAnnouncer      — hourly/daily announcements
   AdaptiveThrottle   — slow down main loop when CPU is high
@@ -34,6 +35,7 @@ from lib.concerns import (
     Concern,
     CoralManager,
     CoralPoker,
+    DigestScheduler,
     DispatcherConfig,
     HealthChecker,
     IdleDetector,
@@ -119,6 +121,7 @@ def main() -> None:
         nudge,
         ProductionLineIntake(cfg),
         ManagerCloseoutEscalator(cfg),
+        DigestScheduler(cfg),
         poker,
         BugSLAChecker(cfg, poker),
         HealthChecker(cfg, poker, coral),
