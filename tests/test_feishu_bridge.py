@@ -581,10 +581,7 @@ class TestRouting:
         assert result.handled is True
         assert len(notifications) == 1
 
-    def test_standby_agent_defaults_to_opposite_engine(self, tmp_path):
-        cfg_claude = _cfg(tmp_path, agent="claude")
-        cfg_codex = _cfg(tmp_path, agent="codex")
-
+    def test_standby_agent_defaults_to_opposite_engine(self):
         assert feishu_bridge._standby_agent(None, "claude") == "codex"
         assert feishu_bridge._standby_agent(None, "codex") == "claude"
         assert feishu_bridge._standby_agent("codex", "claude") == "codex"
@@ -660,7 +657,9 @@ class TestRouting:
             return name == standby
 
         monkeypatch.setattr(feishu_bridge, "has_session", fake_has_session)
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
 
         def fake_run(cmd, **kwargs):
             if "rename-session" in cmd:
@@ -687,11 +686,13 @@ class TestRouting:
             "check_pilot_health",
             lambda c, s=None: feishu_bridge.BridgeResult(False, "stuck at trust prompt"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(
             feishu_bridge,
             "dispatch_diagnosis_to_standby",
-            lambda c, issue: (dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched")),
+            lambda c, issue: dispatched.append(issue) or feishu_bridge.BridgeResult(True, "dispatched"),
         )
         monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
 
@@ -711,7 +712,9 @@ class TestRouting:
             "check_pilot_health",
             lambda c, s=None: feishu_bridge.BridgeResult(False, "still stuck"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(
             feishu_bridge,
             "failover_to_standby",
@@ -748,16 +751,20 @@ class TestRouting:
         assert "non-ngrok" in result.detail
 
     def test_tunnel_health_restarts_dead_ngrok(self, tmp_path, monkeypatch):
-        cfg = _cfg(tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787)
+        cfg = _cfg(
+            tmp_path, webhook_public_url="https://abc.ngrok-free.app", webhook_host="127.0.0.1", webhook_port=8787
+        )
         restarts = []
 
         monkeypatch.setattr(feishu_bridge, "ngrok_public_url_for", lambda h, p: "")
         monkeypatch.setattr(
             feishu_bridge,
             "ensure_tunnel",
-            lambda h, p: (restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app")),
+            lambda h, p: restarts.append(1) or feishu_bridge.BridgeResult(True, "https://new.ngrok-free.app"),
         )
-        monkeypatch.setattr(feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, ""))
+        monkeypatch.setattr(
+            feishu_bridge, "send_feishu_notification", lambda c, t: feishu_bridge.BridgeResult(True, "")
+        )
         monkeypatch.setattr(feishu_bridge, "_update_config_url", lambda c, u: None)
 
         result = feishu_bridge.check_tunnel_health(cfg)
