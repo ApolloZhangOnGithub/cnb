@@ -150,7 +150,7 @@ DEFAULT_READBACK_LIMIT = 12
 MAX_READBACK_LIMIT = 50
 DEFAULT_RESOURCE_HANDOFF_MAX_BYTES = 25 * 1024 * 1024
 MAX_RESOURCE_HANDOFF_BYTES = 100 * 1024 * 1024
-CAFFEINATE_ARGS = ("-dims",)
+CAFFEINATE_ARGS = ("-di",)
 SHORT_REPLY_MAX_CHARS = 280
 SHORT_REPLY_MAX_LINES = 4
 ACK_PREFIX = SUPERVISOR_ROLE.ack_prefix
@@ -168,6 +168,7 @@ DEFAULT_ACTIVITY_UPDATE_SECONDS = (1,)
 DEFAULT_ACTIVITY_UPDATE_REPEAT_SECONDS = 1
 DEFAULT_ACTIVITY_UPDATE_MAX_SECONDS = 600
 ACTIVITY_STALE_SECONDS = 600
+ACTIVITY_COALESCE_SECONDS = 1800
 ACTIVITY_WORK_RE = re.compile(r"^\s*[•●◦]\s*(Working|Thinking|Running)\b", re.IGNORECASE | re.MULTILINE)
 ACTIVITY_PROMPT_RE = re.compile(r"^\s*[›❯>]\s*", re.MULTILINE)
 AGENT_PROCESS_RE = re.compile(r"(^|/|\s)(codex|claude)(\s|$)", re.IGNORECASE)
@@ -281,7 +282,6 @@ class FeishuBridgeConfig:
     readback_max_limit: int = MAX_READBACK_LIMIT
     resource_handoff_enabled: bool = True
     resource_handoff_max_bytes: int = DEFAULT_RESOURCE_HANDOFF_MAX_BYTES
-    caffeine_enabled: bool = True
     standby_enabled: bool = False
     standby_agent: str = DEFAULT_STANDBY_AGENT
     standby_pilot_tmux: str = ""
@@ -440,7 +440,9 @@ class FeishuBridgeConfig:
             standby_enabled=_bool(section.get("standby_enabled"), False),
             standby_agent=_standby_agent(section.get("standby_agent"), agent),
             standby_pilot_tmux=str(section.get("standby_pilot_tmux") or ""),
-            heartbeat_interval_seconds=max(10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)),
+            heartbeat_interval_seconds=max(
+                10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)
+            ),
         )
 
 
@@ -1195,7 +1197,9 @@ def run_heartbeat_check(cfg: FeishuBridgeConfig) -> BridgeResult:
         if result.handled:
             start_standby_if_needed(cfg)
         return result
-    return BridgeResult(True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})")
+    return BridgeResult(
+        True, f"waiting for standby diagnosis ({_heartbeat_consecutive_failures}/{HEARTBEAT_UNHEALTHY_THRESHOLD})"
+    )
 
 
 def check_tunnel_health(cfg: FeishuBridgeConfig) -> BridgeResult:
@@ -1275,6 +1279,10 @@ def format_for_pilot(
         parts.extend(["", "[Feishu referenced message]", reference_summary])
     if handoff_summary:
         parts.extend(["", "[Feishu resources handed to Claude Code]", handoff_summary])
+    if cfg is not None:
+        thread_summary = activity_thread_summary(cfg, event.message_id)
+        if thread_summary:
+            parts.extend(["", "[Feishu active activity thread]", thread_summary])
     if cfg is not None:
         parts.extend(["", "[CNB bridge affordances]", bridge_affordance_text(cfg)])
     parts.extend(["", event.text])
@@ -1395,6 +1403,106 @@ def record_activity_start(cfg: FeishuBridgeConfig, event: FeishuInboundEvent) ->
     _write_activity_state(path, payload)
 
 
+def activity_root_message_id(cfg: FeishuBridgeConfig, message_id: str) -> str:
+    if not message_id:
+        return ""
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages")
+    if not isinstance(messages, dict):
+        return ""
+    item = messages.get(message_id)
+    if not isinstance(item, dict):
+        return ""
+    root = item.get("coalesced_into")
+    return root if isinstance(root, str) and root else message_id
+
+
+def find_active_activity_root(cfg: FeishuBridgeConfig, event: FeishuInboundEvent, *, now: float | None = None) -> str:
+    if not event.message_id or not event.chat_id or not event.sender_id:
+        return ""
+    now_value = time.time() if now is None else now
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages")
+    if not isinstance(messages, dict):
+        return ""
+    best_id = ""
+    best_started = 0.0
+    for message_id, item in messages.items():
+        if not isinstance(item, dict) or item.get("done_at") or item.get("coalesced_into"):
+            continue
+        if message_id == event.message_id:
+            continue
+        if item.get("chat_id") != event.chat_id or item.get("sender_id") != event.sender_id:
+            continue
+        started_at = _parse_activity_timestamp(item.get("started_at"))
+        if started_at is None or now_value - started_at > ACTIVITY_COALESCE_SECONDS:
+            continue
+        if started_at >= best_started:
+            best_id = str(message_id)
+            best_started = started_at
+    return best_id
+
+
+def record_activity_supplement(cfg: FeishuBridgeConfig, root_message_id: str, event: FeishuInboundEvent) -> None:
+    if not root_message_id or not event.message_id or root_message_id == event.message_id:
+        return
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    root = messages.get(root_message_id)
+    if not isinstance(root, dict):
+        root = {}
+        messages[root_message_id] = root
+    supplements = root.setdefault("supplement_message_ids", [])
+    if not isinstance(supplements, list):
+        supplements = []
+        root["supplement_message_ids"] = supplements
+    if event.message_id not in supplements:
+        supplements.append(event.message_id)
+    root["latest_supplement_message_id"] = event.message_id
+    root["latest_supplement_at"] = now
+
+    item = messages.get(event.message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[event.message_id] = item
+    item.update(
+        {
+            "chat_id": event.chat_id,
+            "sender_id": event.sender_id,
+            "coalesced_into": root_message_id,
+            "supplement_at": now,
+            "done_at": "",
+        }
+    )
+    _write_activity_state(path, payload)
+
+
+def activity_thread_summary(cfg: FeishuBridgeConfig, message_id: str) -> str:
+    root_message_id = activity_root_message_id(cfg, message_id) or message_id
+    if not root_message_id:
+        return ""
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages")
+    if not isinstance(messages, dict):
+        return ""
+    root = messages.get(root_message_id)
+    if not isinstance(root, dict):
+        return ""
+    supplements = [str(mid) for mid in root.get("supplement_message_ids", []) if str(mid)]
+    pending = [root_message_id, *supplements[-8:]]
+    lines = [f"primary_message_id: {root_message_id}", "pending_message_ids: " + ", ".join(pending)]
+    latest = root.get("latest_supplement_message_id")
+    if isinstance(latest, str) and latest:
+        lines.append(f"latest_user_supplement: {latest}")
+        lines.append("这是同一活跃请求中的用户补充/打断；处理时保留这些 message_id，可优先回复最新一条。")
+    return "\n".join(lines)
+
+
 def record_outgoing_reply(cfg: FeishuBridgeConfig, source_message_id: str, reply_message_id: str) -> None:
     if not source_message_id or not reply_message_id:
         return
@@ -1442,6 +1550,13 @@ def mark_activity_done(cfg: FeishuBridgeConfig, message_id: str, *, reason: str 
     item["done_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     if reason:
         item["closed_reason"] = reason
+    root_message_id = item.get("coalesced_into")
+    if isinstance(root_message_id, str) and root_message_id:
+        root = messages.get(root_message_id)
+        if isinstance(root, dict):
+            root["done_at"] = item["done_at"]
+            if reason:
+                root["closed_reason"] = reason
     _write_activity_state(path, payload)
 
 
@@ -1485,7 +1600,13 @@ def activity_is_done(cfg: FeishuBridgeConfig, message_id: str) -> bool:
     if not message_id:
         return True
     payload = _load_activity_state(activity_state_path(cfg))
-    item = payload.get("messages", {}).get(message_id)
+    messages = payload.get("messages", {})
+    item = messages.get(message_id) if isinstance(messages, dict) else None
+    if isinstance(item, dict):
+        root_message_id = item.get("coalesced_into")
+        if isinstance(root_message_id, str) and root_message_id:
+            root = messages.get(root_message_id)
+            return isinstance(root, dict) and bool(root.get("done_at"))
     return isinstance(item, dict) and bool(item.get("done_at"))
 
 
@@ -1558,7 +1679,7 @@ def open_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) ->
 
     items: list[dict[str, Any]] = []
     for message_id, item in messages.items():
-        if not isinstance(item, dict) or item.get("done_at"):
+        if not isinstance(item, dict) or item.get("done_at") or item.get("coalesced_into"):
             continue
         started_at = _parse_activity_timestamp(item.get("started_at"))
         if started_at is None:
@@ -2713,12 +2834,15 @@ def _split_activity_card_lines(body: str) -> list[str]:
 
 
 def _activity_card_screen_markdown(section: ActivitySection) -> str:
-    lines, _omitted = _activity_card_screen_lines(section.body)
+    lines, omitted = _activity_card_screen_lines(section.body)
     if not lines:
         return "(当前 TUI 没有可见内容)"
     rendered: list[str] = []
-    for line in lines:
-        rendered.append(_render_activity_line(line))
+    rendered.append(f"<font color='grey'>{_card_escape_terminal_line(section.title)} · 最后 {len(lines)} 行</font>")
+    if omitted:
+        rendered.append(f"<font color='grey'>… 已省略上方 {omitted} 行；完整实时画面用 /cnb_watch</font>")
+    for index, line in enumerate(lines, start=1):
+        rendered.append(f"<font color='grey'>{index:02d}</font> {_render_activity_line(line)}")
     return "\n".join(rendered)
 
 
@@ -2787,23 +2911,7 @@ def _is_noise_screen_line(line: str, noise_blob: str) -> bool:
         )
     ):
         return True
-    if line.startswith(
-        (
-            "• ",
-            "◦ ",
-            "● ",
-            "› ",
-            "> ",
-            "Working",
-            "Run ",
-            "gpt-",
-            "background terminal running",
-            "/ps to view",
-            "esc to interrupt",
-        )
-    ):
-        return True
-    if line in {"Codex screen", "Claude Code screen"}:
+    if line.startswith(("› ", "> ", "Working", "Run ", "gpt-", "background terminal running", "/ps to view")):
         return True
     if line in noise_blob:
         return True
@@ -3702,7 +3810,6 @@ def setup_config(args: argparse.Namespace, base: FeishuBridgeConfig) -> BridgeRe
         "readback_max_limit": base.readback_max_limit,
         "resource_handoff_enabled": base.resource_handoff_enabled,
         "resource_handoff_max_bytes": base.resource_handoff_max_bytes,
-        "caffeine_enabled": base.caffeine_enabled,
     }
     if role is CHIEF_ROLE:
         section["device_chief_name"] = pilot_name
@@ -3877,7 +3984,18 @@ def handle_payload(
     if command_result is not None:
         return command_result
 
+    coalesced_root = "" if dry_run else find_active_activity_root(cfg, event)
+    if coalesced_root:
+        record_activity_supplement(cfg, coalesced_root, event)
+
     routed = route_event(event, cfg, dry_run=dry_run)
+    if routed.handled and coalesced_root and not dry_run:
+        root_event = replace(event, message_id=coalesced_root)
+        activity = send_activity_update(cfg, root_event, 0) if activity_update_message_id(cfg, coalesced_root) else None
+        detail = f"{routed.detail}; coalesced into active activity {coalesced_root}"
+        if activity and activity.handled:
+            detail += f"; {activity.detail}"
+        return BridgeResult(True, detail)
     if routed.handled and not dry_run:
         record_activity_start(cfg, event)
     if routed.handled and send_ack and not dry_run:
@@ -4051,7 +4169,7 @@ def serve_webhook(
         print(f"ERROR: failed to bind Feishu webhook server: {exc}", file=sys.stderr)
         return 1
     url = cfg.webhook_public_url or f"http://{cfg.webhook_host}:{cfg.webhook_port}/"
-    heartbeat_thread = start_heartbeat_daemon(cfg)
+    start_heartbeat_daemon(cfg)
     hb_interval = cfg.heartbeat_interval_seconds if cfg.standby_enabled else DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     features = ["tunnel"]
     if cfg.standby_enabled:
@@ -4165,7 +4283,7 @@ def consume_events(
 
 
 def caffeine_pid_file(cfg: FeishuBridgeConfig) -> Path:
-    return cfg.config_path.parent / f"{_safe_path_part(cfg.bridge_tmux)}.caffeinate.pid"
+    return cfg.config_path.parent / "run" / f"{_safe_path_part(cfg.bridge_tmux)}.caffeinate.pid"
 
 
 def _read_caffeine_pid(path: Path) -> int | None:
@@ -4199,7 +4317,7 @@ def _remove_caffeine_pid_file(path: Path) -> None:
         return
 
 
-def caffeine_status(cfg: FeishuBridgeConfig) -> tuple[str, str]:
+def _caffeine_companion_state(cfg: FeishuBridgeConfig) -> tuple[str, str]:
     if not cfg.caffeine_enabled:
         return "disabled", "caffeine_enabled=false"
     if sys.platform != "darwin":
@@ -4220,13 +4338,13 @@ def caffeine_status(cfg: FeishuBridgeConfig) -> tuple[str, str]:
 
 
 def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
-    state, detail = caffeine_status(cfg)
+    state, detail = _caffeine_companion_state(cfg)
     if state == "disabled":
-        return BridgeResult(True, "keep-awake disabled")
+        return BridgeResult(True, "disabled")
     if state == "unavailable":
-        return BridgeResult(True, f"keep-awake unavailable ({detail})")
+        return BridgeResult(True, f"unavailable ({detail})")
     if state == "active":
-        return BridgeResult(True, f"keep-awake active ({detail})")
+        return BridgeResult(True, _format_caffeine_status(state, detail))
     if state == "stale":
         _remove_caffeine_pid_file(caffeine_pid_file(cfg))
 
@@ -4235,7 +4353,7 @@ def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
         return BridgeResult(True, "keep-awake unavailable (caffeinate not found)")
     try:
         proc = subprocess.Popen(
-            [executable, *CAFFEINATE_ARGS],
+            ["caffeinate", *CAFFEINATE_ARGS],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -4247,14 +4365,14 @@ def start_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
     path = caffeine_pid_file(cfg)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"{proc.pid}\n")
+        path.write_text(str(proc.pid))
     except OSError as exc:
         try:
             proc.terminate()
         except OSError:
             pass
         return BridgeResult(False, f"failed to record keep-awake pid: {exc}")
-    return BridgeResult(True, f"keep-awake active (pid={proc.pid})")
+    return BridgeResult(True, f"active (pid {proc.pid})")
 
 
 def stop_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
@@ -4280,6 +4398,29 @@ def stop_caffeine_companion(cfg: FeishuBridgeConfig) -> BridgeResult:
         return BridgeResult(False, f"failed to stop keep-awake pid={pid}: {exc}")
     _remove_caffeine_pid_file(path)
     return BridgeResult(True, f"stopped keep-awake pid={pid}")
+
+
+def _format_caffeine_status(state: str, detail: str) -> str:
+    if state == "disabled":
+        return "disabled"
+    if state == "unavailable":
+        if detail == "not macOS":
+            return "unavailable (non-macOS)"
+        return f"unavailable ({detail})"
+    if state == "active" and detail.startswith("pid="):
+        return f"active (pid {detail.removeprefix('pid=')})"
+    if state == "stopped":
+        return "inactive"
+    return state
+
+
+def caffeine_status(cfg: FeishuBridgeConfig) -> str:
+    state, detail = _caffeine_companion_state(cfg)
+    return _format_caffeine_status(state, detail)
+
+
+def caffeine_pid_path(cfg: FeishuBridgeConfig) -> Path:
+    return caffeine_pid_file(cfg)
 
 
 def _with_companion_detail(base: str, companion: BridgeResult) -> str:
@@ -4333,111 +4474,12 @@ def stop_bridge_daemon(cfg: FeishuBridgeConfig) -> BridgeResult:
     return BridgeResult(False, f"failed to stop {cfg.bridge_tmux}: {detail}")
 
 
-def caffeine_pid_path(cfg: FeishuBridgeConfig) -> Path:
-    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", cfg.bridge_tmux).strip("-") or "bridge"
-    return cfg.config_path.expanduser().parent / "run" / f"feishu-caffeinate-{safe_name}.pid"
-
-
-def _read_pid(path: Path) -> int | None:
-    try:
-        return int(path.read_text().strip())
-    except (OSError, ValueError):
-        return None
-
-
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
-
-
-def _pid_command(pid: int) -> str:
-    try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "comm="],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    if result.returncode != 0:
-        return ""
-    return result.stdout.strip()
-
-
-def _caffeine_platform_state(cfg: FeishuBridgeConfig) -> str:
-    if not cfg.caffeine_enabled:
-        return "disabled"
-    if sys.platform != "darwin":
-        return "unavailable (non-macOS)"
-    if shutil.which("caffeinate") is None:
-        return "unavailable (caffeinate not found)"
-    return "available"
-
-
-def caffeine_status(cfg: FeishuBridgeConfig) -> str:
-    platform_state = _caffeine_platform_state(cfg)
-    if platform_state != "available":
-        return platform_state
-    path = caffeine_pid_path(cfg)
-    pid = _read_pid(path)
-    if pid is None:
-        return "inactive"
-    command = _pid_command(pid)
-    if _pid_alive(pid) and command.endswith("caffeinate"):
-        return f"active (pid {pid})"
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
-    except OSError:
-        return "stale"
-    return "inactive"
-
-
 def start_caffeine_if_needed(cfg: FeishuBridgeConfig) -> BridgeResult:
-    status = caffeine_status(cfg)
-    if status.startswith("active"):
-        return BridgeResult(True, status)
-    if status.startswith("disabled") or status.startswith("unavailable"):
-        return BridgeResult(True, status)
-    path = caffeine_pid_path(cfg)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        process = subprocess.Popen(
-            ["caffeinate", "-di"],
-            cwd=str(cfg.project_root),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        path.write_text(str(process.pid))
-    except OSError as exc:
-        return BridgeResult(True, f"unavailable ({exc})")
-    return BridgeResult(True, f"active (pid {process.pid})")
+    return start_caffeine_companion(cfg)
 
 
 def stop_caffeine(cfg: FeishuBridgeConfig) -> BridgeResult:
-    path = caffeine_pid_path(cfg)
-    pid = _read_pid(path)
-    if pid is None:
-        return BridgeResult(True, caffeine_status(cfg))
-    command = _pid_command(pid)
-    if _pid_alive(pid) and command.endswith("caffeinate"):
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError as exc:
-            return BridgeResult(True, f"stale ({exc})")
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
-    except OSError as exc:
-        return BridgeResult(True, f"stopped but pid cleanup failed: {exc}")
-    return BridgeResult(True, "stopped")
+    return stop_caffeine_companion(cfg)
 
 
 def stop_watch_viewer(cfg: FeishuBridgeConfig) -> BridgeResult:
