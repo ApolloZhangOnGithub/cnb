@@ -8,6 +8,7 @@ from pathlib import Path
 from lib.board_db import BoardDB
 from lib.common import validate_identity
 from lib.tmux_utils import capture_pane, has_session, pane_command
+from lib.worktree_checkpoint import build_checkpoint, checkpoint_has_blocker, render_checkpoint
 
 SHELL_COMMANDS = {"zsh", "bash", "sh", "-zsh", "-bash", ""}
 SPINNER_RE = re.compile(r"^\s*(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|●)", re.MULTILINE)
@@ -258,24 +259,15 @@ def cmd_prebuild(db: BoardDB) -> None:
 
 def cmd_dirty(db: BoardDB) -> None:
     assert db.env is not None
-    print("=== Uncommitted Changes ===\n")
-    pr = db.env.project_root
-    changes = _git(pr, "status", "--porcelain").strip()
-    if not changes:
-        print("Working tree clean.")
-        return
-    code = "\n".join(l for l in changes.splitlines() if "board/" not in l)
-    if code:
-        print("Code:")
-        for l in code.splitlines():
-            print(f"  {l}")
-        print()
-    board = "\n".join(l for l in changes.splitlines() if "board/" in l)
-    if board:
-        print(f"Board: {len(board.splitlines())} files (normal churn)")
-    print()
-    log = _git(pr, "log", "--oneline", "-1").strip()
-    print(f"Last commit: {log}")
+    print(render_checkpoint(build_checkpoint(db.env.project_root)))
+
+
+def cmd_checkpoint(db: BoardDB) -> None:
+    assert db.env is not None
+    checkpoint = build_checkpoint(db.env.project_root)
+    print(render_checkpoint(checkpoint, guard=True))
+    if checkpoint_has_blocker(checkpoint):
+        raise SystemExit(1)
 
 
 def cmd_dashboard(db: BoardDB) -> None:
