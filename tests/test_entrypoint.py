@@ -68,7 +68,11 @@ def fake_project(tmp_path):
     fake_codex.chmod(fake_codex.stat().st_mode | stat.S_IEXEC)
 
     stub_swarm = tmp_path / "swarm-stub"
-    stub_swarm.write_text("#!/usr/bin/env bash\nexit 0\n")
+    stub_swarm.write_text(
+        "#!/usr/bin/env bash\n"
+        'printf "CNB_AGENT=%s\\nSWARM_AGENT=%s\\nARGS=%s\\n" "$CNB_AGENT" "$SWARM_AGENT" "$*" >> "$PWD/swarm-env.log"\n'
+        "exit 0\n"
+    )
     stub_swarm.chmod(stub_swarm.stat().st_mode | stat.S_IEXEC)
 
     project_dir = tmp_path / "proj"
@@ -117,6 +121,11 @@ def _run(fake_project, args=None, env=None):
         timeout=30,
         env=run_env,
     )
+
+
+def _read_swarm_log(project_dir: Path) -> str:
+    path = project_dir / "swarm-env.log"
+    return path.read_text() if path.exists() else ""
 
 
 class TestWorkerClamping:
@@ -218,6 +227,18 @@ class TestSystemPrompt:
         assert "BYPASS=1" in r.stdout
         assert "APPROVAL=" not in r.stdout
         assert "SANDBOX=" not in r.stdout
+
+    def test_codex_agent_long_flag_exports_swarm_agent(self, fake_project):
+        project_dir = fake_project[0]
+        r = _run(fake_project, ["--agent", "codex", "2"])
+        swarm_log = _read_swarm_log(project_dir)
+
+        assert r.returncode == 0
+        assert "engine: codex" in r.stdout
+        assert "BYPASS=1" in r.stdout
+        assert "CNB_AGENT=codex" in swarm_log
+        assert "SWARM_AGENT=codex" in swarm_log
+        assert "ARGS=start" in swarm_log
 
 
 class TestSlashCommands:
