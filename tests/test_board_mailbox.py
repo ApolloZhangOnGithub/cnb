@@ -5,6 +5,7 @@ error paths (missing keys, empty messages, duplicate keygen).
 """
 
 import json
+import os
 import sys
 from contextlib import ExitStack
 from pathlib import Path
@@ -26,10 +27,11 @@ def _mock_registry(pubkeys_file):
 
 
 @pytest.fixture
-def mailbox_db(db):
+def mailbox_db(db, monkeypatch):
     """BoardDB with keys dir."""
     keys_dir = db.env.claudes_dir / "keys"
     keys_dir.mkdir(exist_ok=True)
+    monkeypatch.setenv("CNB_PRIVATE_KEYS_DIR", str(db.env.project_root / "home" / ".cnb" / "keys"))
     return db
 
 
@@ -60,6 +62,7 @@ class TestKeygen:
         assert "OK" in output
         assert _private_key_path(mailbox_db, "alice").exists()
         assert not (mailbox_db.env.claudes_dir / "keys" / "alice.pem").exists()
+        assert not (mailbox_db.env.claudes_dir / "keys" / _private_key_path(mailbox_db, "alice").name).exists()
 
     def test_key_filename_is_namespaced_by_project(self, mailbox_db, pubkeys_file):
         with _mock_registry(pubkeys_file):
@@ -67,6 +70,7 @@ class TestKeygen:
         path = _private_key_path(mailbox_db, "alice")
         assert path.name.startswith("p")
         assert path.name.endswith("-alice.pem")
+        assert path.parent == Path(os.environ["CNB_PRIVATE_KEYS_DIR"])
 
     def test_registers_pubkey(self, mailbox_db, pubkeys_file):
         with _mock_registry(pubkeys_file):
@@ -136,6 +140,23 @@ class TestKeygenAll:
 
         output = capsys.readouterr().out
         assert "legacy-key works" in output
+
+    def test_unseal_can_read_project_private_key_fallback(self, mailbox_db, pubkeys_file, capsys):
+        with _mock_registry(pubkeys_file):
+            cmd_keygen(mailbox_db, "bob")
+            global_key = _private_key_path(mailbox_db, "bob")
+            project_key = mailbox_db.env.claudes_dir / "keys" / global_key.name
+            project_key.write_bytes(global_key.read_bytes())
+            global_key.unlink()
+            cmd_keygen(mailbox_db, "alice")
+            capsys.readouterr()
+            cmd_seal(mailbox_db, "alice", ["bob", "project-key fallback works"])
+            capsys.readouterr()
+
+        cmd_unseal(mailbox_db, "bob")
+
+        output = capsys.readouterr().out
+        assert "project-key fallback works" in output
 
 
 class TestSeal:
