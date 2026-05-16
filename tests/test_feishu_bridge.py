@@ -1732,6 +1732,71 @@ class TestRouting:
         assert "activity_update_error" not in item
         assert "activity_update_error_at" not in item
 
+    def test_send_activity_stale_notice_records_blocked_open_activity(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        calls = []
+
+        feishu_bridge.record_activity_start(cfg, event)
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_short_reply",
+            lambda cfg, mid, text: calls.append((mid, text)) or feishu_bridge.BridgeResult(True, "sent"),
+        )
+
+        result = feishu_bridge.send_activity_stale_notice(
+            cfg,
+            event,
+            elapsed_seconds=600,
+            reason="activity monitor reached 600s limit",
+        )
+
+        assert result.handled is True
+        assert calls == [
+            (
+                "om_1",
+                "这条请求已超过 10m00s 仍没有最终飞书回复，可能卡在 compact 或长工具执行。我已标记阻塞；设备主管会继续处理最新消息。",
+            )
+        ]
+        assert feishu_bridge.activity_is_done(cfg, "om_1") is False
+        state = json.loads(feishu_bridge.activity_state_path(cfg).read_text())
+        item = state["messages"]["om_1"]
+        assert item["activity_stale_notice_at"]
+        assert item["activity_stale_notice_elapsed_seconds"] == 600
+        assert item["activity_stale_notice_result"] == "sent"
+        assert item["blocked_reason"] == "stale notice sent: activity monitor reached 600s limit"
+        assert "已发送 stale 通知" in feishu_bridge.describe_request_activity(cfg)
+
+    def test_send_activity_stale_notice_is_idempotent(self, tmp_path, monkeypatch):
+        cfg = _cfg(tmp_path)
+        event = FeishuInboundEvent(text="ping", message_id="om_1", chat_id="oc_allowed", sender_id="ou_user")
+        calls = []
+
+        feishu_bridge.record_activity_start(cfg, event)
+        monkeypatch.setattr(
+            feishu_bridge,
+            "send_short_reply",
+            lambda cfg, mid, text: calls.append((mid, text)) or feishu_bridge.BridgeResult(True, "sent"),
+        )
+
+        first = feishu_bridge.send_activity_stale_notice(
+            cfg,
+            event,
+            elapsed_seconds=600,
+            reason="activity monitor reached 600s limit",
+        )
+        second = feishu_bridge.send_activity_stale_notice(
+            cfg,
+            event,
+            elapsed_seconds=660,
+            reason="activity monitor reached 600s limit",
+        )
+
+        assert first.handled is True
+        assert second.handled is False
+        assert second.detail == "activity stale notice already sent"
+        assert len(calls) == 1
+
     def test_activity_card_uses_feishu_interactive_schema(self, tmp_path):
         cfg = _cfg(tmp_path, activity_render_style="claude")
         snapshot = feishu_bridge.ActivitySnapshot(

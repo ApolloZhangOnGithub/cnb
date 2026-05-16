@@ -1565,6 +1565,43 @@ def record_activity_update_failure(cfg: FeishuBridgeConfig, source_message_id: s
     _write_activity_state(path, payload)
 
 
+def activity_stale_notice_sent(cfg: FeishuBridgeConfig, message_id: str) -> bool:
+    if not message_id:
+        return False
+    payload = _load_activity_state(activity_state_path(cfg))
+    item = payload.get("messages", {}).get(message_id)
+    return isinstance(item, dict) and bool(item.get("activity_stale_notice_at"))
+
+
+def record_activity_stale_notice(
+    cfg: FeishuBridgeConfig,
+    source_message_id: str,
+    result: BridgeResult,
+    *,
+    elapsed_seconds: int,
+) -> None:
+    if not source_message_id:
+        return
+    path = activity_state_path(cfg)
+    payload = _load_activity_state(path)
+    messages = payload.setdefault("messages", {})
+    if not isinstance(messages, dict):
+        messages = {}
+        payload["messages"] = messages
+    item = messages.get(source_message_id)
+    if not isinstance(item, dict):
+        item = {}
+        messages[source_message_id] = item
+    item["activity_stale_notice_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    item["activity_stale_notice_elapsed_seconds"] = max(0, int(elapsed_seconds))
+    item["activity_stale_notice_result"] = result.detail
+    if result.handled:
+        item.pop("activity_stale_notice_error", None)
+    else:
+        item["activity_stale_notice_error"] = result.detail
+    _write_activity_state(path, payload)
+
+
 def describe_activity(cfg: FeishuBridgeConfig) -> str:
     return "\n".join(
         (
@@ -1587,6 +1624,7 @@ def describe_request_activity(cfg: FeishuBridgeConfig, *, now: float | None = No
     stale = [item for item in open_items if item["age_seconds"] >= threshold]
     blocked = [item for item in open_items if item.get("blocked_at")]
     update_errors = [item for item in open_items if item.get("activity_update_error")]
+    stale_notices = [item for item in open_items if item.get("activity_stale_notice_at")]
     oldest = open_items[0]
     parts = [f"{len(open_items)} 个未完成", f"最久 {_format_duration(oldest['age_seconds'])}"]
     if blocked:
@@ -1595,6 +1633,8 @@ def describe_request_activity(cfg: FeishuBridgeConfig, *, now: float | None = No
     if update_errors:
         reason = _truncate_inline(str(update_errors[0].get("activity_update_error") or "unknown"), 96)
         parts.append(f"{len(update_errors)} 个活动更新失败：{reason}")
+    if stale_notices:
+        parts.append(f"{len(stale_notices)} 个已发送 stale 通知")
     if stale:
         parts.append(f"{len(stale)} 个超过 {_format_duration(threshold)}，需要检查{role_label(cfg)}是否卡住")
     return "；".join(parts) + "。"
@@ -1626,6 +1666,9 @@ def open_activity_items(cfg: FeishuBridgeConfig, *, now: float | None = None) ->
                 "blocked_reason": item.get("blocked_reason") or "",
                 "activity_update_error_at": item.get("activity_update_error_at") or "",
                 "activity_update_error": item.get("activity_update_error") or "",
+                "activity_stale_notice_at": item.get("activity_stale_notice_at") or "",
+                "activity_stale_notice_result": item.get("activity_stale_notice_result") or "",
+                "activity_stale_notice_error": item.get("activity_stale_notice_error") or "",
             }
         )
     return sorted(items, key=lambda item: item["age_seconds"], reverse=True)
@@ -2874,6 +2917,32 @@ def send_activity_update(cfg: FeishuBridgeConfig, event: FeishuInboundEvent, ela
     return result
 
 
+def send_activity_stale_notice(
+    cfg: FeishuBridgeConfig,
+    event: FeishuInboundEvent,
+    *,
+    elapsed_seconds: int,
+    reason: str,
+) -> BridgeResult:
+    if activity_is_done(cfg, event.message_id):
+        return BridgeResult(False, "activity already done")
+    if activity_stale_notice_sent(cfg, event.message_id):
+        return BridgeResult(False, "activity stale notice already sent")
+
+    text = (
+        f"这条请求已超过 {_format_duration(elapsed_seconds)} 仍没有最终飞书回复，"
+        "可能卡在 compact 或长工具执行。我已标记阻塞；设备主管会继续处理最新消息。"
+    )
+    result = send_short_reply(cfg, event.message_id, text)
+    record_activity_stale_notice(cfg, event.message_id, result, elapsed_seconds=elapsed_seconds)
+    if result.handled:
+        mark_activity_blocked(cfg, event.message_id, reason=f"stale notice sent: {reason}")
+        return BridgeResult(True, "activity stale notice sent; activity remains open")
+
+    mark_activity_blocked(cfg, event.message_id, reason=f"stale notice failed: {result.detail}; {reason}")
+    return result
+
+
 def should_send_ack(cfg: FeishuBridgeConfig) -> bool:
     return cfg.ack and cfg.notification_policy in {"ack", "live"}
 
@@ -2947,7 +3016,11 @@ def _activity_monitor_loop(event: FeishuInboundEvent, cfg: FeishuBridgeConfig) -
             f"activity monitor reached {max_seconds}s limit" if max_seconds else "activity monitor schedule exhausted"
         )
         mark_activity_monitor_closed(cfg, event.message_id, reason=reason)
-        mark_activity_blocked(cfg, event.message_id, reason=f"final Feishu reply not confirmed: {reason}")
+        elapsed_seconds = max_seconds or max(0, int(time.monotonic() - started))
+        notice = send_activity_stale_notice(cfg, event, elapsed_seconds=elapsed_seconds, reason=reason)
+        print(f"[cnb-feishu-activity] {event.message_id} stale: {notice.detail}", file=sys.stderr)
+        if not notice.handled:
+            mark_activity_blocked(cfg, event.message_id, reason=f"final Feishu reply not confirmed: {reason}")
 
 
 def iter_activity_update_elapsed_seconds(cfg: FeishuBridgeConfig):
