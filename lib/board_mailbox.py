@@ -11,6 +11,7 @@ from lib.board_db import BoardDB, ts
 from lib.common import validate_identity
 from lib.crypto import (
     generate_keypair,
+    key_storage_name,
     load_private_key,
     public_key_from_hex,
     public_key_to_hex,
@@ -26,6 +27,23 @@ PUBKEYS_FILE = Path(os.environ.get("CNB_PUBKEYS_FILE", REGISTRY_DIR / "pubkeys.j
 def _keys_dir(db: BoardDB) -> Path:
     assert db.env is not None
     return db.env.claudes_dir / "keys"
+
+
+def _project_root(db: BoardDB) -> Path:
+    assert db.env is not None
+    return db.env.project_root
+
+
+def _private_key_path(db: BoardDB, name: str) -> Path:
+    return _keys_dir(db) / f"{key_storage_name(name, _project_root(db))}.pem"
+
+
+def _legacy_private_key_path(db: BoardDB, name: str) -> Path:
+    return _keys_dir(db) / f"{key_storage_name(name)}.pem"
+
+
+def _has_private_key(db: BoardDB, name: str) -> bool:
+    return _private_key_path(db, name).exists() or _legacy_private_key_path(db, name).exists()
 
 
 def _load_pubkeys() -> dict[str, str]:
@@ -57,12 +75,15 @@ def cmd_keygen(db: BoardDB, identity: str) -> None:
     name = identity.lower()
     kd = _keys_dir(db)
 
-    if (kd / f"{name}.pem").exists():
-        print(f"ERROR: 密钥已存在 ({kd / f'{name}.pem'})，如需重新生成请先删除旧密钥")
+    if _has_private_key(db, name):
+        existing = (
+            _private_key_path(db, name) if _private_key_path(db, name).exists() else _legacy_private_key_path(db, name)
+        )
+        print(f"ERROR: 密钥已存在 ({existing})，如需重新生成请先删除旧密钥")
         raise SystemExit(1)
 
     private, public = generate_keypair()
-    save_keypair(kd, name, private, public)
+    save_keypair(kd, name, private, public, _project_root(db))
     pubkey_hex = public_key_to_hex(public)
 
     pubkeys = _load_pubkeys()
@@ -70,14 +91,14 @@ def cmd_keygen(db: BoardDB, identity: str) -> None:
     _save_pubkeys(pubkeys)
 
     print("OK 密钥已生成")
-    print(f"  私钥: {kd / f'{name}.pem'} (勿泄露)")
+    print(f"  私钥: {_private_key_path(db, name)} (勿泄露)")
     print(f"  公钥: {pubkey_hex[:16]}...")
     print(f"  已写入 {_pubkeys_display_path()}")
 
 
 def cmd_keygen_all(db: BoardDB) -> None:
     assert db.env is not None
-    kd = db.env.claudes_dir / "keys"
+    kd = _keys_dir(db)
     sessions = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all' ORDER BY name")]
     if not sessions:
         print("ERROR: 无注册会话")
@@ -88,11 +109,11 @@ def cmd_keygen_all(db: BoardDB) -> None:
     skipped = 0
 
     for name in sessions:
-        if (kd / f"{name}.pem").exists():
+        if _has_private_key(db, name):
             skipped += 1
             continue
         private, public = generate_keypair()
-        save_keypair(kd, name, private, public)
+        save_keypair(kd, name, private, public, _project_root(db))
         pubkeys[name] = public_key_to_hex(public)
         generated += 1
 
@@ -141,7 +162,7 @@ def cmd_unseal(db: BoardDB, identity: str) -> None:
     kd = _keys_dir(db)
 
     try:
-        private = load_private_key(kd, name)
+        private = load_private_key(kd, name, _project_root(db))
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         raise SystemExit(1)
@@ -178,7 +199,7 @@ def cmd_mailbox_log(db: BoardDB, identity: str) -> None:
     kd = _keys_dir(db)
 
     try:
-        private = load_private_key(kd, name)
+        private = load_private_key(kd, name, _project_root(db))
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         raise SystemExit(1)

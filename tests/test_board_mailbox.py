@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.board_mailbox import cmd_keygen, cmd_keygen_all, cmd_mailbox_log, cmd_seal, cmd_unseal
+from lib.board_mailbox import _private_key_path, cmd_keygen, cmd_keygen_all, cmd_mailbox_log, cmd_seal, cmd_unseal
 
 
 def _mock_registry(pubkeys_file):
@@ -58,7 +58,15 @@ class TestKeygen:
             cmd_keygen(mailbox_db, "alice")
         output = capsys.readouterr().out
         assert "OK" in output
-        assert (mailbox_db.env.claudes_dir / "keys" / "alice.pem").exists()
+        assert _private_key_path(mailbox_db, "alice").exists()
+        assert not (mailbox_db.env.claudes_dir / "keys" / "alice.pem").exists()
+
+    def test_key_filename_is_namespaced_by_project(self, mailbox_db, pubkeys_file):
+        with _mock_registry(pubkeys_file):
+            cmd_keygen(mailbox_db, "alice")
+        path = _private_key_path(mailbox_db, "alice")
+        assert path.name.startswith("p")
+        assert path.name.endswith("-alice.pem")
 
     def test_registers_pubkey(self, mailbox_db, pubkeys_file):
         with _mock_registry(pubkeys_file):
@@ -80,10 +88,9 @@ class TestKeygenAll:
             cmd_keygen_all(mailbox_db)
         output = capsys.readouterr().out
         assert "OK keygen-all" in output
-        keys_dir = mailbox_db.env.claudes_dir / "keys"
         sessions = [r[0] for r in mailbox_db.query("SELECT name FROM sessions WHERE name != 'all'")]
         for s in sessions:
-            assert (keys_dir / f"{s}.pem").exists(), f"Missing key for {s}"
+            assert _private_key_path(mailbox_db, s).exists(), f"Missing key for {s}"
         data = json.loads(pubkeys_file.read_text())
         for s in sessions:
             assert s in data
@@ -113,6 +120,22 @@ class TestKeygenAll:
         cmd_unseal(mailbox_db, "bob")
         output = capsys.readouterr().out
         assert "auto-keygen test" in output
+
+    def test_unseal_can_read_legacy_private_key(self, mailbox_db, pubkeys_file, capsys):
+        with _mock_registry(pubkeys_file):
+            cmd_keygen(mailbox_db, "bob")
+            namespaced = _private_key_path(mailbox_db, "bob")
+            legacy = namespaced.parent / "bob.pem"
+            namespaced.rename(legacy)
+            cmd_keygen(mailbox_db, "alice")
+            capsys.readouterr()
+            cmd_seal(mailbox_db, "alice", ["bob", "legacy-key works"])
+            capsys.readouterr()
+
+        cmd_unseal(mailbox_db, "bob")
+
+        output = capsys.readouterr().out
+        assert "legacy-key works" in output
 
 
 class TestSeal:
