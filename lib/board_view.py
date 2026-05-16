@@ -200,6 +200,7 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         validate_identity(db, identity)
     assert db.env is not None
     print("=== Board ===\n")
+    board = db.env.install_home / "bin" / "board"
 
     roadmap = db.env.project_root / "ROADMAP.md"
     p0_locked = False
@@ -209,13 +210,13 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         if m and re.search(r"从未|未验证|阻塞", m.group()):
             p0_locked = True
             print("!!! P0 LOCKED — 端到端未验证，全员聚焦 P0 !!!")
-            print("    运行 ./board p0 查看详情\n")
+            print(f"    运行 {board} p0 查看详情\n")
 
     if identity:
         me = identity.lower()
         count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (me,))
         if count:
-            print(f">>> 你有 {count} 条未读消息，运行 ./board inbox 查看 <<<\n")
+            print(f">>> 你有 {count} 条未读消息，运行 {board} --as {me} inbox 查看 <<<\n")
 
     prefix = db.env.prefix
     print("Status:")

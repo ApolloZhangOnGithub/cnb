@@ -115,6 +115,33 @@ class TestCmdP0:
         assert "P0 CLEAR" in output
 
 
+class TestCmdViewPrompts:
+    def test_p0_locked_prompt_uses_absolute_board_path(self, db, capsys):
+        roadmap = db.env.project_root / "ROADMAP.md"
+        roadmap.write_text("## Status\n端到端状态: 从未验证\n## END\n")
+
+        cmd_view(db, "alice")
+        output = capsys.readouterr().out
+
+        assert f"{db.env.install_home}/bin/board p0" in output
+        assert "./board" not in output
+
+    def test_unread_prompt_uses_absolute_board_path(self, db, capsys):
+        msg_id = db.execute(
+            "INSERT INTO messages(ts, sender, recipient, body) VALUES (?, ?, ?, ?)",
+            ("2026-05-16 08:00:00", "bob", "alice", "ping"),
+        )
+        db.execute(
+            "INSERT INTO inbox(session, message_id, delivered_at, read) VALUES (?, ?, ?, 0)", ("alice", msg_id, "")
+        )
+
+        cmd_view(db, "alice")
+        output = capsys.readouterr().out
+
+        assert f"{db.env.install_home}/bin/board --as alice inbox" in output
+        assert "./board" not in output
+
+
 class TestCmdStalls:
     def test_no_suspects_when_inbox_empty(self, db, capsys):
         db.execute(
