@@ -92,20 +92,37 @@ def unseal_b64(encoded: str, recipient_priv: X25519PrivateKey) -> str:
 
 
 def save_keypair(
-    keys_dir: Path, name: str, private: X25519PrivateKey, public: X25519PublicKey, project_root: Path | None = None
+    keys_dir: Path,
+    name: str,
+    private: X25519PrivateKey,
+    public: X25519PublicKey,
+    project_root: Path | None = None,
+    public_keys_dir: Path | None = None,
 ) -> None:
     keys_dir.mkdir(parents=True, exist_ok=True)
     storage_name = key_storage_name(name, project_root)
     (keys_dir / f"{storage_name}.pem").write_bytes(private_key_to_pem(private))
     (keys_dir / f"{storage_name}.pem").chmod(0o600)
-    (keys_dir / f"{storage_name}.pub").write_text(public_key_to_hex(public) + "\n")
+    pub_dir = public_keys_dir or keys_dir
+    pub_dir.mkdir(parents=True, exist_ok=True)
+    (pub_dir / f"{storage_name}.pub").write_text(public_key_to_hex(public) + "\n")
 
 
-def load_private_key(keys_dir: Path, name: str, project_root: Path | None = None) -> X25519PrivateKey:
-    pem_path = keys_dir / f"{key_storage_name(name, project_root)}.pem"
-    legacy_path = keys_dir / f"{key_storage_name(name)}.pem"
-    if not pem_path.exists() and project_root is not None and legacy_path.exists():
-        pem_path = legacy_path
-    if not pem_path.exists():
-        raise FileNotFoundError(f"私钥不存在: {pem_path} (先运行 keygen)")
-    return private_key_from_pem(pem_path.read_bytes())
+def load_private_key(
+    keys_dir: Path,
+    name: str,
+    project_root: Path | None = None,
+    fallback_dirs: tuple[Path, ...] = (),
+) -> X25519PrivateKey:
+    storage_names = [key_storage_name(name, project_root)]
+    legacy_name = key_storage_name(name)
+    if legacy_name not in storage_names:
+        storage_names.append(legacy_name)
+
+    candidates = [
+        directory / f"{storage_name}.pem" for directory in (keys_dir, *fallback_dirs) for storage_name in storage_names
+    ]
+    for pem_path in candidates:
+        if pem_path.exists():
+            return private_key_from_pem(pem_path.read_bytes())
+    raise FileNotFoundError(f"私钥不存在: {candidates[0]} (先运行 keygen)")
