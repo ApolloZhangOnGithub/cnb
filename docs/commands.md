@@ -7,7 +7,7 @@ cnb has two command surfaces: terminal CLI commands and Claude Code slash comman
 ### Project lifecycle
 
 ```bash
-cnb                     # initialize project + launch team + start dispatcher
+cnb                     # initialize project + launch team + start dispatcher watchdog
 cnb codex               # same, with Codex as the agent engine
 cnb doctor              # health check: verify dependencies and config
 cnb ps                  # tongxue status dashboard
@@ -19,7 +19,7 @@ cnb exec <name> "msg"   # send a message to a tongxue
 ### Swarm control
 
 ```bash
-cnb swarm start         # launch the full team
+cnb swarm start         # launch the full team + ensure dispatcher watchdog is running
 cnb swarm smoke <name>  # start a tongxue in report-only standby
 ```
 
