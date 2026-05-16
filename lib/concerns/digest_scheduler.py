@@ -29,8 +29,8 @@ class DigestScheduler(Concern):
     def _already_sent_today(self, notif_type: str, date_str: str) -> bool:
         try:
             count = db(self.cfg).scalar(
-                "SELECT COUNT(*) FROM notification_log WHERE notif_type=? AND ref_id=?",
-                (notif_type, f"digest-{date_str}"),
+                "SELECT COUNT(*) FROM notification_log WHERE notif_type=? AND (ref_id=? OR sent_at LIKE ?)",
+                (notif_type, f"digest-{date_str}", f"{date_str}%"),
             )
             return bool(count)
         except Exception:
