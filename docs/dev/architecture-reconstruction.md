@@ -177,7 +177,10 @@ cnb
 - `bin/init` 会合并或创建 `.claude/settings.json`, 添加 `PostToolBatch` pulse hook。
 - `bin/cnb` 正常启动时还会生成 `.claude/commands/cnb-*.md` slash command 文件, 这些文件是运行期产物, 不属于核心源码。
 - 如果项目是 Git repo, `bin/init` 会安装 `bin/secret-scan` 到 `.git/hooks/pre-commit`。
-- keygen 路径会写项目本地 `.cnb/pubkeys.json` 或 legacy `.claudes/pubkeys.json`; 旧的源码级 `registry/pubkeys.json` 只作为兼容读取 fallback。
+- 当前 encrypted mailbox keygen 仍会把 private keys 写到项目本地 `.cnb/keys/`
+  或 legacy `.claudes/keys/`, 并把 public keys 写到源码级
+  `registry/pubkeys.json`。这不是最终安全模型; issue #60 仍跟踪把 private keys
+  迁出项目 runtime 目录并改成 collision-proof 命名。
 
 新项目初始目录:
 
@@ -1188,9 +1191,10 @@ These are not style complaints. They change how faithfully someone can rebuild t
    - tests and some docs still build `.claudes`.
    - hooks/settings may reference only `.claudes`.
 
-4. Encrypted-mailbox key storage has a legacy fallback.
-   - New project init/keygen writes public keys to project-local `.cnb/pubkeys.json` or `.claudes/pubkeys.json`.
-   - Existing source-level `registry/pubkeys.json` is still read as a compatibility fallback.
+4. Encrypted-mailbox key storage is not at its target state yet.
+   - Current keygen writes private keys to project-local `.cnb/keys/` or legacy `.claudes/keys/`.
+   - Public keys are registered in source-level `registry/pubkeys.json`.
+   - Issue #60 tracks moving private keys out of project runtime directories and adding collision-proof names.
    - Tests that spawn `bin/init` still need isolated `HOME` so global project registration stays hermetic.
 
 5. Feishu bridge is a monolith.

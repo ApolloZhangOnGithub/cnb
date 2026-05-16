@@ -21,7 +21,7 @@ ROADMAP Phase 2 核心功能。让 ownership 不只是"这个模块是你的"，
 
 不告诉同学怎么改代码，告诉它约束：测试覆盖率 ≥ 80%、响应时间 ≤ 200ms、不引入安全漏洞。执行细节同学自己决定。写好约束，你就不需要在场。
 
-**对应实现**：每个模块一个 contract 文件（`.claudes/contracts/<module>.yml`），定义该模块的验收标准。`task done` 时自动检查 contract。
+**对应实现**：每个模块一个 contract 文件（`.cnb/contracts/<module>.yml`），定义该模块的验收标准。`task done` 时自动检查 contract。
 
 ### 不确定时停下来（丰田：安灯绳）
 
