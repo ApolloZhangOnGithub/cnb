@@ -133,6 +133,27 @@ class TestDailyDigest:
         sched._send_daily("2026-05-08")
         assert mock_send.call_count == first_count
 
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    def test_skips_if_daily_digest_already_logged_today(self, mock_send, mock_sessions, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        conn = _init_db(cfg.board_db)
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        conn.execute(
+            """
+            INSERT INTO notification_log(notif_type, recipient, ref_type, ref_id, channel, sent_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("daily-digest", "alice", "digest", "manual-digest", "board-inbox", f"{date_str} 08:15:00"),
+        )
+        conn.commit()
+
+        sched = DigestScheduler(cfg)
+        sched._send_daily(date_str)
+
+        mock_send.assert_not_called()
+        conn.close()
+
     @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=[])
     @patch("lib.concerns.digest_scheduler.board_send")
     def test_no_subscribers_no_send(self, mock_send, mock_sessions, tmp_path):
