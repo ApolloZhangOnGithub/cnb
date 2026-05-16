@@ -2,16 +2,16 @@
 number: 48
 title: "Tech debt ownership: dedicated code health role"
 state: OPEN
-labels: ["phase:1", "infra"]
+labels: ["phase:1", "infra", "priority:p0"]
 assignees: []
 created: 2026-05-08
-updated: 2026-05-09
+updated: 2026-05-10
 ---
 
 # #48 Tech debt ownership: dedicated code health role
 
 **State:** OPEN
-**Labels:** phase:1, infra
+**Labels:** phase:1, infra, priority:p0
 
 ---
 

@@ -2,16 +2,16 @@
 number: 91
 title: "Add project discovery and Codex engine CLI regression tests"
 state: OPEN
-labels: ["phase:1", "infra"]
+labels: ["phase:1", "infra", "priority:p1"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-10
 ---
 
 # #91 Add project discovery and Codex engine CLI regression tests
 
 **State:** OPEN
-**Labels:** phase:1, infra
+**Labels:** phase:1, infra, priority:p1
 
 ---
 

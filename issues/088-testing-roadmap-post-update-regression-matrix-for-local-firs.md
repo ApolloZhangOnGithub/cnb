@@ -2,16 +2,16 @@
 number: 88
 title: "Testing roadmap: post-update regression matrix for local-first features"
 state: OPEN
-labels: ["phase:1", "infra"]
+labels: ["phase:1", "infra", "priority:p1"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-10
 ---
 
 # #88 Testing roadmap: post-update regression matrix for local-first features
 
 **State:** OPEN
-**Labels:** phase:1, infra
+**Labels:** phase:1, infra, priority:p1
 
 ---
 

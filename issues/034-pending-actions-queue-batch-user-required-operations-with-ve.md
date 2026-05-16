@@ -2,16 +2,16 @@
 number: 34
 title: "Pending actions queue: batch user-required operations with verification"
 state: OPEN
-labels: ["phase:1", "infra"]
+labels: ["phase:1", "infra", "priority:p1"]
 assignees: []
 created: 2026-05-07
-updated: 2026-05-09
+updated: 2026-05-10
 ---
 
 # #34 Pending actions queue: batch user-required operations with verification
 
 **State:** OPEN
-**Labels:** phase:1, infra
+**Labels:** phase:1, infra, priority:p1
 
 ---
 

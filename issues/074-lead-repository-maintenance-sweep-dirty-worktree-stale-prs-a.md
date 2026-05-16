@@ -2,16 +2,16 @@
 number: 74
 title: "Lead repository maintenance sweep: dirty worktree, stale PRs, and CI follow-ups"
 state: OPEN
-labels: ["phase:1", "infra"]
+labels: ["phase:1", "infra", "priority:p0"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-10
 ---
 
 # #74 Lead repository maintenance sweep: dirty worktree, stale PRs, and CI follow-ups
 
 **State:** OPEN
-**Labels:** phase:1, infra
+**Labels:** phase:1, infra, priority:p0
 
 ---
 

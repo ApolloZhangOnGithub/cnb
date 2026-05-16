@@ -2,16 +2,16 @@
 number: 60
 title: "P0: 加密邮箱私钥安全 — gitignore 缺失 + 命名冲突 + 存储位置错误"
 state: OPEN
-labels: ["bug", "infra"]
+labels: ["bug", "phase:1", "infra", "priority:p0"]
 assignees: []
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-16
 ---
 
 # #60 P0: 加密邮箱私钥安全 — gitignore 缺失 + 命名冲突 + 存储位置错误
 
 **State:** OPEN
-**Labels:** bug, infra
+**Labels:** bug, phase:1, infra, priority:p0
 
 ---
 

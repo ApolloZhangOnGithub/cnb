@@ -2,16 +2,16 @@
 number: 87
 title: "Improve ownership routing beyond prefix and substring matching"
 state: OPEN
-labels: ["phase:2", "ownership", "infra"]
+labels: ["phase:2", "ownership", "infra", "priority:p1"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-10
 ---
 
 # #87 Improve ownership routing beyond prefix and substring matching
 
 **State:** OPEN
-**Labels:** phase:2, ownership, infra
+**Labels:** phase:2, ownership, infra, priority:p1
 
 ---
 

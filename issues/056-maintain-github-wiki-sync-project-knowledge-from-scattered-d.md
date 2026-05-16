@@ -2,16 +2,16 @@
 number: 56
 title: "Maintain GitHub Wiki: sync project knowledge from scattered docs"
 state: OPEN
-labels: ["phase:2", "infra"]
+labels: ["phase:2", "infra", "priority:p2"]
 assignees: []
 created: 2026-05-08
-updated: 2026-05-09
+updated: 2026-05-10
 ---
 
 # #56 Maintain GitHub Wiki: sync project knowledge from scattered docs
 
 **State:** OPEN
-**Labels:** phase:2, infra
+**Labels:** phase:2, infra, priority:p2
 
 ---
 
