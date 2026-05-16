@@ -36,7 +36,7 @@ def make_cfg(tmp_path: Path, sessions: list[str] | None = None) -> DispatcherCon
         sessions_dir=cd / "sessions",
         board_db=db_path,
         suspended_file=cd / "suspended",
-        board_sh="./board",
+        board_sh=str(tmp_path / "bin" / "board"),
         coral_sess="cc-test-lead",
         dispatcher_session="cc-test-dispatcher",
         log_dir=cd / "logs",
@@ -246,6 +246,8 @@ class TestPriority:
         assert mock_send.call_count == 1, "only one nudge per session per tick"
         sent_text = mock_send.call_args[0][1] if mock_send.call_args[0] else str(mock_send.call_args)
         assert "inbox" in sent_text.lower(), "inbox nudge should win over idle/queued"
+        assert sent_text == f"{cfg.board_sh} --as alice inbox"
+        assert "./board" not in sent_text
 
     @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
     @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)

@@ -31,7 +31,7 @@ def make_cfg(tmp_path: Path, sessions: list[str] | None = None) -> DispatcherCon
         sessions_dir=cd / "sessions",
         board_db=db_path,
         suspended_file=cd / "suspended",
-        board_sh="./board",
+        board_sh=str(tmp_path / "bin" / "board"),
         coral_sess=f"{PREFIX}-lead",
         dispatcher_session=f"{PREFIX}-dispatcher",
         log_dir=cd / "logs",
@@ -105,6 +105,21 @@ class TestInboxNudger:
         with patch("lib.concerns.notifications.tmux_send") as mock_send:
             nudger.nudge_if_unread("alice")
             assert mock_send.call_count == 0
+
+    @patch("lib.concerns.notifications.tmux_send", return_value=True)
+    @patch("lib.concerns.notifications.tmux_ok", return_value=True)
+    @patch("lib.concerns.notifications.is_claude_running", return_value=True)
+    @patch("lib.concerns.notifications.db")
+    def test_nudge_uses_configured_board_path(self, mock_db, mock_running, mock_ok, mock_send, tmp_path):
+        cfg = make_cfg(tmp_path)
+        mock_db.return_value.scalar.return_value = 1
+        nudger = InboxNudger(cfg)
+
+        nudger.nudge_if_unread("alice")
+
+        expected = f"{cfg.board_sh} --as alice inbox"
+        mock_send.assert_called_once_with("cc-test-alice", expected)
+        assert "./board" not in expected
 
     @patch("lib.concerns.notifications.tmux_send", return_value=True)
     @patch("lib.concerns.notifications.tmux_ok", return_value=True)

@@ -84,7 +84,7 @@ class NudgeCoordinator(Concern):
         if unread <= 0:
             return False
         sess = f"{self.cfg.prefix}-{name}"
-        tmux_send(sess, f"./board --as {name} inbox")
+        tmux_send(sess, f"{self.cfg.board_sh} --as {name} inbox")
         return True
 
     def _try_queued_flush(self, name: str) -> bool:

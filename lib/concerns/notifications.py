@@ -33,7 +33,7 @@ class InboxNudger(Concern):
             return
 
         log(f"INBOX: {name} has {unread} unread -> nudging")
-        tmux_send(sess, f"./board --as {name} inbox")
+        tmux_send(sess, f"{self.cfg.board_sh} --as {name} inbox")
 
     def tick(self, now: int) -> None:
         for name in get_dev_sessions(self.cfg):
