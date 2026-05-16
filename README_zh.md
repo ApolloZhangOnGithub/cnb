@@ -35,7 +35,7 @@ claude        # 正常启动 Claude Code
 
 ```bash
 cd your-project
-cnb           # 初始化 .cnb/、启动同学团队、启动 dispatcher
+cnb           # 初始化 .cnb/、启动同学团队，默认启动 dispatcher watchdog
 ```
 
 Codex：`cnb codex` 或 `CNB_AGENT=codex cnb`。启动参数、`/goal` 工作流、看板 nudge 和 smoke test 详见 [Codex 引擎](docs/codex-engine.md)。
