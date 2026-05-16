@@ -395,12 +395,15 @@ export SWARM_AGENT="${SWARM_AGENT:-$_LEAD_AGENT}"
 
 # ---- Helper: start dispatcher if not already running ----
 _start_dispatcher() {
-    local pidfile="$CNB_PROJECT/$_CFG_DIR/dispatcher.pid"
+    case "${CNB_AUTO_DISPATCHER:-1}" in
+        0|false|False|no|No|off|Off) return ;;
+    esac
+    local pidfile="$CNB_PROJECT/$_CFG_DIR/dispatcher-watchdog.pid"
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         return
     fi
     mkdir -p "$CNB_PROJECT/$_CFG_DIR/logs"
-    "$CLAUDES_HOME/bin/dispatcher" >> "$CNB_PROJECT/$_CFG_DIR/logs/dispatcher.log" 2>&1 &
+    "$CLAUDES_HOME/bin/dispatcher-watchdog" >> "$CNB_PROJECT/$_CFG_DIR/logs/dispatcher-watchdog.log" 2>&1 &
     echo $! > "$pidfile"
     disown
 }

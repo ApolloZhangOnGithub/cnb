@@ -4,6 +4,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import threading
 import time
 import tomllib
@@ -21,6 +22,11 @@ SUPPORTED_AGENTS = frozenset({"claude", "codex", "trae", "qwen"})
 # conflicts with explicit --ask-for-approval or --sandbox flags, so keep it
 # standalone instead of trying to restate the implied "never ask/no sandbox".
 CODEX_PERMISSION_FLAGS = ("--dangerously-bypass-approvals-and-sandbox",)
+
+
+def auto_dispatcher_enabled() -> bool:
+    value = os.environ.get("CNB_AUTO_DISPATCHER", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
 
 
 def codex_goal_feature_command() -> str:
@@ -74,6 +80,39 @@ class SwarmManager:
 
     def _board_path(self) -> str:
         return str(self.cfg.install_home / "bin" / "board")
+
+    def _pid_alive(self, pidfile: Path) -> bool:
+        if not pidfile.exists():
+            return False
+        try:
+            pid = int(pidfile.read_text().strip())
+            os.kill(pid, 0)
+            return True
+        except (OSError, ValueError):
+            return False
+
+    def ensure_dispatcher_watchdog(self) -> bool:
+        if not auto_dispatcher_enabled():
+            return False
+        pidfile = self._env.claudes_dir / "dispatcher-watchdog.pid"
+        if self._pid_alive(pidfile):
+            return False
+
+        self._env.log_dir.mkdir(parents=True, exist_ok=True)
+        env = os.environ.copy()
+        env["CNB_PROJECT"] = str(self._env.project_root)
+        env["CLAUDES_HOME"] = str(self.cfg.install_home)
+        with (self._env.log_dir / "dispatcher-watchdog.log").open("ab") as log:
+            proc = subprocess.Popen(
+                [sys.executable, str(self.cfg.install_home / "bin" / "dispatcher-watchdog")],
+                cwd=self._env.project_root,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                env=env,
+                start_new_session=True,
+            )
+        pidfile.write_text(f"{proc.pid}\n")
+        return True
 
     def build_system_prompt(self, name: str) -> str:
         board = self._board_path()
@@ -444,12 +483,16 @@ class SwarmManager:
         for t in self._pending_threads:
             t.join(timeout=90)
         self._pending_threads.clear()
+        dispatcher_started = self.ensure_dispatcher_watchdog()
 
         print()
         backend_name = type(self.cfg.backend).__name__.lower().replace("backend", "")
         standby_note = " | Startup: standby/smoke" if standby else ""
         print(f"Mode: {backend_name} | Engine: {self.cfg.agent} | Started: {started}{standby_note}")
         print(f"Logs: {self._env.log_dir}")
+        if auto_dispatcher_enabled():
+            state = "started" if dispatcher_started else "running"
+            print(f"Dispatcher watchdog: {state}")
         if isinstance(self.cfg.backend, TmuxBackend):
             print(f"  tmux attach -t {self._env.prefix}-<name>   # attach (Ctrl-B D to detach)")
         else:

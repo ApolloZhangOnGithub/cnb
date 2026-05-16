@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from lib.common import ClaudesEnv
-from lib.swarm import SwarmConfig, SwarmManager
+from lib.swarm import SwarmConfig, SwarmManager, auto_dispatcher_enabled
 from lib.swarm_backend import ScreenBackend, SessionBackend, TmuxBackend, detect_backend
 
 # ---------------------------------------------------------------------------
@@ -155,6 +155,51 @@ class TestPrompts:
         p = mgr.build_initial_prompt("bob")
         assert "bob" in p
         assert "inbox" in p
+
+
+class TestDispatcherAutostart:
+    def test_default_enabled(self, monkeypatch):
+        monkeypatch.delenv("CNB_AUTO_DISPATCHER", raising=False)
+
+        assert auto_dispatcher_enabled() is True
+
+    def test_can_disable_with_env(self, monkeypatch):
+        monkeypatch.setenv("CNB_AUTO_DISPATCHER", "0")
+
+        assert auto_dispatcher_enabled() is False
+
+    def test_start_launches_dispatcher_watchdog(self, mgr, monkeypatch, capsys):
+        calls = []
+
+        class FakePopen:
+            pid = 4321
+
+            def __init__(self, args, **kwargs):
+                calls.append((args, kwargs))
+
+        monkeypatch.delenv("CNB_AUTO_DISPATCHER", raising=False)
+        monkeypatch.setattr("lib.swarm.subprocess.Popen", FakePopen)
+
+        mgr.start(["alice"])
+
+        assert calls
+        assert calls[0][0][-1].endswith("bin/dispatcher-watchdog")
+        assert calls[0][1]["cwd"] == mgr._env.project_root
+        assert calls[0][1]["env"]["CNB_PROJECT"] == str(mgr._env.project_root)
+        assert (mgr._env.claudes_dir / "dispatcher-watchdog.pid").read_text() == "4321\n"
+        assert "Dispatcher watchdog: started" in capsys.readouterr().out
+
+    def test_start_skips_dispatcher_when_disabled(self, mgr, monkeypatch, capsys):
+        monkeypatch.setenv("CNB_AUTO_DISPATCHER", "0")
+        monkeypatch.setattr(
+            "lib.swarm.subprocess.Popen",
+            lambda *args, **kwargs: pytest.fail("dispatcher watchdog should not start"),
+        )
+
+        mgr.start(["alice"])
+
+        assert not (mgr._env.claudes_dir / "dispatcher-watchdog.pid").exists()
+        assert "Dispatcher watchdog" not in capsys.readouterr().out
 
     def test_initial_prompt_standby_reports_only(self, mgr):
         p = mgr.build_initial_prompt("bob", standby=True)

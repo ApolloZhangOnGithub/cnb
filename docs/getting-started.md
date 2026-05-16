@@ -39,7 +39,7 @@ cd your-project
 cnb
 ```
 
-This initializes the project (creates `.cnb/` with SQLite DB and config), launches a team of tongxue in tmux, starts a dispatcher, and drops you into the device supervisor's session.
+This initializes the project (creates `.cnb/` with SQLite DB and config), launches a team of tongxue in tmux, starts a dispatcher watchdog, and drops you into the device supervisor's session. Direct `cnb swarm start` also starts the dispatcher watchdog by default; set `CNB_AUTO_DISPATCHER=0` only for tests or manual debugging.
 
 ### Using Codex as the engine
 
