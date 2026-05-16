@@ -117,7 +117,7 @@ This project uses cnb for multi-session coordination.
 You are a session. Your name is passed via `--name` when Claude Code starts.
 On startup:
 ```bash
-board --as <your-name> inbox
+cnb board --as <your-name> inbox
 ```
 
 **Team leads only**: on first startup, check the global bulletin board for org-wide announcements:
@@ -128,21 +128,21 @@ cat ~/.cnb/bulletin.md
 ### Commands
 
 ```bash
-board --as <name> send <to> "<msg>"    # message (person or "all")
-board --as <name> inbox                # check unread
-board --as <name> ack                  # clear inbox
-board --as <name> status "<desc>"      # update current task
-board --as <name> task add "<desc>"    # add task
-board --as <name> task done            # finish current task (auto-verify + auto-PR)
-board --as <name> task done --skip-verify  # skip test verification
-board --as <name> view                 # board overview
-board --as <name> bug report P1 "desc" # report bug
-board --as <name> send all "msg"       # broadcast
-board --as <name> own claim <path>     # claim ownership of a path/module
-board --as <name> own list             # list your ownership
-board --as <name> own disown <path>    # release ownership
-board --as <name> own map              # show all ownership
-board --as <name> scan                 # scan issues/CI, route to owners
+cnb board --as <name> send <to> "<msg>"    # message (person or "all")
+cnb board --as <name> inbox                # check unread
+cnb board --as <name> ack                  # clear inbox
+cnb board --as <name> status "<desc>"      # update current task
+cnb board --as <name> task add "<desc>"    # add task
+cnb board --as <name> task done            # finish current task (auto-verify + auto-PR)
+cnb board --as <name> task done --skip-verify  # skip test verification
+cnb board --as <name> view                 # board overview
+cnb board --as <name> bug report P1 "desc" # report bug
+cnb board --as <name> send all "msg"       # broadcast
+cnb board --as <name> own claim <path>     # claim ownership of a path/module
+cnb board --as <name> own list             # list your ownership
+cnb board --as <name> own disown <path>    # release ownership
+cnb board --as <name> own map              # show all ownership
+cnb board --as <name> scan                 # scan issues/CI, route to owners
 ```
 
 ### Rules

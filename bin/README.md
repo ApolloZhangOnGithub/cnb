@@ -10,7 +10,7 @@ This directory contains executable entrypoints for cnb. Keep the root README foc
 | `cnb capture` | Receives user-authorized browser/app captures and stores `.cnb/captures/<id>/` artifacts. | Protocol notes live in [`../docs/capture-protocol.md`](../docs/capture-protocol.md) and [`../tools/web-capture/README.md`](../tools/web-capture/README.md). |
 | `board` | Lower-level board operations: inbox, messages, status, tasks, ownership, pending actions, and views. | Prefer `cnb board ...` unless a test or script needs the direct entrypoint. |
 | `swarm` | Starts and manages background tongxue sessions. | Usually invoked through `cnb` during normal operation. |
-| `dispatcher` / `dispatcher-watchdog` | Monitors board activity and keeps coordination moving. | Background infrastructure; document operational changes before changing defaults. |
+| `dispatcher` / `dispatcher-watchdog` | Monitors board activity and keeps coordination moving. | Background infrastructure; starts by default from `cnb` and `cnb swarm start`. Use `CNB_AUTO_DISPATCHER=0` only for tests or manual debugging. |
 | `doctor` | Health checks for local cnb prerequisites and project state. | Use before diagnosing environment issues. |
 | `hygiene` | Reports generated files, local runtime state, and suspicious untracked work. | Use before cleanup in a dirty shared worktree; it does not delete files. |
 | `cnb resources` | Read-only resource and process-pressure diagnostics. | `--processes` groups high CPU/RSS processes and recommends safe next actions without stopping anything. |
