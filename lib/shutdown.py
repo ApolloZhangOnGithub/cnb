@@ -37,6 +37,7 @@ def _board_send(board_sh: str, sender: str, recipient: str, msg: str) -> bool:
 
 SYSTEM_SESSIONS: frozenset[str] = frozenset({"all", "dispatcher"})
 DRY_RUN_NOTICE = "PREVIEW ONLY / NO ACTION TAKEN"
+DRY_RUN_SUMMARY_TITLE = "SIMULATED SHUTDOWN SUMMARY"
 
 
 def _active_sessions(board: BoardDB, roster: list[str] | None = None) -> list[str]:
@@ -209,15 +210,18 @@ def run_shutdown(
         print("\n[2/5] 跳过等待 ack")
 
     if dry_run:
-        print(f"\n[3/5] {DRY_RUN_NOTICE} — generating in-memory report preview only")
+        print(f"\n[3/5] {DRY_RUN_NOTICE} — would collect reports in memory only")
     else:
         print("\n[3/5] 收集同学日报...")
     reports = collect_reports(board, sessions, since=started, project_root=env.project_root)
     for name in sessions:
-        print(f"  {name}: OK")
+        if dry_run:
+            print(f"  {name}: SIMULATED — report preview generated in memory; not saved")
+        else:
+            print(f"  {name}: OK")
 
     if dry_run:
-        print(f"\n[4/5] {DRY_RUN_NOTICE} — generating in-memory shift summary preview only")
+        print(f"\n[4/5] {DRY_RUN_NOTICE} — would generate shift summary in memory only")
     else:
         print("\n[4/5] 生成轮次汇总...")
     ended = datetime.now()
@@ -231,10 +235,11 @@ def run_shutdown(
     )
 
     if dry_run:
-        print(f"  WOULD SAVE: dailies/{shift_number:03d}/")
-        print(f"  NOT SAVED: _meta.md + {len(reports)} 份个人日报")
-        print(f"\n[5/5] {DRY_RUN_NOTICE} — sessions not stopped")
-        print(f"\n=== Shift {shift_number:03d} PREVIEW ONLY — NO ACTION TAKEN ===")
+        print(f"  {DRY_RUN_SUMMARY_TITLE}: dailies/{shift_number:03d}/")
+        print(f"  SIMULATED ONLY: _meta.md + {len(reports)} 份个人日报")
+        print(f"  NO FILES WRITTEN: dailies/{shift_number:03d}/ was not created or updated")
+        print(f"\n[5/5] {DRY_RUN_NOTICE} — would stop sessions; no stop command sent")
+        print(f"\n=== Shift {shift_number:03d} SIMULATED SHUTDOWN — NO ACTION TAKEN ===")
         return None
 
     shift_dir = save_shift(dailies_dir, shift_number, reports, meta)
