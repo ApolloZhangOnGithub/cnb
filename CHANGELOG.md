@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.70-dev (unreleased)
+
+### Refactoring
+
+- **Consolidate update-check** (#43) — Removed the duplicate bash version-check from `bin/cnb` (~120 lines: `_check_update`, `_notify_update_owner`, `_version_gt`, `_in_virtualenv`, cache file paths). Both entry points (`cnb <subcmd>` and the interactive banner) now call `bin/board update-check` so there is one implementation. Added `--quiet` (no stdout; cron / subcommand path) and `--terminal` (silent unless stale, then prints the historical yellow banner line) modes to keep UX identical. Kept `_read_update_owner` in bash since `cnb exec` still calls it directly. Stacks on #43.
+
 ## 0.5.69-dev (unreleased)
 
 ### Features

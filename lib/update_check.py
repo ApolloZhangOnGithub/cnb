@@ -217,10 +217,20 @@ def check_update(env: Any, current: str) -> bool:
 def cmd_update_check(db: Any, args: list[str]) -> None:
     """Board command — manual trigger for debugging / cron jobs.
 
-    `--force` ignores the notification-suppression key so the message resends even
-    if the owner was already nudged for this version pair.
+    Output modes (mutually exclusive; default is the verbose `OK ...` summary):
+      --quiet     no stdout. Owner still gets notified via board send when stale.
+                  Use from cron / bin/cnb subcommand path.
+      --terminal  silent when up-to-date; print one yellow line when stale.
+                  Use from bin/cnb interactive banner, where any noise dilutes
+                  the launch.
+
+    Other flags:
+      --force   ignore the notification-suppression key so the message resends
+                even if the owner was already nudged for this version pair
     """
     assert db.env is not None
+    quiet = "--quiet" in args
+    terminal = "--terminal" in args
     current_version = _read_local_version(db.env.install_home)
     if "--force" in args:
         CACHE_NOTIFIED.unlink(missing_ok=True)
@@ -228,14 +238,24 @@ def cmd_update_check(db: Any, args: list[str]) -> None:
         # Give the spawned npm a beat to land; harmless if still pending.
         time.sleep(2)
     sent = check_update(db.env, current_version)
+    if quiet:
+        return
     latest = cached_latest_version() or "?"
     owner = read_update_owner(db.env) or "?"
+    is_stale = latest != "?" and version_gt(latest, current_version)
+    if terminal:
+        if is_stale and not is_venv():
+            # Match the historical bash banner phrasing so the user UX is unchanged.
+            print(
+                f"\033[1;33m⬆ cnb v{latest} 已发布，当前 v{current_version}。运行 npm install -g claude-nb 更新。\033[0m"
+            )
+        return
     if is_venv():
         print(f"OK update-check skipped: in venv (current v{current_version})")
         return
     if sent:
         print(f"OK update-check notified {owner}: v{current_version} -> v{latest}")
-    elif latest != "?" and version_gt(latest, current_version):
+    elif is_stale:
         print(f"OK update-check stale (already notified {owner} for v{latest})")
     else:
         print(f"OK update-check up to date (v{current_version}, latest v{latest})")
