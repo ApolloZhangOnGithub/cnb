@@ -32,6 +32,7 @@ sys.path.insert(0, str(CLAUDES_HOME))
 # excluded — those modules are not imported by dispatcher.
 WATCHED_PATHS = (
     CLAUDES_HOME / "lib" / "concerns",
+    CLAUDES_HOME / "lib" / "common.py",  # ClaudesEnv + DB wrapper; transitively used
     CLAUDES_HOME / "bin" / "dispatcher",
     CLAUDES_HOME / "bin" / "dispatcher-watchdog",
 )
