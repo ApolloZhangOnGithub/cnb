@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.97-dev (unreleased)
+
+### Features
+
+- **Dispatcher auto-reload on code change (#235)** — `bin/dispatcher` now records the max mtime across `lib/concerns/`, `lib/common.py`, `bin/dispatcher`, and `bin/dispatcher-watchdog` at startup. Each tick re-reads it; if newer, sleeps 5s (debounce against editor mid-save flicker), re-checks, and on confirmed change `raise SystemExit(0)`. `bin/dispatcher-watchdog` already respawns unconditionally, so the next code change picks up automatically — no manual `kill -TERM` needed. Watched paths are deliberately narrow (`lib/blog_*` is excluded because dispatcher does not import it).
+
 ## 0.5.78-dev (unreleased)
 
 ### Features
