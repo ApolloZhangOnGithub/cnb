@@ -9,7 +9,7 @@ from pathlib import Path
 from lib.board_db import BoardDB
 from lib.tmux_utils import is_agent_running as is_claude_running  # noqa: F401 — re-export
 from lib.tmux_utils import (
-    tmux_ok,  # noqa: F401 — re-export for concerns
+    tmux_ok,
     tmux_run,
 )
 from lib.tmux_utils import tmux_send as _tmux_send_raw
