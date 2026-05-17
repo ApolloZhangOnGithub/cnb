@@ -28,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from lib.concerns.helpers import has_tool_process
 from lib.swarm import CODEX_PERMISSION_FLAGS
 from lib.tmux_utils import has_session, tmux_send
 
@@ -144,6 +145,14 @@ HEARTBEAT_UNHEALTHY_THRESHOLD = 3
 # long enough that normal tool exec / model thinking does not trigger, short
 # enough that users notice silence within a Feishu thread.
 DEFAULT_STALL_THRESHOLD_SECONDS = 300
+# Default pane-static window for L2 stall detection: how long the supervisor
+# pane content can be unchanged (with no tool process running and an outstanding
+# inbound) before flagging stall. Chosen >= L1's 300s so L2 does not fire first
+# during legitimate long model thinking.
+DEFAULT_PANE_STALL_STATIC_SECONDS = 300
+# Spinner glyphs / progress markers that indicate the supervisor is actively
+# processing even when the pane md5 happens to be stable for a moment.
+_PANE_PROGRESS_MARKERS = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "esc to interrupt")
 SUPPORTED_PILOT_ROLES = frozenset({DEFAULT_PILOT_ROLE, DEVICE_CHIEF_ROLE})
 SUPPORTED_TRANSPORTS = frozenset({"local_openapi", "hermes_lark_cli"})
 SUPPORTED_ACTIVITY_RENDER_STYLES = frozenset({"auto", "codex", "claude"})
@@ -290,6 +299,7 @@ class FeishuBridgeConfig:
     standby_pilot_tmux: str = ""
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     stall_threshold_seconds: int = DEFAULT_STALL_THRESHOLD_SECONDS
+    pane_stall_static_seconds: int = DEFAULT_PANE_STALL_STATIC_SECONDS
 
     @classmethod
     def load(cls, config_path: Path | None = None, project_root: Path | None = None) -> FeishuBridgeConfig:
@@ -449,6 +459,9 @@ class FeishuBridgeConfig:
             ),
             stall_threshold_seconds=max(
                 30, _int(section.get("stall_threshold_seconds"), DEFAULT_STALL_THRESHOLD_SECONDS)
+            ),
+            pane_stall_static_seconds=max(
+                30, _int(section.get("pane_stall_static_seconds"), DEFAULT_PANE_STALL_STATIC_SECONDS)
             ),
         )
 
@@ -1096,6 +1109,9 @@ def check_pilot_health(cfg: FeishuBridgeConfig, tmux_session: str | None = None)
     stall = stall_status_for_pilot(cfg)
     if stall:
         return BridgeResult(False, stall)
+    pane_stall = pane_stall_status(cfg, session)
+    if pane_stall:
+        return BridgeResult(False, pane_stall)
     return BridgeResult(True, "healthy")
 
 
@@ -1153,6 +1169,79 @@ def stall_status_for_pilot(cfg: FeishuBridgeConfig) -> str:
     if age_seconds < cfg.stall_threshold_seconds:
         return ""
     return f"no reply to {message_id} for {int(age_seconds)}s (threshold {cfg.stall_threshold_seconds}s)"
+
+
+# L2 stall detection (#160): pane-hash decay with no-tool-process and outstanding-inbound
+# guards. Module-level cache keyed by tmux session — survives across heartbeat ticks
+# but not across bridge process restarts (acceptable; restart resets the clock safely).
+_pane_hash_state: dict[str, tuple[str, float]] = {}
+
+
+def _pane_md5_now(session: str) -> tuple[str, str]:
+    """Capture the supervisor pane and return (raw_content, md5). Empty md5 on failure."""
+    try:
+        result = subprocess.run(
+            ["tmux", "capture-pane", "-t", session, "-p", "-J"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "", ""
+    if result.returncode != 0:
+        return "", ""
+    content = result.stdout
+    return content, hashlib.md5(content.encode()).hexdigest()
+
+
+def _pane_shows_progress(content: str) -> bool:
+    """True if the pane content has spinner glyphs or 'esc to interrupt' — signals
+    the supervisor is actively processing even if the md5 happens to match.
+    """
+    return any(marker in content for marker in _PANE_PROGRESS_MARKERS)
+
+
+def pane_stall_status(cfg: FeishuBridgeConfig, session: str | None = None) -> str:
+    """L2: report stall when pane content has been frozen for the configured window
+    AND there is no spawned tool process AND there is an outstanding inbound.
+
+    The three-way AND distinguishes:
+      - long tool exec (has_tool_process → True): not a stall.
+      - model streaming output (md5 changes each tick): not a stall.
+      - quiet supervisor with no inbound waiting: not a stall.
+      - frozen / compact-freeze with no children: stall.
+
+    Reset-on-change is implicit — when the md5 differs from the cached value,
+    the per-session timer restarts. Spinner-glyph / 'esc to interrupt' guard
+    prevents false positives when Claude Code is mid-thinking but the visible
+    progress indicator happens to look static for a tick.
+    """
+    sess = session or cfg.pilot_tmux
+    outstanding = oldest_outstanding_inbound(cfg)
+    if outstanding is None:
+        return ""
+    if has_tool_process(sess):
+        return ""
+    content, current_md5 = _pane_md5_now(sess)
+    if not current_md5:
+        return ""
+    if _pane_shows_progress(content):
+        # Reset the timer so we don't accumulate static time across spinner ticks.
+        _pane_hash_state[sess] = (current_md5, time.time())
+        return ""
+    now = time.time()
+    cached = _pane_hash_state.get(sess)
+    if cached is None or cached[0] != current_md5:
+        _pane_hash_state[sess] = (current_md5, now)
+        return ""
+    static_seconds = now - cached[1]
+    if static_seconds < cfg.pane_stall_static_seconds:
+        return ""
+    message_id, _ = outstanding
+    return (
+        f"pane unchanged {int(static_seconds)}s with no tool process, "
+        f"outstanding {message_id} (threshold {cfg.pane_stall_static_seconds}s)"
+    )
 
 
 def failover_to_standby(cfg: FeishuBridgeConfig) -> BridgeResult:
