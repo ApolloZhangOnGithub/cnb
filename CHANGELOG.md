@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.96-dev (unreleased)
+
+### Documentation
+
+- **c-n-b.space fetch troubleshooting (#214)** — Added `docs/dev/troubleshooting-fetch.md` documenting the local-proxy + Aliyun ICP interception that prevents `curl` / `requests` from reaching the public sites, the `bin/fetch-site` workaround, and the two blockers (apex 80→443 redirect missing; multi-SAN cert needed) that currently prevent submitting the apex to the Chromium HSTS preload list. Linked from CLAUDE.md so tongxue see it before they reach for `curl`.
+
 ## 0.5.78-dev (unreleased)
 
 ### Features
