@@ -124,6 +124,16 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
     if attach_ref:
         print(f"  附件已存储: {stored_path}")
 
+    prefix = db.env.prefix
+    if to == "all":
+        all_names = [r[0] for r in db.query("SELECT name FROM sessions WHERE name != 'all'")]
+        offline = [n for n in all_names if not has_session(f"{prefix}-{n}")]
+        if offline:
+            print(f"  ⚠ 离线同学（下次上线时可见）: {', '.join(offline)}")
+    else:
+        if not has_session(f"{prefix}-{to}"):
+            print(f"  ⚠ {to} 当前离线，消息将在其上线后可见")
+
     nudge_session(db, to)
 
 
