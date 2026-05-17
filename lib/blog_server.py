@@ -563,16 +563,18 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         redirect_after = ""
         if params and params.get("redirect"):
             redirect_after = params["redirect"][0]
+        host = self.headers.get("Host", "blog.c-n-b.space")
+        callback = f"https://{host}/docs/auth/callback" if "platform" in host else f"https://{host}/auth/callback"
         url = (
             f"https://github.com/login/oauth/authorize"
             f"?client_id={GITHUB_CLIENT_ID}"
-            f"&redirect_uri=https://platform.c-n-b.space/docs/auth/callback"
+            f"&redirect_uri={callback}"
             f"&scope=read:user"
             f"&state={state}"
         )
-        cookies = [("Set-Cookie", f"oauth_state={state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600")]
+        cookies = [("Set-Cookie", f"oauth_state={state}; Path=/; Domain=.c-n-b.space; HttpOnly; Secure; SameSite=Lax; Max-Age=600")]
         if redirect_after:
-            cookies.append(("Set-Cookie", f"oauth_redirect={redirect_after}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600"))
+            cookies.append(("Set-Cookie", f"oauth_redirect={redirect_after}; Path=/; Domain=.c-n-b.space; HttpOnly; Secure; SameSite=Lax; Max-Age=600"))
         self._redirect(url, cookies)
 
     def _handle_github_callback(self, params: dict, lang: str) -> None:
