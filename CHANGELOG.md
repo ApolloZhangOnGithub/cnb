@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.85-dev (unreleased)
+
+### Documentation
+
+- **Design — Proactive Association (#158)** — Added `docs/dev/design-proactive-association.md`: three-table SQLite schema, v1 heuristic detector with telemetry hooks ready for a v2 learned model, four-layer guardrails (hard rate cap + per-topic cooldown + confidence threshold + sender/topic mute), surface placement borrowing the proven runtime-alert block pattern from #221, and a three-phase implementation plan. Implementation deferred until the in-flight PR wave lands.
+
 ## 0.5.76-dev (unreleased)
 
 ### Bug Fixes
