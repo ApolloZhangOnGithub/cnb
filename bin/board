@@ -5,6 +5,7 @@ Uses a declarative command registry with lazy module imports instead of
 if/elif chains and ad-hoc lambda dicts.
 """
 
+import os
 import sys
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -318,6 +319,14 @@ COMMANDS: list[Command] = [
         needs_identity=False,
         aliases=["m"],
     ),
+    Command(
+        "update-check",
+        "lib.update_check",
+        "cmd_update_check",
+        "check for stale cnb install",
+        "update-check [--force]",
+        needs_identity=False,
+    ),
     # ── maintenance ──
     Command(
         "prune",
@@ -400,6 +409,18 @@ def print_help() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _maybe_check_update(env: ClaudesEnv) -> None:
+    """Silent best-effort version check. Never blocks the dispatch."""
+    if os.environ.get("CNB_SKIP_UPDATE_CHECK") == "1":
+        return
+    try:
+        from lib.update_check import _read_local_version, check_update
+
+        check_update(env, _read_local_version(env.install_home))
+    except Exception:
+        pass
+
+
 def main() -> None:
     env = ClaudesEnv.load()
     db = BoardDB(env)
@@ -426,6 +447,7 @@ def main() -> None:
     if identity:
         validate_identity(db, identity)
 
+    _maybe_check_update(env)
     _dispatch(cmd, db, identity, rest)
 
 
