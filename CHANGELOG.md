@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.100-dev (unreleased)
+
+### Features
+
+- **Lead idle nudge embeds idle employee names (#255)** — `_try_lead_idle` in `NudgeCoordinator` now lists who is currently idle (`当前 idle 员工: alice, bob, charlie`) inside the lead-nudge text so lead can dispatch directly without a `board view` round-trip. When no employees are idle, falls back to `当前无 idle 员工，但仍需扫 PR queue / master CI / open issues`. Suspended sessions are excluded from the roster. The `_already_queued` dedup marker (`扫描团队`) is unchanged across all roster variations.
+
 ## 0.5.78-dev (unreleased)
 
 ### Features

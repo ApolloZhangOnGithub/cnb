@@ -467,6 +467,72 @@ class TestAlreadyQueued:
         assert mock_send.call_count >= 1, "fresh prompt — nudge must still fire"
 
 
+class TestLeadIdleRoster:
+    """Lead idle nudge should embed the names of currently-idle employees so lead
+    can dispatch directly without a `board view` round-trip (#255)."""
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.has_lead_session", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice", "bob", "charlie"])
+    def test_lead_idle_nudge_lists_idle_employee_names(
+        self, _devs, _has_lead, mock_send, _running, _ok, NudgeCoordinator, tmp_path, monkeypatch
+    ):
+        cfg = make_cfg(tmp_path, ["alice", "bob", "charlie"])
+        idle = make_idle({"cc-test-lead", "cc-test-alice", "cc-test-charlie"})  # alice + charlie idle, bob busy
+        monkeypatch.setattr("lib.concerns.nudge_coordinator.tmux", lambda *_args: "")
+        coord = NudgeCoordinator(cfg, idle)
+
+        coord.tick(1000)
+
+        sent_to_lead = [call for call in mock_send.call_args_list if call.args[0] == "cc-test-lead"]
+        assert sent_to_lead, "lead must be nudged when idle"
+        message = sent_to_lead[0].args[1]
+        assert "alice" in message
+        assert "charlie" in message
+        assert "bob" not in message, "busy bob must not appear in the idle list"
+        assert "扫描团队" in message
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.has_lead_session", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice", "bob"])
+    def test_lead_idle_nudge_with_no_idle_employees(
+        self, _devs, _has_lead, mock_send, _running, _ok, NudgeCoordinator, tmp_path, monkeypatch
+    ):
+        cfg = make_cfg(tmp_path, ["alice", "bob"])
+        idle = make_idle({"cc-test-lead"})  # only lead idle, employees busy
+        monkeypatch.setattr("lib.concerns.nudge_coordinator.tmux", lambda *_args: "")
+        coord = NudgeCoordinator(cfg, idle)
+
+        coord.tick(1000)
+
+        sent_to_lead = [call for call in mock_send.call_args_list if call.args[0] == "cc-test-lead"]
+        assert sent_to_lead
+        message = sent_to_lead[0].args[1]
+        assert "当前无 idle 员工" in message
+        assert "PR queue" in message
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice", "bob"])
+    def test_idle_employee_names_skips_suspended(
+        self, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path, monkeypatch
+    ):
+        cfg = make_cfg(tmp_path, ["alice", "bob"])
+        # Both alice and bob would be idle, but bob is suspended.
+        cfg.suspended_file.write_text("bob\n")
+        idle = make_idle({"cc-test-alice", "cc-test-bob"})
+        coord = NudgeCoordinator(cfg, idle)
+
+        names = coord._idle_employee_names()
+
+        assert names == ["alice"], "suspended bob must be filtered out"
+
+
 class TestStructure:
     def test_is_concern_subclass(self, NudgeCoordinator):
         assert issubclass(NudgeCoordinator, Concern)
