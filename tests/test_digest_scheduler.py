@@ -259,3 +259,128 @@ class TestWeeklyReport:
         sched = DigestScheduler(cfg)
         sched._send_weekly("2026-05-11")
         mock_send.assert_not_called()
+
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    @patch("lib.concerns.digest_scheduler.generate_weekly_report")
+    def test_weekly_swallows_report_generation_exception(self, mock_generate, mock_send, mock_sessions, tmp_path):
+        """If `generate_weekly_report` raises, the scheduler must not crash the dispatcher."""
+        cfg = _make_cfg(tmp_path)
+        _init_db(cfg.board_db)
+        toml = cfg.claudes_dir / "notifications.toml"
+        toml.write_text("[defaults]\nweekly-report = true\n")
+        mock_generate.side_effect = RuntimeError("DB locked")
+
+        sched = DigestScheduler(cfg)
+        # Must not raise.
+        sched._send_weekly("2026-05-11")
+        mock_send.assert_not_called()
+
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    @patch("lib.notification_delivery.subprocess.run")
+    def test_weekly_records_human_lark_im_subscriber(self, mock_run, mock_send, mock_sessions, tmp_path):
+        """Weekly external-channel delivery success path mirrors daily."""
+        cfg = _make_cfg(tmp_path)
+        conn = _init_db(cfg.board_db)
+        toml = cfg.claudes_dir / "notifications.toml"
+        toml.write_text(
+            "[defaults]\nweekly-report = true\n"
+            '[human]\nname = "Test User"\nemail = "test@example.com"\n'
+            'lark_chat_id = "oc_123"\nweekly-report = true\n'
+        )
+        mock_run.return_value = Mock(returncode=0, stdout="{}", stderr="")
+        sched = DigestScheduler(cfg)
+
+        sched._send_weekly("2026-05-11")
+
+        recipients = conn.execute(
+            "SELECT recipient, channel FROM notification_log WHERE notif_type='weekly-report' ORDER BY recipient"
+        ).fetchall()
+        assert ("human", "lark-im") in [(r[0], r[1]) for r in recipients]
+        conn.close()
+
+
+class TestExceptionPaths:
+    """Cover the broad except: branches that protect the dispatcher loop."""
+
+    def test_already_sent_today_returns_false_on_db_error(self, tmp_path, monkeypatch):
+        cfg = _make_cfg(tmp_path)
+        _init_db(cfg.board_db)
+        sched = DigestScheduler(cfg)
+
+        # Force the DB call to raise — the helper must catch and return False so the
+        # caller proceeds to send rather than silently no-op-ing.
+        def boom(*a, **kw):
+            raise sqlite3.OperationalError("simulated DB failure")
+
+        monkeypatch.setattr("lib.concerns.digest_scheduler.db", lambda _: Mock(scalar=boom))
+        assert sched._already_sent_today("daily-digest", "2026-05-08") is False
+
+    def test_record_digest_swallows_insert_exception(self, tmp_path, monkeypatch):
+        cfg = _make_cfg(tmp_path)
+        _init_db(cfg.board_db)
+        sched = DigestScheduler(cfg)
+
+        def broken_db(_):
+            class _BrokenConn:
+                def conn(self):
+                    raise sqlite3.OperationalError("simulated")
+
+            return _BrokenConn()
+
+        monkeypatch.setattr("lib.concerns.digest_scheduler.db", broken_db)
+        # Must not raise — exception should be logged via `warn(...)` and swallowed.
+        sched._record_digest("daily-digest", "alice", "2026-05-08", "board-inbox")
+
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    @patch("lib.concerns.digest_scheduler.generate_daily_digest")
+    def test_daily_swallows_digest_generation_exception(self, mock_generate, mock_send, mock_sessions, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        _init_db(cfg.board_db)
+        mock_generate.side_effect = RuntimeError("DB locked")
+
+        sched = DigestScheduler(cfg)
+        # Must not raise; no send because we bail before delivery.
+        sched._send_daily("2026-05-08")
+        mock_send.assert_not_called()
+
+
+class TestTickWeekly:
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    @patch("lib.concerns.digest_scheduler.datetime")
+    def test_fires_weekly_on_monday(self, mock_dt, mock_send, mock_sessions, tmp_path):
+        """tick at 9am on a Monday should trigger both daily and weekly send paths."""
+        cfg = _make_cfg(tmp_path)
+        _init_db(cfg.board_db)
+        toml = cfg.claudes_dir / "notifications.toml"
+        toml.write_text("[defaults]\nweekly-report = true\ndaily-digest = true\n")
+        # 2026-05-11 is a Monday.
+        mock_dt.now.return_value = datetime(2026, 5, 11, 9, 0)
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        sched = DigestScheduler(cfg)
+        sched.tick(100)
+
+        assert sched._last_daily_date == "2026-05-11"
+        assert sched._last_weekly_date == "2026-05-11"
+
+    @patch("lib.concerns.digest_scheduler.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.digest_scheduler.board_send")
+    @patch("lib.concerns.digest_scheduler.datetime")
+    def test_skips_weekly_on_non_monday(self, mock_dt, mock_send, mock_sessions, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        _init_db(cfg.board_db)
+        toml = cfg.claudes_dir / "notifications.toml"
+        toml.write_text("[defaults]\nweekly-report = true\ndaily-digest = true\n")
+        # 2026-05-12 is a Tuesday — daily yes, weekly no.
+        mock_dt.now.return_value = datetime(2026, 5, 12, 9, 0)
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        sched = DigestScheduler(cfg)
+        sched.tick(100)
+
+        assert sched._last_daily_date == "2026-05-12"
+        assert sched._last_weekly_date == ""
