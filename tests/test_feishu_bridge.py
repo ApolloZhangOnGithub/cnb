@@ -765,6 +765,116 @@ class TestStallStatusForPilot:
         cfg = _cfg(tmp_path)
         assert feishu_bridge.stall_status_for_pilot(cfg) == ""
 
+
+def _write_outstanding(tmp_path, message_id="msg_out", ago_seconds=0):
+    """Helper to plant an outstanding inbound in feishu_activity.json."""
+    cfg = _cfg(tmp_path)
+    import time as _time
+
+    ts = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(_time.time() - ago_seconds))
+    path = feishu_bridge.activity_state_path(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "messages": {
+                    message_id: {"routed_to_self": True, "started_at": ts, "done_at": ""},
+                }
+            }
+        )
+    )
+    return cfg
+
+
+class TestPaneStallStatus:
+    def _reset_cache(self):
+        feishu_bridge._pane_hash_state.clear()
+
+    def test_empty_when_no_outstanding_inbound(self, tmp_path):
+        self._reset_cache()
+        cfg = _cfg(tmp_path)
+        assert feishu_bridge.pane_stall_status(cfg, "cnb-test") == ""
+
+    def test_empty_when_tool_process_running(self, tmp_path, monkeypatch):
+        self._reset_cache()
+        cfg = _write_outstanding(tmp_path)
+        monkeypatch.setattr(feishu_bridge, "has_tool_process", lambda sess: True)
+        # has_tool_process short-circuits before pane capture, so subprocess is irrelevant
+        assert feishu_bridge.pane_stall_status(cfg, "cnb-test") == ""
+
+    def test_resets_when_pane_md5_changes(self, tmp_path, monkeypatch):
+        self._reset_cache()
+        cfg = _cfg(tmp_path, pane_stall_static_seconds=60)
+        _write_outstanding(tmp_path)
+        monkeypatch.setattr(feishu_bridge, "has_tool_process", lambda sess: False)
+
+        captures = iter(
+            [
+                ("output v1\n", ""),
+                ("output v2\n", ""),  # different content -> different md5 -> resets timer
+            ]
+        )
+
+        def fake_run(cmd, **kwargs):
+            content, _err = next(captures)
+            return SimpleNamespace(returncode=0, stdout=content, stderr="")
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+        # First call seeds the cache.
+        assert feishu_bridge.pane_stall_status(cfg, "cnb-test") == ""
+        # Second call sees different md5, resets timer — still empty.
+        assert feishu_bridge.pane_stall_status(cfg, "cnb-test") == ""
+
+    def test_stall_reported_after_static_window(self, tmp_path, monkeypatch):
+        self._reset_cache()
+        cfg = _cfg(tmp_path, pane_stall_static_seconds=10)
+        _write_outstanding(tmp_path)
+        monkeypatch.setattr(feishu_bridge, "has_tool_process", lambda sess: False)
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda cmd, **k: SimpleNamespace(returncode=0, stdout="static\n", stderr=""),
+        )
+        # Plant a cache entry from 30s ago for the same md5 we'll re-observe.
+        md5_now = feishu_bridge.hashlib.md5(b"static\n").hexdigest()
+        feishu_bridge._pane_hash_state["cnb-test"] = (md5_now, feishu_bridge.time.time() - 30)
+
+        result = feishu_bridge.pane_stall_status(cfg, "cnb-test")
+
+        assert result.startswith("pane unchanged ")
+        assert "no tool process" in result
+        assert "outstanding msg_out" in result
+
+    def test_progress_glyph_resets_timer(self, tmp_path, monkeypatch):
+        self._reset_cache()
+        cfg = _cfg(tmp_path, pane_stall_static_seconds=10)
+        _write_outstanding(tmp_path)
+        monkeypatch.setattr(feishu_bridge, "has_tool_process", lambda sess: False)
+
+        spinner_content = "⠹ thinking ... esc to interrupt\n"
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda cmd, **k: SimpleNamespace(returncode=0, stdout=spinner_content, stderr=""),
+        )
+        # Even with a stale-looking cache entry, spinner content must reset and not flag.
+        md5_now = feishu_bridge.hashlib.md5(spinner_content.encode()).hexdigest()
+        feishu_bridge._pane_hash_state["cnb-test"] = (md5_now, feishu_bridge.time.time() - 9999)
+
+        result = feishu_bridge.pane_stall_status(cfg, "cnb-test")
+        assert result == ""
+
+    def test_empty_when_pane_capture_fails(self, tmp_path, monkeypatch):
+        self._reset_cache()
+        cfg = _write_outstanding(tmp_path)
+        monkeypatch.setattr(feishu_bridge, "has_tool_process", lambda sess: False)
+        monkeypatch.setattr(
+            feishu_bridge.subprocess,
+            "run",
+            lambda cmd, **k: SimpleNamespace(returncode=1, stdout="", stderr="error"),
+        )
+        assert feishu_bridge.pane_stall_status(cfg, "cnb-test") == ""
+
     def test_failover_renames_standby_to_primary(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, standby_enabled=True, standby_agent="codex", allowed_chat_ids=frozenset({"oc_test"}))
         renames = []

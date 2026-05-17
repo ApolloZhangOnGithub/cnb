@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.86-dev (unreleased)
+
+### Features
+
+- **Supervisor stall detection L2 — pane-hash decay (#160)** — Adds `pane_stall_status(cfg, session)` as a complement to L1's `stall_status_for_pilot`. Three-way AND of (a) outstanding inbound exists [from L1], (b) no spawned tool process (`has_tool_process` from concerns helpers), (c) pane md5 unchanged for `pane_stall_static_seconds` (default 300s, min 30s). Spinner glyphs and "esc to interrupt" reset the timer so legitimate Claude Code mid-thinking is not flagged. OR-stacked with L1 in `check_pilot_health` — operators see distinct reason strings for each layer. Stacks on PR #242 (L1).
+
 ## 0.5.78-dev (unreleased)
 
 ### Features
