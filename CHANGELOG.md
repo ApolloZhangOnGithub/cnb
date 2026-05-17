@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.77-dev (unreleased)
+
+### Features
+
+- **Model downgrade + budget alerts in board view** (#153) — Wired `board usage` command exposing the existing token aggregation, and surfaced model-downgrade + over-budget warnings directly in `board overview` and `board view` so tongxue see degraded state immediately on startup. Cross-provider switches (claude → deepseek) no longer trigger false downgrade alerts, `<synthetic>` placeholders are filtered, and live alerts scan only the last 6h of JSONLs to stay snappy on hot project dirs. Optional `[budget] usd / warn_pct` config in `.cnb/config.toml`.
+
 ## 0.5.76-dev (unreleased)
 
 ### Bug Fixes
