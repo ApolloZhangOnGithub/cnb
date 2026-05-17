@@ -62,6 +62,27 @@ swarm start <dev>        # 按需要的最小集合起，不要一次全开
 
 lead 工作模式确认（自身要持续 nudge，员工 idle 不 nudge）后，才开放并行开发。
 
+## WIP Limit — 在制品上限
+
+每个员工同时 **最多 2 个 open PR**。这是 Kanban / Lean Manufacturing 的核心约束。
+
+为什么：
+- PR 数 = 库存。库存越多，flow 越慢。
+- 每多一个 in-flight PR，rebase 链反应越严重（今天 lisa-su 7 个 PR、musk 5 个 → 任何 master 改动引爆全部）
+- 员工注意力分散到 7 个分支，质量下降
+- review 负担堆给 lead，lead 来不及消化变瓶颈
+
+执行：
+- lead 派活前先检查目标员工 `gh pr list --author <name> --state open` 数量
+- 超过 2 → 不派新活，告诉员工"先合掉一个再说"
+- 员工自己也要主动 close stale/重复 PR
+- 例外：master CI 紧急修复 PR 不算 in-flight
+
+观察指标：
+- in-flight PR 总数 ≤ 团队人数 × 2
+- 超过 → 暂停 issue dispatch，全员转 review/merge 模式直到降到阈值
+- 这是 **流动效率 (flow efficiency)** 而非利用率 (utilization)
+
 ## 反模式 — 不要做
 
 - ❌ 一上来 `swarm start`（全员）：会一次性触发 7 个 claude × N 个 init bug，根本看不清谁挂了

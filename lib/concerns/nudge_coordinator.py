@@ -137,7 +137,9 @@ class NudgeCoordinator(Concern):
             "员工有活 → 不打扰他们，但你自己做：审 PR、close stale issue、整理 ROADMAP、"
             "拆大 issue 成小 issue、给老 issue 加 priority/phase 标签、"
             "把零散 doc 整合进 docs 站、回顾自己的 norms 有没有遗漏。"
-            "员工空闲 → 立即派下一个 issue 给他。"
+            "员工空闲 → 立即派下一个 issue 给他，但先 gh pr list --author <name> 检查："
+            "该员工 in-flight PR 已 ≥ 2 个，不派新活，要他先合掉一个；"
+            "团队总 in-flight PR 超过 人数×2，全员暂停派活，转 review/merge 模式。"
             "不要说'没活'、'等审批'、'瓶颈在外部'——这些都是 lead 失职的借口。"
             "立即 gh issue list && gh pr list，挑下一件最有价值的事开始做。",
         )
