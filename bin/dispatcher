@@ -199,6 +199,9 @@ def main() -> None:
             for c in concerns:
                 c.maybe_tick(now)
 
+            # _code_changed blocks for RELOAD_DEBOUNCE_SECONDS (5s) when a
+            # change is detected — main loop pauses once per restart cycle.
+            # Acceptable trade-off; quiet ticks short-circuit before sleep.
             if _code_changed(baseline_mtime):
                 log("Code change detected in watched paths, exiting for watchdog restart")
                 raise SystemExit(0)
