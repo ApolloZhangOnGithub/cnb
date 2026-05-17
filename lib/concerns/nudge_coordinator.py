@@ -23,6 +23,19 @@ class NudgeRecord:
     consecutive_ineffective: int = 0
 
 
+def _already_queued(sess: str, marker: str) -> bool:
+    """Return True if `marker` appears in the pane's last few visible lines.
+
+    Used to avoid stacking duplicate nudges when a session is mid-thinking and
+    the previous nudge text is still typed at the prompt waiting to be
+    processed. Scanning only the tail keeps this cheap and immune to large
+    scrollback drifts.
+    """
+    content = tmux("capture-pane", "-t", sess, "-p") or ""
+    tail = "\n".join(content.splitlines()[-6:])
+    return marker in tail
+
+
 class NudgeCoordinator(Concern):
     interval = 5
     COOLDOWN = 15
@@ -84,6 +97,11 @@ class NudgeCoordinator(Concern):
         if unread <= 0:
             return False
         sess = f"{self.cfg.prefix}-{name}"
+        # Stable suffix instead of absolute board path — the same command can
+        # appear with different prefixes (cnb vs absolute), but the trailing
+        # `--as <name> inbox` is invariant.
+        if _already_queued(sess, f"--as {name} inbox"):
+            return False
         tmux_send(sess, f"{self.cfg.board_sh} --as {name} inbox")
         return True
 
@@ -101,6 +119,8 @@ class NudgeCoordinator(Concern):
     def _try_idle(self, name: str) -> bool:
         sess = f"{self.cfg.prefix}-{name}"
         if not self.idle.is_idle(sess):
+            return False
+        if _already_queued(sess, "推进你的活跃 KR"):
             return False
         tmux_send(
             sess,

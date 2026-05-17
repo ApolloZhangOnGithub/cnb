@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.69-dev (unreleased)
+
+### Bug Fixes
+
+- **Dispatcher nudge dedup (#226)** — `NudgeCoordinator._try_inbox` and `_try_idle` now `capture-pane` the session and skip re-sending when the same command/prompt is already typed at the prompt (stable suffix match: `--as <name> inbox` and `推进你的活跃 KR`). Previously the cooldown alone allowed dispatcher to stack multiple `❯ board --as <name> inbox` lines on busy panes when the session was still thinking.
+
 ## 0.5.68-dev (unreleased)
 
 ### Bug Fixes
