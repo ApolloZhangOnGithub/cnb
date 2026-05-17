@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.94-dev (unreleased)
+
+### Tests
+
+- **capture_ingest coverage** — Added 18 tests covering the previously uncovered branches in `lib/capture_ingest.py`: nested-list redaction, project=None discovery vs global-store fallback, capture-id overflow, content-markdown Links section, data: URL screenshot prefix, ingest validation (non-dict / invalid mode), notify no-op when board.db missing, list-captures empty dir, find-capture unknown id, CLI list/show/wechat subcommand paths. Brings coverage from 83% to 99% (only `__main__` guard remains). Contributes to #88.
+
 ## 0.5.78-dev (unreleased)
 
 ### Features

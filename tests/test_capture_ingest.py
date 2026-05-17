@@ -5,12 +5,14 @@ import subprocess
 import sys
 from base64 import b64encode
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.capture_ingest import CaptureError, cmd_capture, ingest_capture, list_captures
+from lib.wechat_article import WechatArticle
 
 
 def _init_board(cnb_dir: Path) -> None:
@@ -225,6 +227,253 @@ def test_cli_invalid_json_file_returns_error(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "capture payload 不是有效 JSON" in err
     assert not (tmp_path / ".cnb" / "captures").exists()
+
+
+def test_redaction_descends_into_lists(tmp_path):
+    """Nested lists inside payload metadata should still get redacted recursively."""
+    (tmp_path / ".cnb").mkdir()
+    # "items" doesn't match the secret-key regex, so _redact_json descends
+    # into the list and recurses into each dict.
+    payload = {
+        "mode": "page",
+        "title": "Nested",
+        "metadata": {"items": [{"api_key": "ABC123"}, {"plain": "ok"}]},
+    }
+
+    result = ingest_capture(payload, project=tmp_path, notify=None)
+
+    redacted = json.loads((Path(result["path"]) / "payload.redacted.json").read_text())
+    assert redacted["metadata"]["items"][0]["api_key"] == "[REDACTED]"
+    assert redacted["metadata"]["items"][1]["plain"] == "ok"
+
+
+def test_project_none_uses_discovered_claudes_dir(tmp_path, monkeypatch):
+    """When project=None and find_claudes_dir succeeds, use the discovered dir."""
+    cnb = tmp_path / ".cnb"
+    cnb.mkdir()
+    monkeypatch.setattr("lib.capture_ingest.find_claudes_dir", lambda: cnb)
+
+    result = ingest_capture({"mode": "page", "title": "Discovered"}, notify=None)
+
+    capture_dir = Path(result["path"])
+    assert capture_dir.is_relative_to(cnb / "captures")
+    assert result["manifest"]["scope"] == "project"
+
+
+def test_no_project_marker_falls_back_to_global_store(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("CNB_PROJECT", raising=False)
+    # Force find_claudes_dir() to fail so the fallback branch runs.
+    monkeypatch.setattr(
+        "lib.capture_ingest.find_claudes_dir",
+        lambda: (_ for _ in ()).throw(FileNotFoundError("no project marker")),
+    )
+
+    result = ingest_capture({"mode": "page", "title": "Fallback"}, notify=None)
+
+    capture_dir = Path(result["path"])
+    assert capture_dir.is_relative_to(tmp_path / "home" / ".cnb" / "captures")
+    assert result["manifest"]["scope"] == "global"
+
+
+def test_capture_id_overflow_raises(tmp_path, monkeypatch):
+    (tmp_path / ".cnb").mkdir()
+    monkeypatch.setattr("lib.capture_ingest._now_iso", lambda: "2026-05-10T01:02:03Z")
+    payload = {"mode": "page", "title": "Crowded", "url": "https://example.test/c"}
+
+    first = ingest_capture(payload, project=tmp_path, notify=None)
+    base_id = Path(first["path"]).name
+    captures_dir = tmp_path / ".cnb" / "captures"
+    for i in range(2, 100):
+        (captures_dir / f"{base_id}-{i}").mkdir()
+
+    with pytest.raises(CaptureError, match="capture id 冲突过多"):
+        ingest_capture(payload, project=tmp_path, notify=None)
+
+
+def test_content_markdown_includes_links_section(tmp_path):
+    (tmp_path / ".cnb").mkdir()
+    payload = {
+        "mode": "article",
+        "title": "Linky",
+        "links": [
+            {"text": "Docs", "href": "https://example.test/docs"},
+            {"href": "https://example.test/bare"},
+            "https://example.test/plain",
+        ],
+    }
+
+    result = ingest_capture(payload, project=tmp_path, notify=None)
+
+    content = (Path(result["path"]) / "content.md").read_text()
+    assert "## Links" in content
+    assert "[Docs](https://example.test/docs)" in content
+    assert "https://example.test/bare" in content
+    assert "https://example.test/plain" in content
+
+
+def test_screenshot_accepts_data_url_prefix(tmp_path):
+    (tmp_path / ".cnb").mkdir()
+    png_bytes = b"\x89PNG\r\n\x1a\nfake"
+    payload = {
+        "mode": "snapshot",
+        "title": "Data URL",
+        "screenshot_base64": f"data:image/png;base64,{b64encode(png_bytes).decode()}",
+    }
+
+    result = ingest_capture(payload, project=tmp_path, notify=None)
+
+    assert (Path(result["path"]) / "visible.png").read_bytes() == png_bytes
+
+
+def test_ingest_rejects_non_dict_payload(tmp_path):
+    with pytest.raises(CaptureError, match="must be a JSON object"):
+        ingest_capture([1, 2, 3], project=tmp_path, notify=None)  # type: ignore[arg-type]
+
+
+def test_ingest_rejects_invalid_mode(tmp_path):
+    (tmp_path / ".cnb").mkdir()
+    with pytest.raises(CaptureError, match="无效 capture mode"):
+        ingest_capture({"mode": "blink", "title": "Bad"}, project=tmp_path, notify=None)
+
+
+def test_notify_is_silent_when_board_db_missing(tmp_path):
+    """Project may not yet have an initialized board.db; capture should still succeed."""
+    (tmp_path / ".cnb").mkdir()
+    # no _init_board call — board.db deliberately absent
+    result = ingest_capture(
+        {"mode": "page", "title": "Boardless"}, project=tmp_path, notify="lead", sender="dispatcher"
+    )
+    # Artifacts should still be written; just no DB to notify.
+    assert (Path(result["path"]) / "manifest.json").exists()
+
+
+def test_list_captures_returns_empty_when_dir_missing(tmp_path):
+    """No .cnb/captures yet → list should be empty, not crash."""
+    (tmp_path / ".cnb").mkdir()
+    assert list_captures(project=tmp_path) == []
+
+
+def test_cli_show_unknown_id_exits(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    with pytest.raises(SystemExit) as exc:
+        cmd_capture(["show", "does-not-exist", "--project", str(tmp_path)])
+    assert exc.value.code == 1
+    assert "找不到 capture" in capsys.readouterr().err
+
+
+def test_cli_ingest_rejects_non_dict_json(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    payload_file = tmp_path / "payload.json"
+    payload_file.write_text("[1, 2, 3]")
+    with pytest.raises(SystemExit) as exc:
+        cmd_capture(["ingest", "--project", str(tmp_path), "--file", str(payload_file), "--no-notify"])
+    assert exc.value.code == 1
+    assert "must be a JSON object" in capsys.readouterr().err
+
+
+def test_cli_list_text_output_when_not_json(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    ingest_capture({"mode": "page", "title": "Plain List Entry"}, project=tmp_path, notify=None)
+    cmd_capture(["list", "--project", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert "Plain List Entry" in out
+
+
+def test_cli_list_text_output_empty(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    cmd_capture(["list", "--project", str(tmp_path)])
+    assert "没有 capture" in capsys.readouterr().out
+
+
+def test_cli_show_json_and_path_flags(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    res = ingest_capture({"mode": "page", "title": "ForShow"}, project=tmp_path, notify=None)
+    cid = res["manifest"]["id"]
+
+    cmd_capture(["show", cid, "--project", str(tmp_path), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["id"] == cid
+
+    cmd_capture(["show", cid, "--project", str(tmp_path), "--path"])
+    printed_path = capsys.readouterr().out.strip()
+    assert printed_path.endswith(cid)
+
+
+def test_cli_wechat_failure_exits_with_error(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    failed = WechatArticle(
+        status="not-found",
+        url="https://mp.weixin.qq.com/s/bad",
+        message="article missing",
+    )
+    with (
+        patch("lib.capture_ingest.fetch_wechat_article", return_value=failed),
+        pytest.raises(SystemExit) as exc,
+    ):
+        cmd_capture(
+            [
+                "wechat",
+                "https://mp.weixin.qq.com/s/bad",
+                "--project",
+                str(tmp_path),
+                "--no-notify",
+            ]
+        )
+    assert exc.value.code == 1
+    assert "article missing" in capsys.readouterr().err
+
+
+def test_cli_wechat_success_writes_capture_and_prints_summary(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    article = WechatArticle(
+        status="ok",
+        url="https://mp.weixin.qq.com/s/good",
+        title="WeChat Title",
+        author="作者",
+        publish_time="2026-05-17",
+        text="正文内容",
+        html="<p>正文内容</p>",
+        method="mobile",
+    )
+    with patch("lib.capture_ingest.fetch_wechat_article", return_value=article):
+        cmd_capture(
+            [
+                "wechat",
+                "https://mp.weixin.qq.com/s/good",
+                "--project",
+                str(tmp_path),
+                "--no-notify",
+            ]
+        )
+    out = capsys.readouterr().out
+    assert "WeChat article 已保存" in out
+    assert "method: mobile" in out
+
+
+def test_cli_wechat_success_json_output(tmp_path, capsys):
+    (tmp_path / ".cnb").mkdir()
+    article = WechatArticle(
+        status="ok",
+        url="https://mp.weixin.qq.com/s/good",
+        title="JSON WeChat",
+        text="hi",
+        html="<p>hi</p>",
+        method="mobile",
+    )
+    with patch("lib.capture_ingest.fetch_wechat_article", return_value=article):
+        cmd_capture(
+            [
+                "wechat",
+                "https://mp.weixin.qq.com/s/good",
+                "--project",
+                str(tmp_path),
+                "--no-notify",
+                "--json",
+            ]
+        )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["manifest"]["title"] == "JSON WeChat"
 
 
 def test_bin_cnb_capture_ingest_list_public_dispatch(tmp_path):
