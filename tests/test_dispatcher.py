@@ -1,9 +1,10 @@
-"""Tests for dispatcher pid lock and TimeAnnouncer startup initialization.
+"""Tests for dispatcher pid lock, TimeAnnouncer init, and code-change detection.
 
 Covers:
   - _acquire_pidlock() prevents duplicate dispatcher instances
   - _acquire_pidlock() reclaims stale pidfiles from dead processes
   - TimeAnnouncer initializes last_hour to current hour (prevents message storm)
+  - _max_mtime / _code_changed detect lib/concerns/* edits and debounce mid-save
 """
 
 import os
@@ -97,3 +98,113 @@ class TestTimeAnnouncerInit:
                 mock_dt.now.return_value = fake_now
                 announcer.tick(0)
             mock_send.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Auto-reload detection (#235): mirror dispatcher's _max_mtime / _code_changed
+# locally — bin/dispatcher is a script without a .py extension, so the test
+# uses copies just like the _acquire_pidlock pattern above.
+# ---------------------------------------------------------------------------
+
+
+def _max_mtime(paths: tuple[Path, ...]) -> float:
+    latest = 0.0
+    for root in paths:
+        if root.is_file():
+            try:
+                latest = max(latest, root.stat().st_mtime)
+            except OSError:
+                continue
+            continue
+        if not root.is_dir():
+            continue
+        for py in root.rglob("*.py"):
+            try:
+                latest = max(latest, py.stat().st_mtime)
+            except OSError:
+                continue
+    return latest
+
+
+def _code_changed(paths: tuple[Path, ...], baseline_mtime: float, sleep) -> bool:
+    if _max_mtime(paths) <= baseline_mtime:
+        return False
+    sleep(0)  # debounce delay (injected — tests do not block)
+    return _max_mtime(paths) > baseline_mtime
+
+
+class TestMaxMtime:
+    def test_returns_zero_for_empty_dir(self, tmp_path):
+        (tmp_path / "empty").mkdir()
+        assert _max_mtime((tmp_path / "empty",)) == 0.0
+
+    def test_returns_zero_for_missing_path(self, tmp_path):
+        assert _max_mtime((tmp_path / "does-not-exist",)) == 0.0
+
+    def test_picks_latest_across_files(self, tmp_path):
+        a = tmp_path / "a.py"
+        b = tmp_path / "b.py"
+        a.write_text("# a")
+        b.write_text("# b")
+        os.utime(a, (1000, 1000))
+        os.utime(b, (2000, 2000))
+        assert _max_mtime((tmp_path,)) == 2000.0
+
+    def test_picks_latest_across_paths(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_a.mkdir()
+        file_b = tmp_path / "b.py"
+        (dir_a / "x.py").write_text("")
+        file_b.write_text("")
+        os.utime(dir_a / "x.py", (1000, 1000))
+        os.utime(file_b, (3000, 3000))
+        assert _max_mtime((dir_a, file_b)) == 3000.0
+
+    def test_ignores_non_py_files(self, tmp_path):
+        (tmp_path / "ignored.txt").write_text("")
+        os.utime(tmp_path / "ignored.txt", (9999, 9999))
+        (tmp_path / "watched.py").write_text("")
+        os.utime(tmp_path / "watched.py", (1000, 1000))
+        assert _max_mtime((tmp_path,)) == 1000.0
+
+    def test_explicit_file_path_does_not_require_py_extension(self, tmp_path):
+        # Explicit file paths (e.g. bin/dispatcher) bypass the .py glob.
+        script = tmp_path / "dispatcher"
+        script.write_text("#!/usr/bin/env python3")
+        os.utime(script, (5000, 5000))
+        assert _max_mtime((script,)) == 5000.0
+
+
+class TestCodeChanged:
+    def test_returns_false_when_nothing_changed(self, tmp_path):
+        (tmp_path / "x.py").write_text("")
+        baseline = _max_mtime((tmp_path,))
+        sleep_calls: list[float] = []
+        result = _code_changed((tmp_path,), baseline, sleep=sleep_calls.append)
+        assert result is False
+        assert sleep_calls == [], "no sleep when no change — short-circuit"
+
+    def test_returns_true_when_change_persists_through_debounce(self, tmp_path):
+        f = tmp_path / "x.py"
+        f.write_text("")
+        os.utime(f, (1000, 1000))
+        baseline = _max_mtime((tmp_path,))
+        os.utime(f, (2000, 2000))
+        sleep_calls: list[float] = []
+        result = _code_changed((tmp_path,), baseline, sleep=sleep_calls.append)
+        assert result is True
+        assert sleep_calls == [0], "debounce sleep fires before second check"
+
+    def test_returns_false_when_change_reverts_during_debounce(self, tmp_path):
+        """Mid-save flicker: file mtime briefly newer, then reverted."""
+        f = tmp_path / "x.py"
+        f.write_text("")
+        os.utime(f, (1000, 1000))
+        baseline = _max_mtime((tmp_path,))
+        os.utime(f, (2000, 2000))
+
+        def revert_during_sleep(_):
+            os.utime(f, (1000, 1000))
+
+        result = _code_changed((tmp_path,), baseline, sleep=revert_during_sleep)
+        assert result is False

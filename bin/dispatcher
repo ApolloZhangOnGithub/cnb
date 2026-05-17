@@ -27,6 +27,17 @@ _self = Path(__file__).resolve()
 CLAUDES_HOME = _self.parent.parent
 sys.path.insert(0, str(CLAUDES_HOME))
 
+# Watched paths for the auto-reload check: changes here mean a fresh process
+# must pick up the new code (see issue #235). lib/blog_* etc. is intentionally
+# excluded — those modules are not imported by dispatcher.
+WATCHED_PATHS = (
+    CLAUDES_HOME / "lib" / "concerns",
+    CLAUDES_HOME / "lib" / "common.py",  # ClaudesEnv + DB wrapper; transitively used
+    CLAUDES_HOME / "bin" / "dispatcher",
+    CLAUDES_HOME / "bin" / "dispatcher-watchdog",
+)
+RELOAD_DEBOUNCE_SECONDS = 5
+
 from lib.common import ClaudesEnv
 from lib.concerns import (
     AdaptiveThrottle,
@@ -86,6 +97,44 @@ if not Path(cfg.board_sh).exists():
 # ---------------------------------------------------------------------------
 
 
+def _max_mtime(paths: tuple[Path, ...]) -> float:
+    """Return the max mtime across all .py files under watched paths.
+
+    Files that have been removed or are unreadable are skipped silently — the
+    check is best-effort and must never block dispatcher startup.
+    """
+    latest = 0.0
+    for root in paths:
+        if root.is_file():
+            try:
+                latest = max(latest, root.stat().st_mtime)
+            except OSError:
+                continue
+            continue
+        if not root.is_dir():
+            continue
+        for py in root.rglob("*.py"):
+            try:
+                latest = max(latest, py.stat().st_mtime)
+            except OSError:
+                continue
+    return latest
+
+
+def _code_changed(baseline_mtime: float, sleep=time.sleep) -> bool:
+    """Detect a watched-path mtime newer than baseline, debouncing mid-save.
+
+    On first detection, sleeps RELOAD_DEBOUNCE_SECONDS and re-reads. Returns
+    True only if the change is still present after the debounce — protects
+    against half-written files (editor swap-file flicker, partial git checkout).
+    The sleep callable is injectable for tests.
+    """
+    if _max_mtime(WATCHED_PATHS) <= baseline_mtime:
+        return False
+    sleep(RELOAD_DEBOUNCE_SECONDS)
+    return _max_mtime(WATCHED_PATHS) > baseline_mtime
+
+
 def _acquire_pidlock() -> Path:
     pidfile = cfg.claudes_dir / "dispatcher.pid"
     if pidfile.exists():
@@ -103,6 +152,7 @@ def _acquire_pidlock() -> Path:
 def main() -> None:
     pidfile = _acquire_pidlock()
     base_interval = 2
+    baseline_mtime = _max_mtime(WATCHED_PATHS)
 
     coral = CoralManager(cfg)
     idle = IdleDetector(cfg)
@@ -149,6 +199,13 @@ def main() -> None:
 
             for c in concerns:
                 c.maybe_tick(now)
+
+            # _code_changed blocks for RELOAD_DEBOUNCE_SECONDS (5s) when a
+            # change is detected — main loop pauses once per restart cycle.
+            # Acceptable trade-off; quiet ticks short-circuit before sleep.
+            if _code_changed(baseline_mtime):
+                log("Code change detected in watched paths, exiting for watchdog restart")
+                raise SystemExit(0)
 
             deadline = time.time() + base_interval * throttle.multiplier
             while running and time.time() < deadline:
