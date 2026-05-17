@@ -118,6 +118,28 @@ def generate_agent_report(
             lines = [f"- {c}" for c in commits[:20]]
             sections.append(f"## Git Commits ({len(commits)})\n" + "\n".join(lines))
 
+        # ── Token + Model usage (best-effort; missing data is silent) ──
+        try:
+            from lib.token_usage import estimate_cost, tongxue_token_summary
+
+            usage = tongxue_token_summary(project_root, session_name)
+            if usage and usage.get("messages", 0) > 0:
+                model = usage.get("latest_model") or usage.get("model", "?")
+                models = usage.get("models") or []
+                cost = estimate_cost(usage)
+                trail = f" (从 {models[0]})" if len(models) >= 2 and models[0] != model else ""
+                section_lines = [
+                    f"- 模型: `{model}`{trail}",
+                    f"- 消息: {usage['messages']}",
+                    f"- Tokens: in {usage['input']:,} / out {usage['output']:,} / "
+                    f"cache-read {usage['cache_read']:,} / cache-write {usage['cache_create']:,}",
+                    f"- 估算费用: ${cost:.2f}",
+                ]
+                sections.append("## Token + 模型\n" + "\n".join(section_lines))
+        except Exception:
+            # Daily report must never fail because of usage parsing.
+            pass
+
     header = f"# 日报 — {session_name} — {date_str}"
     if not sections:
         return header + "\n\n(本轮无活动)"
