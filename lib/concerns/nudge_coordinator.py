@@ -124,15 +124,34 @@ class NudgeCoordinator(Concern):
         # Lead idle is handled separately in tick() with a different message.
         return False
 
+    def _idle_employee_names(self) -> list[str]:
+        """Names of dev sessions (employees, excludes lead) currently idle and not suspended.
+
+        Used by _try_lead_idle (#255) so lead's nudge text already lists who is free,
+        saving lead a `board view` round-trip before dispatching work.
+        """
+        names: list[str] = []
+        for name in get_dev_sessions(self.cfg):
+            if is_suspended(name, self.cfg.suspended_file):
+                continue
+            if self.idle.is_idle(f"{self.cfg.prefix}-{name}"):
+                names.append(name)
+        return names
+
     def _try_lead_idle(self) -> bool:
         sess = f"{self.cfg.prefix}-lead"
         if not self.idle.is_idle(sess):
             return False
         if _already_queued(sess, "扫描团队"):
             return False
+        idle_employees = self._idle_employee_names()
+        if idle_employees:
+            employee_clause = f"（当前 idle 员工: {', '.join(idle_employees)}）"
+        else:
+            employee_clause = "（当前无 idle 员工，但仍需扫 PR queue / master CI / open issues）"
         tmux_send(
             sess,
-            "lead 不能 idle。扫描团队状态：谁空闲、谁阻塞、PR queue、master CI、open issues。"
+            f"lead 不能 idle。扫描团队状态{employee_clause}：谁空闲、谁阻塞、PR queue、master CI、open issues。"
             "主动给空闲员工派下一个 issue，不要等他们汇报。",
         )
         return True
