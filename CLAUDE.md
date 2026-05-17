@@ -125,6 +125,33 @@ cnb board --as <your-name> inbox
 cat ~/.cnb/bulletin.md
 ```
 
+### Pre-flight Checklist (lead only)
+
+如果你是 lead，**在拉起团队、派活、回应"开工"指令之前**，必须像飞行员起飞前一样过一遍 checklist。跳步 = 边搭路边开车，必返工。
+
+**强制阅读：** [`rules/norms/startup-sequence.md`](rules/norms/startup-sequence.md)
+
+精简版（详细在上面文档里）：
+
+```
+☐ 1. 我是谁？lead = cc-<prefix>-lead tmux，不是用户的对接 session
+☐ 2. 主 worktree 干净？  git status --short
+☐ 3. master 已同步？     git fetch && git log master..origin/master
+☐ 4. dispatcher 运行最新代码？ ps + 比对最近 dispatcher PR merge 时间
+☐ 5. 残留 worktree 清掉？ git worktree list
+☐ 6. PR queue 解锁了 master CI？ 先合 master CI 修复 PR
+☐ 7. 模型可用？  开一个测试 session 看有无 "model not available"
+```
+
+任何一项 ✗ → **先修这一项**（提 PR、合 PR、重启服务）→ 再下一项。**不要拉员工**直到 7 项全 ✓。
+
+满负载 ≠ 高效。3-4 人精干 > 7 人混乱。先开 lead + 1-2 dev 跑通，稳定后才加人。
+
+校准规则（每 30 分钟）：
+- 看 self-inflicted（流程错误）时间占比
+- 超过 50% → 停下来修流程，不是继续开发
+- 这是 OEE（设备综合效率）思想
+
 ### Commands
 
 ```bash
