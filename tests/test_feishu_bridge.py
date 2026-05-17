@@ -875,6 +875,184 @@ class TestPaneStallStatus:
         )
         assert feishu_bridge.pane_stall_status(cfg, "cnb-test") == ""
 
+
+class TestPendingInboundSnapshot:
+    def test_returns_empty_when_no_state(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        assert feishu_bridge.pending_inbound_snapshot(cfg) == []
+
+    def test_returns_full_records_for_pending_messages_oldest_first(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        path = feishu_bridge.activity_state_path(cfg)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "messages": {
+                        "msg_new": {
+                            "routed_to_self": True,
+                            "started_at": "2026-05-17 14:05:00",
+                            "done_at": "",
+                            "text": "newest message",
+                            "sender_id": "user_a",
+                            "chat_id": "oc_x",
+                            "thread_id": "th1",
+                            "parent_id": "msg_root",
+                        },
+                        "msg_old": {
+                            "routed_to_self": True,
+                            "started_at": "2026-05-17 14:00:00",
+                            "done_at": "",
+                            "text": "oldest pending",
+                            "sender_id": "user_a",
+                            "chat_id": "oc_x",
+                            "thread_id": "",
+                            "parent_id": "",
+                        },
+                    }
+                }
+            )
+        )
+        snapshot = feishu_bridge.pending_inbound_snapshot(cfg)
+        assert [s["message_id"] for s in snapshot] == ["msg_old", "msg_new"]
+        assert snapshot[0]["text"] == "oldest pending"
+        assert snapshot[1]["thread_id"] == "th1"
+
+    def test_skips_done_and_non_routed(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        path = feishu_bridge.activity_state_path(cfg)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "messages": {
+                        "msg_done": {
+                            "routed_to_self": True,
+                            "started_at": "2026-05-17 14:00:00",
+                            "done_at": "2026-05-17 14:01:00",
+                            "text": "done",
+                        },
+                        "msg_outgoing": {
+                            "outgoing_from_self": True,
+                            "started_at": "2026-05-17 14:00:00",
+                            "text": "ours",
+                        },
+                    }
+                }
+            )
+        )
+        assert feishu_bridge.pending_inbound_snapshot(cfg) == []
+
+
+class TestBuildHandoffBrief:
+    def test_brief_contains_reason_and_each_message(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        snapshot = [
+            {
+                "message_id": "msg1",
+                "text": "first question",
+                "sender_id": "user_a",
+                "chat_id": "oc_x",
+                "thread_id": "th1",
+                "parent_id": "",
+                "started_at": "2026-05-17 14:00:00",
+            },
+            {
+                "message_id": "msg2",
+                "text": "follow-up",
+                "sender_id": "user_a",
+                "chat_id": "oc_x",
+                "thread_id": "",
+                "parent_id": "msg1",
+                "started_at": "2026-05-17 14:03:00",
+            },
+        ]
+        brief = feishu_bridge.build_handoff_brief(cfg, snapshot, issue="pane unchanged 320s")
+        assert "pane unchanged 320s" in brief
+        assert "等待处理的飞书消息 2 条" in brief
+        assert "msg1" in brief and "msg2" in brief
+        assert "first question" in brief
+        assert "follow-up" in brief
+        assert "立即操作" in brief
+
+    def test_brief_truncates_long_text(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        snapshot = [
+            {
+                "message_id": "msg_long",
+                "text": "x" * 5000,
+                "sender_id": "user_a",
+                "chat_id": "oc_x",
+                "thread_id": "",
+                "parent_id": "",
+                "started_at": "2026-05-17 14:00:00",
+            }
+        ]
+        brief = feishu_bridge.build_handoff_brief(cfg, snapshot)
+        assert "…" in brief
+        # 200 chars + ellipsis should keep the brief bounded
+        assert brief.count("x") <= 250
+
+
+class TestBuildFailoverUserNotice:
+    def test_notice_includes_engine_swap(self, tmp_path):
+        cfg = _cfg(tmp_path, standby_agent="codex")
+        notice = feishu_bridge.build_failover_user_notice(cfg, "claude", [], issue="health check failed")
+        assert "Claude Code → 当前引擎: Codex" in notice
+        assert "health check failed" in notice
+
+    def test_notice_mentions_pending_count_when_nonempty(self, tmp_path):
+        cfg = _cfg(tmp_path, standby_agent="codex")
+        snapshot = [
+            {
+                "message_id": "msg1",
+                "text": "q",
+                "sender_id": "u",
+                "chat_id": "c",
+                "thread_id": "",
+                "parent_id": "",
+                "started_at": "2026-05-17 14:00:00",
+            }
+        ]
+        notice = feishu_bridge.build_failover_user_notice(cfg, "claude", snapshot, issue="stall")
+        assert "无需重发" in notice
+        assert "1 条消息" in notice
+
+
+class TestRecordActivityStartHandoffFields:
+    def test_persists_text_and_thread_context(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        event = feishu_bridge.FeishuInboundEvent(
+            text="hello world",
+            message_id="msg_new",
+            thread_id="th1",
+            parent_id="msg_parent",
+            root_id="msg_root",
+            chat_id="oc_x",
+            sender_id="user_a",
+        )
+        feishu_bridge.record_activity_start(cfg, event)
+        path = feishu_bridge.activity_state_path(cfg)
+        payload = json.loads(path.read_text())
+        item = payload["messages"]["msg_new"]
+        assert item["text"] == "hello world"
+        assert item["thread_id"] == "th1"
+        assert item["parent_id"] == "msg_parent"
+        assert item["root_id"] == "msg_root"
+
+    def test_truncates_text_at_1024(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        event = feishu_bridge.FeishuInboundEvent(
+            text="x" * 5000,
+            message_id="msg_long",
+            chat_id="c",
+            sender_id="u",
+        )
+        feishu_bridge.record_activity_start(cfg, event)
+        path = feishu_bridge.activity_state_path(cfg)
+        item = json.loads(path.read_text())["messages"]["msg_long"]
+        assert len(item["text"]) == 1024
+
     def test_failover_renames_standby_to_primary(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, standby_enabled=True, standby_agent="codex", allowed_chat_ids=frozenset({"oc_test"}))
         renames = []
@@ -946,7 +1124,7 @@ class TestPaneStallStatus:
         monkeypatch.setattr(
             feishu_bridge,
             "failover_to_standby",
-            lambda c: feishu_bridge.BridgeResult(True, "failover done"),
+            lambda c, issue="": feishu_bridge.BridgeResult(True, "failover done"),
         )
         monkeypatch.setattr(
             feishu_bridge,

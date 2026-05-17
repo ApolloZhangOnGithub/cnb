@@ -1244,10 +1244,14 @@ def pane_stall_status(cfg: FeishuBridgeConfig, session: str | None = None) -> st
     )
 
 
-def failover_to_standby(cfg: FeishuBridgeConfig) -> BridgeResult:
+def failover_to_standby(cfg: FeishuBridgeConfig, issue: str = "") -> BridgeResult:
     standby_tmux = resolve_standby_tmux(cfg)
     if not has_session(standby_tmux):
         return BridgeResult(False, f"standby {standby_tmux} not running, cannot failover")
+    # Snapshot pending inbounds BEFORE killing primary (#160 L3) — once the kill
+    # happens, the activity_state path is still intact (it's a file, not in the
+    # tmux process), but we capture here to keep the handoff brief stable.
+    snapshot = pending_inbound_snapshot(cfg)
     primary_was_running = has_session(cfg.pilot_tmux)
     if primary_was_running:
         try:
@@ -1264,13 +1268,94 @@ def failover_to_standby(cfg: FeishuBridgeConfig) -> BridgeResult:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return BridgeResult(False, f"failed to promote standby: {exc}")
     old_agent = cfg.agent
-    send_feishu_notification(
-        cfg,
-        f"[设备主管切换] 主机长异常，副机长已接管\n"
-        f"原引擎: {'Claude Code' if old_agent == 'claude' else old_agent.capitalize()} → "
-        f"当前引擎: {'Claude Code' if cfg.standby_agent == 'claude' else cfg.standby_agent.capitalize()}",
-    )
+    # Inject handoff brief into the new primary if there were pending inbounds.
+    # New primary's first action should be acknowledging the latest in Feishu;
+    # without this brief it would start cold and the user would have to repeat.
+    if snapshot:
+        tmux_send(cfg.pilot_tmux, build_handoff_brief(cfg, snapshot, issue))
+    send_feishu_notification(cfg, build_failover_user_notice(cfg, old_agent, snapshot, issue))
     return BridgeResult(True, f"failover complete: {standby_tmux} promoted to {cfg.pilot_tmux}")
+
+
+def pending_inbound_snapshot(cfg: FeishuBridgeConfig) -> list[dict[str, Any]]:
+    """Return all routed-but-not-done inbounds, oldest first.
+
+    Each dict has: message_id, text, sender_id, chat_id, thread_id, parent_id,
+    started_at. Used by failover_to_standby (#160 L3) to give the new primary
+    the context the previous primary was working on when it stalled.
+    """
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages", {})
+    if not isinstance(messages, dict):
+        return []
+    items: list[dict[str, Any]] = []
+    for message_id, item in messages.items():
+        if not isinstance(item, dict):
+            continue
+        if not item.get("routed_to_self"):
+            continue
+        if item.get("done_at"):
+            continue
+        items.append(
+            {
+                "message_id": message_id,
+                "text": str(item.get("text", "")),
+                "sender_id": str(item.get("sender_id", "")),
+                "chat_id": str(item.get("chat_id", "")),
+                "thread_id": str(item.get("thread_id", "")),
+                "parent_id": str(item.get("parent_id", "")),
+                "started_at": str(item.get("started_at", "")),
+            }
+        )
+    items.sort(key=lambda x: x["started_at"])
+    return items
+
+
+def build_handoff_brief(cfg: FeishuBridgeConfig, snapshot: list[dict[str, Any]], issue: str = "") -> str:
+    """Brief injected into the new primary via tmux_send right after failover.
+
+    Tells the new primary what stalled, lists pending inbounds oldest-first,
+    and explicitly directs the new primary to acknowledge the latest in
+    Feishu before doing anything else.
+    """
+    reason = issue or "(no detail)"
+    lines = [
+        f"[failover handoff] 你刚被升任主机长（上一任 stall: {reason}）。",
+        f"等待处理的飞书消息 {len(snapshot)} 条，按时间排序（最旧在最上面，最旧的是触发 stall 的那条）：",
+        "",
+    ]
+    for i, item in enumerate(snapshot, 1):
+        text = item["text"] or "(no text)"
+        text_preview = text[:200] + ("…" if len(text) > 200 else "")
+        thread_part = f" thread={item['thread_id']}" if item["thread_id"] else ""
+        lines.append(
+            f"{i}. [msg={item['message_id']}{thread_part} sender={item['sender_id']} from {item['started_at']}]"
+        )
+        lines.append(f"   {text_preview}")
+    lines.append("")
+    lines.append("立即操作：先回复最新的那一条（清单中最后一条），告诉用户「主管已切换，正在处理你刚才的问题」。")
+    lines.append("然后按时间倒序处理（最新优先）。回复时记得 quote 对应 message_id 保持 thread。")
+    return "\n".join(lines)
+
+
+def build_failover_user_notice(
+    cfg: FeishuBridgeConfig,
+    old_agent: str,
+    snapshot: list[dict[str, Any]],
+    issue: str = "",
+) -> str:
+    """Feishu notice to the user after failover. Distinct from build_handoff_brief
+    (which is for the new primary tmux); this is what the human sees in chat.
+    """
+    old_engine = "Claude Code" if old_agent == "claude" else old_agent.capitalize()
+    new_engine = "Claude Code" if cfg.standby_agent == "claude" else cfg.standby_agent.capitalize()
+    base = (
+        f"[设备主管切换] 主机长 stall ({issue or 'health check failed'})，副机长已接管。\n"
+        f"原引擎: {old_engine} → 当前引擎: {new_engine}"
+    )
+    if not snapshot:
+        return base
+    return f"{base}\n你最近 {len(snapshot)} 条消息（最旧 {snapshot[0]['started_at']}）由新主管处理中，无需重发。"
 
 
 def send_feishu_notification(cfg: FeishuBridgeConfig, text: str) -> BridgeResult:
@@ -1348,7 +1433,7 @@ def run_heartbeat_check(cfg: FeishuBridgeConfig) -> BridgeResult:
     if _heartbeat_consecutive_failures >= HEARTBEAT_UNHEALTHY_THRESHOLD:
         print(f"[heartbeat] {HEARTBEAT_UNHEALTHY_THRESHOLD} consecutive failures, initiating failover")
         _heartbeat_consecutive_failures = 0
-        result = failover_to_standby(cfg)
+        result = failover_to_standby(cfg, issue=issue)
         if result.handled:
             start_standby_if_needed(cfg)
         return result
@@ -1551,6 +1636,13 @@ def record_activity_start(cfg: FeishuBridgeConfig, event: FeishuInboundEvent) ->
     item.setdefault("started_at", now)
     item["last_route_at"] = now
     item.setdefault("done_at", "")
+    # Persist text + thread context so failover_to_standby can hand the new
+    # primary a brief about what the previous primary was working on (#160 L3).
+    # Text is truncated; long pastes have their own resource_handoff path.
+    item.setdefault("text", (event.text or "")[:1024])
+    item.setdefault("thread_id", event.thread_id)
+    item.setdefault("parent_id", event.parent_id)
+    item.setdefault("root_id", event.root_id)
     _write_activity_state(path, payload)
 
 

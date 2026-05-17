@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.87-dev (unreleased)
+
+### Features
+
+- **Supervisor failover with conversation handoff — L3 (#160)** — `failover_to_standby` now snapshots pending Feishu inbounds *before* killing the primary, injects a handoff brief into the new primary via tmux (`[failover handoff] 你刚被升任主机长 ...`), and sends a user-facing Feishu notice mentioning pending message count so the user knows not to re-send. `record_activity_start` extended to persist `text` (truncated 1024), `thread_id`, `parent_id`, `root_id` — backward-compatible (`setdefault` only). New `pending_inbound_snapshot` + `build_handoff_brief` + `build_failover_user_notice` helpers. Stall reason from L1/L2 is threaded through `run_heartbeat_check` → `failover_to_standby(cfg, issue=...)`. Closes the user's 2026-05-11 "现在像你自己怎么重启呢" pattern: new primary now starts with full context of what the previous primary was working on. Stacks on PR #247 (L2).
+
 ## 0.5.86-dev (unreleased)
 
 ### Features
