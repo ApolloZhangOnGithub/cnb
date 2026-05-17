@@ -169,6 +169,27 @@ def model_state_alerts(sessions: list[dict]) -> list[str]:
     return alerts
 
 
+def tongxue_token_summary(
+    project_root: Path,
+    name: str,
+    *,
+    recent_hours: float | None = 24.0,
+) -> dict | None:
+    """Return aggregated usage for a single tongxue, or None if no data.
+
+    The default 24h window matches a typical shift; pass `None` for full history.
+    """
+    sessions = _load_project_sessions(project_root, recent_hours=recent_hours)
+    if not sessions:
+        return None
+    needle = name.lower()
+    sessions = [s for s in sessions if (s.get("name") or "").lower() == needle]
+    if not sessions:
+        return None
+    agg = aggregate_by_name(sessions)
+    return agg[0] if agg else None
+
+
 def _parse_usage_args(args: list[str]) -> dict[str, Any]:
     parsed: dict[str, Any] = {"detail": False, "budget": 0.0, "warn_pct": DEFAULT_BUDGET_WARN_PCT}
     i = 0
