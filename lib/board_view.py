@@ -9,6 +9,7 @@ from lib.board_db import BoardDB
 from lib.common import validate_identity
 from lib.fmt import error, heading, ok, warn
 from lib.tmux_utils import capture_pane, has_session, pane_command
+from lib.token_usage import collect_runtime_alerts, load_budget_defaults
 
 SHELL_COMMANDS = {"zsh", "bash", "sh", "-zsh", "-bash", ""}
 SPINNER_RE = re.compile(r"^\s*(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|●)", re.MULTILINE)
@@ -195,6 +196,26 @@ def cmd_overview(db: BoardDB) -> None:
         else:
             print(warn("  No sessions running. Start with: cnb swarm start"))
 
+    _print_runtime_alerts(db)
+
+
+def _print_runtime_alerts(db: BoardDB, session_filter: str | None = None) -> None:
+    """Surface model downgrade and over-budget alerts. Silent when all clear."""
+    assert db.env is not None
+    budget, warn_pct = load_budget_defaults(db.env.claudes_dir)
+    alerts = collect_runtime_alerts(
+        db.env.project_root,
+        budget=budget,
+        warn_pct=warn_pct,
+        session_filter=session_filter,
+    )
+    if not alerts:
+        return
+    print()
+    print(warn("⚠ 运行时:"))
+    for a in alerts:
+        print(warn(f"  ! {a}"))
+
 
 def cmd_view(db: BoardDB, identity: str) -> None:
     if identity:
@@ -218,6 +239,7 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (me,))
         if count:
             print(warn(f">>> 你有 {count} 条未读消息，运行 {board} --as {me} inbox 查看 <<<\n"))
+        _print_runtime_alerts(db, session_filter=me)
 
     prefix = db.env.prefix
     print(heading("Status:"))
