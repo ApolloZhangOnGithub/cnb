@@ -312,9 +312,8 @@ class TestCmdUpdateCheck:
             return SimpleNamespace(returncode=0)
 
         monkeypatch.setattr(update_check.subprocess, "run", fake_run)
-        # avoid the 2s sleep slowing the test
-        monkeypatch.setattr(update_check.time, "sleep", lambda *_: None)
-        monkeypatch.setattr(update_check, "refresh_latest_version_async", lambda: None)
+        # Stub the sync refresh so the test does not spawn npm.
+        monkeypatch.setattr(update_check, "refresh_latest_version_sync", lambda timeout=10.0: "9.99.99")
         db = SimpleNamespace(env=env)
         update_check.cmd_update_check(db, ["--force"])
         out = capsys.readouterr().out
@@ -348,6 +347,14 @@ class TestCmdUpdateCheck:
         monkeypatch.setattr(sys, "base_prefix", sys.prefix)
         (env.install_home / "VERSION").write_text("0.5.67-dev")
         update_check.CACHE_LATEST.write_text("0.5.44")
+        db = SimpleNamespace(env=env)
+        update_check.cmd_update_check(db, ["--quiet"])
+        assert capsys.readouterr().out == ""
+
+    def test_quiet_mode_silent_in_venv(self, env, cache, monkeypatch, capsys):
+        """--quiet in venv must remain silent (no `OK ... skipped` line)."""
+        monkeypatch.setenv("VIRTUAL_ENV", "/tmp/v")
+        (env.install_home / "VERSION").write_text("0.5.67-dev")
         db = SimpleNamespace(env=env)
         update_check.cmd_update_check(db, ["--quiet"])
         assert capsys.readouterr().out == ""
@@ -386,3 +393,62 @@ class TestCmdUpdateCheck:
         db = SimpleNamespace(env=env)
         update_check.cmd_update_check(db, ["--terminal"])
         assert capsys.readouterr().out == ""
+
+    def test_force_in_venv_short_circuits_before_refresh(self, env, cache, monkeypatch, capsys):
+        """In venv, --force must skip both suppression clear and npm fetch."""
+        monkeypatch.setenv("VIRTUAL_ENV", "/tmp/v")
+        (env.install_home / "VERSION").write_text("0.5.67-dev")
+        update_check.CACHE_NOTIFIED.write_text("preserved")
+        refresh_called = []
+        monkeypatch.setattr(
+            update_check,
+            "refresh_latest_version_sync",
+            lambda timeout=10.0: refresh_called.append(timeout),
+        )
+        db = SimpleNamespace(env=env)
+        update_check.cmd_update_check(db, ["--force"])
+        out = capsys.readouterr().out
+        assert "skipped" in out
+        assert "venv" in out
+        # suppression file was NOT cleared, refresh was NOT called
+        assert update_check.CACHE_NOTIFIED.read_text() == "preserved"
+        assert refresh_called == []
+
+
+class TestRefreshLatestVersionSync:
+    def test_writes_cache_on_success(self, cache, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="1.2.3\n", stderr="")
+
+        monkeypatch.setattr(update_check.subprocess, "run", fake_run)
+        result = update_check.refresh_latest_version_sync(timeout=1.0)
+        assert result == "1.2.3"
+        assert update_check.CACHE_LATEST.read_text().strip() == "1.2.3"
+
+    def test_returns_none_on_timeout(self, cache, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            raise update_check.subprocess.TimeoutExpired(cmd, 1.0)
+
+        monkeypatch.setattr(update_check.subprocess, "run", fake_run)
+        assert update_check.refresh_latest_version_sync(timeout=1.0) is None
+
+    def test_returns_none_on_missing_npm(self, cache, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            raise FileNotFoundError("npm")
+
+        monkeypatch.setattr(update_check.subprocess, "run", fake_run)
+        assert update_check.refresh_latest_version_sync(timeout=1.0) is None
+
+    def test_returns_none_on_nonzero_exit(self, cache, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=1, stdout="", stderr="not found")
+
+        monkeypatch.setattr(update_check.subprocess, "run", fake_run)
+        assert update_check.refresh_latest_version_sync(timeout=1.0) is None
+
+    def test_returns_none_on_empty_stdout(self, cache, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="\n", stderr="")
+
+        monkeypatch.setattr(update_check.subprocess, "run", fake_run)
+        assert update_check.refresh_latest_version_sync(timeout=1.0) is None

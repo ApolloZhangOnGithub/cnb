@@ -134,6 +134,35 @@ def refresh_latest_version_async() -> None:
         pass
 
 
+def refresh_latest_version_sync(timeout: float = 10.0) -> str | None:
+    """Block until npm returns or `timeout` elapses; write cache and return the version.
+
+    Used by `cmd_update_check --force` where the caller wants a guaranteed-fresh
+    reading; the async variant races with the next `cached_latest_version()` call.
+    Returns None on timeout / failure / npm missing.
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        result = subprocess.run(
+            ["npm", "view", NPM_PACKAGE, "version"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    version = result.stdout.strip()
+    if not version:
+        return None
+    try:
+        CACHE_LATEST.write_text(version + "\n")
+    except OSError:
+        pass
+    return version
+
+
 _DEV_SUFFIX = re.compile(r"\.dev\d*$")
 _PRERELEASE = re.compile(r"[-+].*$")
 
@@ -225,18 +254,22 @@ def cmd_update_check(db: Any, args: list[str]) -> None:
                   the launch.
 
     Other flags:
-      --force   ignore the notification-suppression key so the message resends
-                even if the owner was already nudged for this version pair
+      --force   ignore the notification-suppression key and synchronously refresh
+                the npm cache so the next read sees a guaranteed-fresh version.
     """
     assert db.env is not None
     quiet = "--quiet" in args
     terminal = "--terminal" in args
     current_version = _read_local_version(db.env.install_home)
+    # Hoist venv short-circuit — saves `--force` an npm fetch + wait when the
+    # operator is debugging from a venv shell.
+    if is_venv():
+        if not quiet and not terminal:
+            print(f"OK update-check skipped: in venv (current v{current_version})")
+        return
     if "--force" in args:
         CACHE_NOTIFIED.unlink(missing_ok=True)
-        refresh_latest_version_async()
-        # Give the spawned npm a beat to land; harmless if still pending.
-        time.sleep(2)
+        refresh_latest_version_sync(timeout=10.0)
     sent = check_update(db.env, current_version)
     if quiet:
         return
@@ -244,14 +277,11 @@ def cmd_update_check(db: Any, args: list[str]) -> None:
     owner = read_update_owner(db.env) or "?"
     is_stale = latest != "?" and version_gt(latest, current_version)
     if terminal:
-        if is_stale and not is_venv():
+        if is_stale:
             # Match the historical bash banner phrasing so the user UX is unchanged.
             print(
                 f"\033[1;33m⬆ cnb v{latest} 已发布，当前 v{current_version}。运行 npm install -g claude-nb 更新。\033[0m"
             )
-        return
-    if is_venv():
-        print(f"OK update-check skipped: in venv (current v{current_version})")
         return
     if sent:
         print(f"OK update-check notified {owner}: v{current_version} -> v{latest}")
