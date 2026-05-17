@@ -90,7 +90,11 @@ PY
 export CNB_PROJECT="${CNB_PROJECT:-$(pwd)}"
 
 if [ $# -gt 0 ]; then
-    CNB_SKIP_UPDATE_CHECK=1 "$CLAUDES_HOME/bin/board" update-check --quiet 2>/dev/null || true
+    # Isolate hook in a subshell + redirect both streams so a hung Python or rogue
+    # stdout cannot pollute a downstream subcommand whose output we capture (e.g.
+    # `cnb projects scan --json`). Detach via & + disown so we don't block dispatch.
+    ( CNB_SKIP_UPDATE_CHECK=1 "$CLAUDES_HOME/bin/board" update-check --quiet </dev/null >/dev/null 2>&1 ) &
+    disown 2>/dev/null || true
 fi
 
 # ---- Subcommands (exact match, always first) ----
