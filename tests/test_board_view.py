@@ -24,6 +24,7 @@ from lib.board_view import (
     _parse_board_time,
     _stall_reason,
     _tmux_status,
+    cmd_checkpoint,
     cmd_dashboard,
     cmd_dirty,
     cmd_freshness,
@@ -639,28 +640,68 @@ class TestCmdProgress:
 
 class TestCmdDirty:
     def test_no_git_repo(self, db, capsys):
-        with patch("lib.board_view._git", return_value=""):
+        with patch("lib.worktree_checkpoint._git", return_value=None):
             cmd_dirty(db)
         output = capsys.readouterr().out
-        assert "clean" in output.lower() or "无" in output or "干净" in output
+        assert "Not a git worktree" in output
 
     def test_shows_dirty_files(self, db, capsys):
-        with patch("lib.board_view._git", return_value=" M lib/foo.py\n M lib/bar.py\n"):
+        def fake_git(_root, *args):
+            if args == ("rev-parse", "--show-toplevel"):
+                return str(db.env.project_root)
+            if args == ("status", "--porcelain"):
+                return " M lib/foo.py\n M lib/bar.py\n"
+            return ""
+
+        with patch("lib.worktree_checkpoint._git", side_effect=fake_git):
             cmd_dirty(db)
         output = capsys.readouterr().out
         assert "foo.py" in output
+        assert "code/docs change" in output
+
+
+class TestCmdCheckpoint:
+    def test_exits_when_guard_finds_dirty_tree(self, db, capsys):
+        def fake_git(_root, *args):
+            if args == ("rev-parse", "--show-toplevel"):
+                return str(db.env.project_root)
+            if args == ("status", "--porcelain"):
+                return "?? .env\n"
+            return ""
+
+        with patch("lib.worktree_checkpoint._git", side_effect=fake_git), pytest.raises(SystemExit):
+            cmd_checkpoint(db)
+        output = capsys.readouterr().out
+        assert "secret/config risk" in output
+        assert "Guard mode" in output
+
+    def test_clean_checkpoint_passes(self, db, capsys):
+        def fake_git(_root, *args):
+            if args == ("rev-parse", "--show-toplevel"):
+                return str(db.env.project_root)
+            if args == ("status", "--porcelain"):
+                return ""
+            return ""
+
+        with patch("lib.worktree_checkpoint._git", side_effect=fake_git):
+            cmd_checkpoint(db)
+        output = capsys.readouterr().out
+        assert "Working tree clean" in output
 
     def test_shows_board_files_separately(self, db, capsys):
         def git_mock(_root, *args):
-            if "log" in args:
-                return "abc123 last commit\n"
-            return " M lib/foo.py\n M board/things.md\n M board/other.md\n"
+            if args == ("rev-parse", "--show-toplevel"):
+                return str(db.env.project_root)
+            if args == ("status", "--porcelain"):
+                return " M lib/foo.py\n M board/things.md\n M board/other.md\n"
+            return ""
 
-        with patch("lib.board_view._git", side_effect=git_mock):
+        with patch("lib.worktree_checkpoint._git", side_effect=git_mock):
             cmd_dirty(db)
         output = capsys.readouterr().out
-        assert "Board: 2 files" in output
+        assert "board/runtime churn: 2" in output
         assert "foo.py" in output
+        assert "code/docs change" in output
 
 
 class TestCmdRoster:
