@@ -132,8 +132,14 @@ class NudgeCoordinator(Concern):
             return False
         tmux_send(
             sess,
-            "lead 不能 idle。扫描团队状态：谁空闲、谁阻塞、PR queue、master CI、open issues。"
-            "主动给空闲员工派下一个 issue，不要等他们汇报。",
+            "lead 不能 idle。这是你的项目，没有用户兜底。"
+            "Open issue 通常 50+ 个，永远有活。"
+            "员工有活 → 不打扰他们，但你自己做：审 PR、close stale issue、整理 ROADMAP、"
+            "拆大 issue 成小 issue、给老 issue 加 priority/phase 标签、"
+            "把零散 doc 整合进 docs 站、回顾自己的 norms 有没有遗漏。"
+            "员工空闲 → 立即派下一个 issue 给他。"
+            "不要说'没活'、'等审批'、'瓶颈在外部'——这些都是 lead 失职的借口。"
+            "立即 gh issue list && gh pr list，挑下一件最有价值的事开始做。",
         )
         return True
 
