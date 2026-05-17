@@ -89,6 +89,35 @@ class TestCmdSend:
         row = db.query_one("SELECT body FROM messages WHERE sender='alice'")
         assert "分享文件" in row["body"]
 
+    def test_send_warns_when_recipient_offline(self, db, monkeypatch, capsys):
+        monkeypatch.setattr("lib.board_msg.has_session", lambda sess: False)
+        cmd_send(db, "alice", ["bob", "are you there?"])
+        out = capsys.readouterr().out
+        assert "OK sent" in out
+        assert "离线" in out
+        assert "bob" in out
+
+    def test_send_no_warning_when_recipient_online(self, db, monkeypatch, capsys):
+        monkeypatch.setattr("lib.board_msg.has_session", lambda sess: True)
+        monkeypatch.setattr("lib.board_msg._is_idle", lambda sess: False)
+        monkeypatch.setattr("lib.board_msg.tmux_send", lambda sess, text: None)
+        cmd_send(db, "alice", ["bob", "hello"])
+        out = capsys.readouterr().out
+        assert "OK sent" in out
+        assert "离线" not in out
+
+    def test_send_all_warns_offline_members(self, db, monkeypatch, capsys):
+        online = {"cc-test-bob"}
+        monkeypatch.setattr("lib.board_msg.has_session", lambda sess: sess in online)
+        monkeypatch.setattr("lib.board_msg._is_idle", lambda sess: False)
+        monkeypatch.setattr("lib.board_msg.tmux_send", lambda sess, text: None)
+        cmd_send(db, "alice", ["all", "broadcast"])
+        out = capsys.readouterr().out
+        assert "OK sent" in out
+        assert "离线" in out
+        assert "charlie" in out
+        assert "bob" not in out.split("离线")[1]
+
     def test_send_nudges_idle_recipient_with_inbox_command(self, db, monkeypatch, capsys):
         sent = []
         monkeypatch.setattr("lib.board_msg.has_session", lambda sess: True)
