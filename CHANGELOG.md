@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.99-dev (unreleased)
+
+### Tests
+
+- **KR3 coverage push — `digest_scheduler` 83→100%, `notification_config` 99→100%** — Added 23 tests in a new `tests/test_digest_scheduler.py` covering schedule parsing, dedup-window logic, and the deliver/skip paths around `last_run` bookkeeping in `lib/concerns/digest_scheduler.py`. Added 1 test in `tests/test_notification_config.py` (`test_deduplicates_repeated_members_in_input`) for the input-member dedup branch — same name passed multiple times (incl. different casing) collapses to one subscriber. Both modules now at 100% line coverage. Contributes to KR3 (notification pipeline health) — closes the last two coverage gaps in the notification pipeline.
+
 ## 0.5.78-dev (unreleased)
 
 ### Features
