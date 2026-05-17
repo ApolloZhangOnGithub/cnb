@@ -199,3 +199,16 @@ CREATE TABLE IF NOT EXISTS mail(
 CREATE INDEX IF NOT EXISTS idx_mail_thread ON mail(thread_id);
 CREATE INDEX IF NOT EXISTS idx_mail_sender ON mail(sender);
 CREATE INDEX IF NOT EXISTS idx_mail_ts ON mail(ts);
+
+-- Audit trail for board scan routing decisions (#87 L1).
+CREATE TABLE IF NOT EXISTS routing_log(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now','localtime')),
+    kind TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    evidence TEXT NOT NULL,
+    confidence TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_routing_log_ref ON routing_log(ref);
+CREATE INDEX IF NOT EXISTS idx_routing_log_recipient ON routing_log(recipient);

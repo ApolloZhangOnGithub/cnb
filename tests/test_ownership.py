@@ -511,6 +511,8 @@ class TestScan:
 
     @patch("lib.board_own.subprocess.run")
     def test_scan_ci_failure(self, mock_run, db, capsys):
+        """L1 (#87): CI failure routes per-file. When the failed run touches
+        a file owned by alice, alice is notified — not broadcast to everyone."""
         env = MagicMock()
         env.project_root = Path("/tmp/fake")
         db.env = env
@@ -521,10 +523,25 @@ class TestScan:
         def side_effect(cmd, **kwargs):
             if "issue" in cmd:
                 return MagicMock(returncode=0, stdout="[]")
-            if "run" in cmd:
+            if "run" in cmd and "list" in cmd:
                 return MagicMock(
                     returncode=0,
-                    stdout=json.dumps([{"status": "completed", "conclusion": "failure", "headBranch": "feature-x"}]),
+                    stdout=json.dumps(
+                        [
+                            {
+                                "status": "completed",
+                                "conclusion": "failure",
+                                "headBranch": "feature-x",
+                                "databaseId": 12345,
+                            }
+                        ]
+                    ),
+                )
+            if "run" in cmd and "view" in cmd:
+                # gh run view --json files → files touched by this run
+                return MagicMock(
+                    returncode=0,
+                    stdout=json.dumps({"files": [{"path": "lib/board_own.py"}, {"path": "lib/other.py"}]}),
                 )
             return MagicMock(returncode=1, stdout="")
 
@@ -536,3 +553,6 @@ class TestScan:
 
         msgs = db.query("SELECT body FROM messages WHERE recipient='alice' AND body LIKE '%CI FAIL%'")
         assert len(msgs) == 1
+        # L1 evidence: matched-via path is in the body so receiver can sanity-check.
+        assert "matched-via: files:" in msgs[0][0]
+        assert "lib/board_own.py" in msgs[0][0]

@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import tomllib
 from dataclasses import dataclass
@@ -12,6 +13,14 @@ from lib.board_db import BoardDB
 from lib.common import is_privileged, parse_flags, validate_identity
 
 DEFAULT_ORPHAN_HOURS = 24
+
+# Issue routing (#87 L1): patterns to extract file paths from issue bodies.
+# Catches things like `lib/board_own.py`, `docs/getting-started.md`,
+# `tests/test_x.py`. Restricted to common cnb source extensions to avoid
+# matching random words.
+_PATH_PATTERN_RE = re.compile(
+    r"\b((?:lib|bin|tests|docs|migrations|cnb)/[\w/.-]+\.(?:py|md|toml|json|sql|sh|yml|yaml))\b"
+)
 
 
 def cmd_own(db: BoardDB, identity: str, args: list[str]) -> None:
@@ -35,8 +44,10 @@ def cmd_own(db: BoardDB, identity: str, args: list[str]) -> None:
         _own_orphans(db, rest)
     elif subcmd == "map":
         _own_map(db)
+    elif subcmd == "audit":
+        _own_audit(db, rest)
     else:
-        print("Usage: board --as <name> own {claim|list|disown|transfer|transfer-all|offboard|orphans|map}")
+        print("Usage: board --as <name> own {claim|list|disown|transfer|transfer-all|offboard|orphans|map|audit}")
         raise SystemExit(1)
 
 
@@ -633,11 +644,120 @@ def cmd_scan(db: BoardDB, identity: str, args: list[str]) -> None:
         print("OK scan 完成: 无新事项")
 
 
+@dataclass(frozen=True)
+class RouteDecision:
+    """One routing decision: who to notify, why, and how strong the signal is."""
+
+    recipient: str
+    evidence: str
+    confidence: str  # "high" | "medium" | "low" | "fallback"
+
+
+def _known_sessions(db: BoardDB) -> set[str]:
+    return {str(row[0]) for row in db.query("SELECT name FROM sessions WHERE name NOT IN ('all', 'system')")}
+
+
+def _fallback_recipient(db: BoardDB) -> str:
+    """Where unmatched / ambiguous routing goes. Prefer `lead`, else broadcast `all`."""
+    row = db.query_one("SELECT name FROM sessions WHERE name='lead'")
+    return "lead" if row else "all"
+
+
+def _route_issue(db: BoardDB, issue: dict, ownership_rows: list[tuple[str, str]]) -> RouteDecision:
+    """Decide where one GitHub issue should go. Priority: assignee > label > path > fallback.
+
+    The first source that yields ≥1 candidate wins. Multi-owner matches in
+    the path tier escalate to fallback (no broadcast-style pings).
+    """
+    title = str(issue.get("title", ""))
+    body = str(issue.get("body") or "")
+    assignees = issue.get("assignees") or []
+    labels = issue.get("labels") or []
+    known = _known_sessions(db)
+    by_path: dict[str, str] = {p: s for s, p in ownership_rows}
+
+    # 1. Assignee — highest confidence (user picked this person on GitHub).
+    for a in assignees:
+        login = (a.get("login") if isinstance(a, dict) else str(a)).lower()
+        if login in known:
+            return RouteDecision(login, f"assigned:{login}", "high")
+
+    # 2. Label `proj:<name>` / `area:<name>` — explicit project tag points at owner.
+    for label in labels:
+        name = (label.get("name") if isinstance(label, dict) else str(label)).lower()
+        if not (name.startswith("proj:") or name.startswith("area:")):
+            continue
+        tag = name.split(":", 1)[1]
+        # match label tag against owned-path tail: pattern "lib/foo/" matches label "foo"
+        for pattern, session in [(p, by_path[p]) for p in by_path]:
+            parts = [seg for seg in pattern.strip("/").split("/") if seg]
+            if tag and parts and tag in parts:
+                return RouteDecision(session, f"label:{name}", "high")
+
+    # 3. Path references in body — regex over common cnb extensions.
+    referenced_paths = _PATH_PATTERN_RE.findall(f"{title}\n{body}")
+    path_owners: dict[str, str] = {}  # owner → evidence path
+    for fpath in referenced_paths:
+        owner = find_owner(db, fpath)
+        if owner and owner not in path_owners:
+            path_owners[owner] = fpath
+    if len(path_owners) == 1:
+        owner, fpath = next(iter(path_owners.items()))
+        return RouteDecision(owner, f"path:{fpath}", "medium")
+    if len(path_owners) > 1:
+        return RouteDecision(
+            _fallback_recipient(db),
+            f"ambiguous:{','.join(sorted(path_owners))}",
+            "fallback",
+        )
+
+    # 4. Substring fallback (preserve legacy behavior for issue bodies that
+    #    mention an ownership pattern without a full file path, e.g. "lib/").
+    text = f"{title}\n{body}".lower()
+    substring_owners: list[tuple[str, str]] = []  # (session, pattern)
+    for session, pattern in ownership_rows:
+        if pattern.lower() in text:
+            substring_owners.append((session, pattern))
+    if len(substring_owners) == 1:
+        session, pattern = substring_owners[0]
+        return RouteDecision(session, f"substring:{pattern}", "low")
+    if len(substring_owners) > 1:
+        owners = sorted({s for s, _ in substring_owners})
+        return RouteDecision(
+            _fallback_recipient(db),
+            f"ambiguous:{','.join(owners)}",
+            "fallback",
+        )
+
+    # 5. No match.
+    return RouteDecision(_fallback_recipient(db), "no_match", "fallback")
+
+
+def _record_routing(db: BoardDB, kind: str, ref: str, decision: RouteDecision) -> None:
+    """Append one row to routing_log. Silent on schema-missing — older DBs are tolerated."""
+    try:
+        db.execute(
+            "INSERT INTO routing_log(kind, ref, recipient, evidence, confidence) VALUES (?, ?, ?, ?, ?)",
+            (kind, ref, decision.recipient, decision.evidence, decision.confidence),
+        )
+    except Exception:
+        pass  # tolerate pre-migration DBs
+
+
+def _format_issue_routing_body(number: int, title: str, decision: RouteDecision, *, orphan_note: str = "") -> str:
+    """Render the message body. Always includes matched-via + confidence so the
+    receiver can spot misrouting without re-running the scan."""
+    header = f"[ISSUE #{number}] {title}"
+    if orphan_note:
+        header = f"{header} — {orphan_note}"
+    return f"{header}\nmatched-via: {decision.evidence}\nconfidence: {decision.confidence}"
+
+
 def _scan_issues(db: BoardDB, project_root: Path) -> int:
-    """Check open GitHub issues, notify owners of relevant ones."""
+    """Check open GitHub issues, notify owners using L1 routing (#87)."""
     try:
         r = subprocess.run(
-            ["gh", "issue", "list", "--state", "open", "--json", "number,title,labels,body"],
+            ["gh", "issue", "list", "--state", "open", "--json", "number,title,labels,body,assignees"],
             cwd=str(project_root),
             capture_output=True,
             text=True,
@@ -650,47 +770,66 @@ def _scan_issues(db: BoardDB, project_root: Path) -> int:
     except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
         return 0
 
-    ownership_rows = db.query("SELECT session, path_pattern FROM ownership")
+    ownership_rows = [(s, p) for s, p in db.query("SELECT session, path_pattern FROM ownership")]
     if not ownership_rows:
         return 0
 
     routed = 0
     for issue in issues:
-        title = issue.get("title", "")
-        body = issue.get("body", "") or ""
         number = issue.get("number", 0)
-        text = f"{title} {body}".lower()
+        title = issue.get("title", "")
+        decision = _route_issue(db, issue, ownership_rows)
 
-        for session, pattern in ownership_rows:
-            if pattern.lower() in text:
-                is_orphan = _is_orphaned_owner(db, session)
-                recipient = "all" if is_orphan else session
-                already = db.scalar(
-                    "SELECT COUNT(*) FROM messages WHERE body LIKE ? AND recipient=?",
-                    (f"%[ISSUE #{number}]%", recipient),
-                )
-                if not already:
-                    if is_orphan:
-                        body = (
-                            f"[ISSUE #{number}] {title} — 原 owner {session} 可能 orphaned，相关 ownership: {pattern}"
-                        )
-                    else:
-                        body = f"[ISSUE #{number}] {title} — 可能与你负责的 {pattern} 相关"
-                    db.post_message(
-                        "system",
-                        recipient,
-                        body,
-                        deliver=True,
-                    )
-                    routed += 1
+        # Orphan owner re-route: preserve legacy behavior of sending to "all"
+        # with the original owner mentioned in the body.
+        orphan_note = ""
+        if decision.recipient in _known_sessions(db) and _is_orphaned_owner(db, decision.recipient):
+            orphan_note = f"原 owner {decision.recipient} 可能 orphaned, 路由证据: {decision.evidence}"
+            decision = RouteDecision("all", f"orphan:{decision.recipient}", "fallback")
+
+        already = db.scalar(
+            "SELECT COUNT(*) FROM messages WHERE body LIKE ? AND recipient=?",
+            (f"%[ISSUE #{number}]%", decision.recipient),
+        )
+        if already:
+            continue
+
+        body = _format_issue_routing_body(number, title, decision, orphan_note=orphan_note)
+        db.post_message("system", decision.recipient, body, deliver=True)
+        _record_routing(db, "issue", f"#{number}", decision)
+        routed += 1
     return routed
 
 
-def _scan_ci(db: BoardDB, project_root: Path) -> int:
-    """Check CI status of current branch, notify owners of failing files."""
+def _failed_run_files(project_root: Path, run_id: int | str) -> list[str]:
+    """Get the list of changed files for a failed run via `gh run view`.
+
+    Returns [] on any error / timeout — callers fall back to lead routing.
+    """
     try:
         r = subprocess.run(
-            ["gh", "run", "list", "--limit", "1", "--json", "status,conclusion,headBranch"],
+            ["gh", "run", "view", str(run_id), "--json", "files"],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if r.returncode != 0:
+            return []
+        data = json.loads(r.stdout)
+        files = data.get("files") if isinstance(data, dict) else None
+        if not isinstance(files, list):
+            return []
+        return [str(f.get("path") or f) for f in files if f]
+    except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _scan_ci(db: BoardDB, project_root: Path) -> int:
+    """Route CI failures by per-file ownership (#87 L1), not broadcast."""
+    try:
+        r = subprocess.run(
+            ["gh", "run", "list", "--limit", "1", "--json", "status,conclusion,headBranch,databaseId"],
             cwd=str(project_root),
             capture_output=True,
             text=True,
@@ -704,22 +843,78 @@ def _scan_ci(db: BoardDB, project_root: Path) -> int:
             return 0
 
         branch = runs[0].get("headBranch", "unknown")
+        run_id = runs[0].get("databaseId", 0)
     except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
         return 0
 
-    owners = db.query("SELECT DISTINCT session FROM ownership")
+    files = _failed_run_files(project_root, run_id) if run_id else []
+    owners: dict[str, list[str]] = {}  # owner → [matching files]
+    for fpath in files:
+        owner = find_owner(db, fpath)
+        if owner:
+            owners.setdefault(owner, []).append(fpath)
+
     routed = 0
-    for (session,) in owners:
-        already = db.scalar(
-            "SELECT COUNT(*) FROM messages WHERE body LIKE ? AND recipient=?",
-            (f"%[CI FAIL]%{branch}%", session),
-        )
-        if not already:
-            db.post_message(
-                "system",
-                session,
-                f"[CI FAIL] {branch} 分支 CI 失败，请检查你负责的模块",
-                deliver=True,
+    if owners:
+        # Route to each matched owner with the specific files as evidence.
+        for owner, matched_files in owners.items():
+            ref = f"{branch}:{run_id}"
+            already = db.scalar(
+                "SELECT COUNT(*) FROM messages WHERE body LIKE ? AND recipient=?",
+                (f"%[CI FAIL]%{ref}%", owner),
             )
+            if already:
+                continue
+            evidence = f"files:{','.join(matched_files[:3])}"
+            confidence = "high"
+            body = (
+                f"[CI FAIL] {ref} 失败，涉及你负责的文件: {', '.join(matched_files[:3])}\n"
+                f"matched-via: {evidence}\n"
+                f"confidence: {confidence}"
+            )
+            db.post_message("system", owner, body, deliver=True)
+            _record_routing(db, "ci", ref, RouteDecision(owner, evidence, confidence))
             routed += 1
-    return routed
+        return routed
+
+    # Fallback: couldn't determine files → route ONE message to lead (or all),
+    # not broadcast to every owner. Better than the previous spammy behavior.
+    fallback = _fallback_recipient(db)
+    ref = f"{branch}:{run_id or 'unknown'}"
+    already = db.scalar(
+        "SELECT COUNT(*) FROM messages WHERE body LIKE ? AND recipient=?",
+        (f"%[CI FAIL]%{ref}%", fallback),
+    )
+    if already:
+        return 0
+    body = f"[CI FAIL] {ref} 分支 CI 失败，无法定位 owner — 请人工分派\nmatched-via: no_files\nconfidence: fallback"
+    db.post_message("system", fallback, body, deliver=True)
+    _record_routing(db, "ci", ref, RouteDecision(fallback, "no_files", "fallback"))
+    return 1
+
+
+def _own_audit(db: BoardDB, args: list[str]) -> None:
+    """Show recent routing decisions from routing_log."""
+    flags, _ = parse_flags(args, value_flags={"limit": ["--limit", "-n"]})
+    try:
+        limit = int(flags["limit"]) if "limit" in flags else 20
+    except ValueError:
+        print("ERROR: --limit 必须是整数")
+        raise SystemExit(1)
+
+    try:
+        rows = db.query(
+            "SELECT ts, kind, ref, recipient, evidence, confidence FROM routing_log ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+    except Exception:
+        print("无 routing_log（schema 未迁移?）")
+        return
+
+    if not rows:
+        print("routing_log 为空")
+        return
+
+    print(f"Routing audit (最近 {len(rows)} 条):")
+    for ts, kind, ref, recipient, evidence, confidence in rows:
+        print(f"  [{ts}] {kind} {ref} → {recipient}  [{confidence}] {evidence}")

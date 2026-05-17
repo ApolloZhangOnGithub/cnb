@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.93-dev (unreleased)
+
+### Features
+
+- **Ownership routing L1 (#87)** — Rewrote `board scan` issue and CI routing with explicit evidence and confidence. Issue routing follows a 3-tier priority chain: GitHub `assignees` (high confidence) → `proj:*` / `area:*` labels (high) → file-path references in title/body (medium) → existing substring fallback (low). Multi-owner matches and unmatched issues route to a fallback recipient (`lead` if it exists, else `all`) with `ambiguous:` or `no_match` evidence rather than broadcasting. CI failures now route per-file via `gh run view --json files` — when the failed run's changed files map to specific owners, only those owners are notified; when files can't be determined (timeout / no data), one fallback message goes to `lead`/`all` instead of the previous spammy broadcast to every owner. Every routing decision is recorded in a new `routing_log` table; `board own audit [--limit N]` shows recent decisions for misroute debrief. Notification message bodies always include `matched-via:` and `confidence:` lines so receivers can spot misrouting. Closes #87 (L1 scope; confidence-from-feedback and ML-based routing remain L2/L3).
+
 ## 0.5.78-dev (unreleased)
 
 ### Features
