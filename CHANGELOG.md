@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.91-dev (unreleased)
+
+### Features
+
+- **Proactive association hints — phase 2 detection (#158)** — Added `lib/hint_detector.py` implementing the four-signal heuristic from the design doc (issue refs / path overlap / keyword overlap / 24h-half-life recency decay) plus `detect_hints()` and `run_for_message()`. Hooked into `cmd_send` post-commit so a tongxue's outgoing message kicks off detection against the recipient's eligible senders; broadcasts (`recipient='all'`) are skipped. Detection is broad-except wrapped so a failing detector cannot break message delivery — both the detector itself and per-emit failures are isolated. Eligibility is sender↔recipient only (lead-confirmed scope). Cross-tongxue sourcing is deferred. 42 unit tests cover signal extraction, recency math, full `detect_hints` DB integration (eligibility / lookback / strongest-prior-per-sender), `run_for_message` (emit propagation, exception isolation, flaky-emit isolation), and `cmd_send` pipeline integration. Stacks on #249 (phase 1).
+
 ## 0.5.87-dev (unreleased)
 
 ### Features
