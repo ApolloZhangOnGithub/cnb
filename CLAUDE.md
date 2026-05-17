@@ -165,6 +165,7 @@ cnb board --as <name> scan                 # scan issues/CI, route to owners
 - **Daily report**: before clocking off, run `board --as <your-name> daily`. Never hand-write timestamps — the command generates them from system time. If you need to add context, pass it as an argument: `board --as <name> daily "补充说明"`.
 - **近期不要用 `/ultraplan`。** 一次消耗 ~33% Pro 日配额（5 小时上限），性价比极低。复杂规划用本地 `/plan` + issue 讨论。以后 Anthropic 调整定价再重新评估。
 - **Shared rules go in CLAUDE.md, not memory.** If a rule applies to all tongxue, it must be written here. Personal memory is per-session — other tongxue cannot see it.
+- **Fetching c-n-b.space sites:** `curl` / `requests` get blocked by local proxies and the Aliyun "Beaver" ICP filter (#214). Use `bin/fetch-site <url>` for `platform.c-n-b.space`, `blog.c-n-b.space`, `docs.c-n-b.space`, `c-n-b.space`. It goes straight to the origin IP via `openssl s_client`. See `docs/dev/troubleshooting-fetch.md` for the full story.
 
 ### Sessions
 
