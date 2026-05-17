@@ -318,6 +318,14 @@ COMMANDS: list[Command] = [
         needs_identity=False,
         aliases=["m"],
     ),
+    Command(
+        "usage",
+        "lib.token_usage",
+        "cmd_board_usage",
+        "token usage + budget across run",
+        "usage [--detail] [--budget USD] [--warn-pct N]",
+        needs_identity=False,
+    ),
     # ── maintenance ──
     Command(
         "prune",

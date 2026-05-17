@@ -1,17 +1,35 @@
 """token_usage — parse Claude Code JSONL logs for per-session token usage and cost estimation."""
 
 import json
+import time as _time
+import tomllib
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
+# JSONLs older than this window are excluded from "live" runtime alerts. Full history
+# (cmd_usage) ignores this filter.
+DEFAULT_RECENT_HOURS = 6.0
+
+# Synthetic placeholders Claude Code writes during compaction / internal flows. They are
+# not real model assignments, so they should never count toward downgrade detection.
+SYNTHETIC_MODELS = frozenset({"<synthetic>"})
+
+_OPUS_PRICING = {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_create": 18.75}
+_SONNET_PRICING = {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_create": 3.75}
+_HAIKU_PRICING = {"input": 0.80, "output": 4.0, "cache_read": 0.08, "cache_create": 1.0}
+
+# Legacy 4-6 keys kept as aliases — historical JSONLs on disk reference them and
+# would otherwise fall through to the default opus pricing (3-5x over-estimate
+# for sonnet sessions).
 PRICING = {
-    "claude-opus-4-6": {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_create": 18.75},
-    "claude-opus-4-7": {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_create": 18.75},
-    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_create": 3.75},
-    "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.0, "cache_read": 0.08, "cache_create": 1.0},
+    "claude-opus-4-6": _OPUS_PRICING,
+    "claude-opus-4-7": _OPUS_PRICING,
+    "claude-sonnet-4-6": _SONNET_PRICING,
+    "claude-sonnet-4-7": _SONNET_PRICING,
+    "claude-haiku-4-5-20251001": _HAIKU_PRICING,
 }
 
 DEFAULT_PRICING = {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_create": 18.75}
@@ -55,9 +73,14 @@ def parse_session_usage(jsonl_path: Path) -> dict:
         msg_type = d.get("type", "")
         if msg_type == "agent-name":
             name = d.get("agentName", "")
+        elif msg_type == "custom-title":
+            # JSONLs may identify their owner via either 'agent-name' or 'custom-title'.
+            name = name or d.get("customTitle", "")
         elif msg_type == "assistant":
             msg = d.get("message", {})
             current_model = msg.get("model", "")
+            if current_model in SYNTHETIC_MODELS:
+                current_model = ""
             if not model:
                 model = current_model
             if current_model:
@@ -123,6 +146,12 @@ def aggregate_by_name(sessions: list[dict]) -> list[dict]:
 
 
 def model_state_alerts(sessions: list[dict]) -> list[str]:
+    """Detect intra-family model downgrades (e.g. opus → sonnet).
+
+    Cross-provider switches (claude → deepseek) are user-initiated via `cnb model use` and
+    should not raise alerts. We require both first and latest models to be in known tiers
+    (>0) before comparing.
+    """
     alerts: list[str] = []
     for s in sessions:
         models = [model for model in s.get("models", []) if model]
@@ -130,10 +159,90 @@ def model_state_alerts(sessions: list[dict]) -> list[str]:
             continue
         first = models[0]
         latest = models[-1]
-        if _model_tier(latest) < _model_tier(first):
+        first_tier = _model_tier(first)
+        latest_tier = _model_tier(latest)
+        if first_tier == 0 or latest_tier == 0:
+            continue
+        if latest_tier < first_tier:
             name = s.get("name") or str(s.get("session_id", ""))[:8]
             alerts.append(f"{name}: model downgraded {first} -> {latest}")
     return alerts
+
+
+def tongxue_token_summary(
+    project_root: Path,
+    name: str,
+    *,
+    recent_hours: float | None = 24.0,
+) -> dict | None:
+    """Return aggregated usage for a single tongxue, or None if no data.
+
+    The default 24h window matches a typical shift; pass `None` for full history.
+    """
+    sessions = _load_project_sessions(project_root, recent_hours=recent_hours)
+    if not sessions:
+        return None
+    needle = name.lower()
+    sessions = [s for s in sessions if (s.get("name") or "").lower() == needle]
+    if not sessions:
+        return None
+    agg = aggregate_by_name(sessions)
+    return agg[0] if agg else None
+
+
+def _short_model_label(model: str) -> str:
+    """Pick a one-word label suitable for a row badge: opus/sonnet/haiku/gpt-5.x/mini/other."""
+    lowered = model.lower()
+    if "mini" in lowered:
+        return "mini"
+    if "haiku" in lowered:
+        return "haiku"
+    if "opus" in lowered:
+        return "opus"
+    if "sonnet" in lowered:
+        return "sonnet"
+    if lowered.startswith("gpt-"):
+        # gpt-5.4-mini already handled above; for plain gpt-5.x return the family marker.
+        # Guard the empty-second-segment case ("gpt-" alone, or "gpt--5.4") so the badge
+        # never renders as just an arrow with nothing on one side.
+        parts = lowered.split("-", 2)
+        candidate = parts[1] if len(parts) > 1 else ""
+        return candidate or model[:8]
+    return model[:8]
+
+
+def session_model_badges(
+    project_root: Path,
+    *,
+    recent_hours: float | None = DEFAULT_RECENT_HOURS,
+) -> dict[str, str]:
+    """Return `{tongxue_name_lower: "opus→sonnet"}` for downgraded sessions only.
+
+    Uses the same tier-aware filtering as `model_state_alerts` so cross-provider
+    switches do not produce badges. Names are lowercased to match how the board DB
+    stores session names. Sessions without a downgrade are omitted; consumers can
+    treat a missing key as "all clear".
+    """
+    sessions = _load_project_sessions(project_root, recent_hours=recent_hours)
+    if not sessions:
+        return {}
+    badges: dict[str, str] = {}
+    for s in aggregate_by_name(sessions):
+        models = [m for m in s.get("models", []) if m]
+        if len(models) < 2:
+            continue
+        first, latest = models[0], models[-1]
+        first_tier = _model_tier(first)
+        latest_tier = _model_tier(latest)
+        if first_tier == 0 or latest_tier == 0:
+            continue
+        if latest_tier >= first_tier:
+            continue
+        name = (s.get("name") or "").lower()
+        if not name:
+            continue
+        badges[name] = f"{_short_model_label(first)}→{_short_model_label(latest)}"
+    return badges
 
 
 def _parse_usage_args(args: list[str]) -> dict[str, Any]:
@@ -171,11 +280,7 @@ def cmd_usage(project_root: Path, args: list[str]) -> None:
         print(f"ERROR: 找不到项目 JSONL 目录: {CLAUDE_PROJECTS_DIR / _project_slug(project_root)}")
         raise SystemExit(1)
 
-    sessions = []
-    for jf in sorted(project_dir.glob("*.jsonl")):
-        usage = parse_session_usage(jf)
-        if usage["messages"] > 0:
-            sessions.append(usage)
+    sessions = _load_project_sessions(project_root, recent_hours=None)
 
     if not sessions:
         print("无 token 用量数据")
@@ -229,6 +334,101 @@ def _print_runtime_state(sessions: list[dict], *, budget: float, warn_pct: float
     print(f"\n预算: ${budget:.2f}；已用 ${total_cost:.2f} ({pct:.1f}%)；剩余 ${remaining:.2f}")
     if pct >= warn_pct:
         print(f"WARNING: token budget usage {pct:.1f}% >= {warn_pct:.1f}% threshold")
+
+
+def _load_project_sessions(project_root: Path, *, recent_hours: float | None = None) -> list[dict]:
+    """Parse all session JSONLs. If `recent_hours` is set, skip files older than that window.
+
+    Tradeoff on mtime: a long-running session whose JSONL hasn't been written to in
+    `recent_hours` is excluded — its model state is treated as stale. This is the right
+    default for live alerts (we want recent runtime signals) but cmd_usage opts into
+    full history (`recent_hours=None`) for the historical breakdown.
+    """
+    project_dir = _find_project_dir(project_root)
+    if not project_dir:
+        return []
+    cutoff = None
+    if recent_hours is not None:
+        cutoff = _time.time() - recent_hours * 3600
+    sessions = []
+    for jf in sorted(project_dir.glob("*.jsonl")):
+        if cutoff is not None and jf.stat().st_mtime < cutoff:
+            continue
+        u = parse_session_usage(jf)
+        if u["messages"] > 0:
+            sessions.append(u)
+    return sessions
+
+
+def load_budget_defaults(claudes_dir: Path) -> tuple[float, float]:
+    """Read [budget] from .cnb/config.toml. Returns (usd, warn_pct).
+
+    Defaults: usd=0.0 (disabled), warn_pct=DEFAULT_BUDGET_WARN_PCT. Malformed values
+    (typo'd strings like "50usd") fall back to defaults rather than raising — the
+    runtime alert hook must never break a board call because of a config typo.
+    """
+    toml_file = claudes_dir / "config.toml"
+    if not toml_file.exists():
+        return 0.0, DEFAULT_BUDGET_WARN_PCT
+    try:
+        cfg = tomllib.loads(toml_file.read_text())
+    except (tomllib.TOMLDecodeError, OSError):
+        return 0.0, DEFAULT_BUDGET_WARN_PCT
+    section = cfg.get("budget", {})
+    try:
+        usd = float(section.get("usd", 0) or 0)
+    except (TypeError, ValueError):
+        usd = 0.0
+    try:
+        warn_pct = float(section.get("warn_pct", DEFAULT_BUDGET_WARN_PCT))
+    except (TypeError, ValueError):
+        warn_pct = DEFAULT_BUDGET_WARN_PCT
+    return usd, warn_pct
+
+
+def collect_runtime_alerts(
+    project_root: Path,
+    *,
+    budget: float = 0.0,
+    warn_pct: float = DEFAULT_BUDGET_WARN_PCT,
+    session_filter: str | None = None,
+    recent_hours: float | None = DEFAULT_RECENT_HOURS,
+) -> list[str]:
+    """Return runtime alert strings (model downgrade + over-budget). Empty if all clear.
+
+    `session_filter` restricts to a single tongxue name (case-insensitive); useful for
+    per-session views where only the caller's own state should surface.
+    `recent_hours` limits scanning to JSONLs touched within that window — the default
+    keeps live commands snappy. Pass `None` for full history (cmd_usage).
+    """
+    sessions = _load_project_sessions(project_root, recent_hours=recent_hours)
+    if session_filter:
+        needle = session_filter.lower()
+        sessions = [s for s in sessions if (s.get("name") or "").lower() == needle]
+    if not sessions:
+        return []
+
+    aggregated = aggregate_by_name(sessions)
+    alerts: list[str] = list(model_state_alerts(aggregated))
+
+    if budget > 0:
+        total_cost = sum(estimate_cost(s) for s in sessions)
+        pct = (total_cost / budget) * 100
+        if pct >= warn_pct:
+            alerts.append(
+                f"token budget usage {pct:.1f}% >= {warn_pct:.1f}% threshold (${total_cost:.2f} / ${budget:.2f})"
+            )
+    return alerts
+
+
+def cmd_board_usage(db: Any, args: list[str]) -> None:
+    """Board command adapter — dispatch to cmd_usage with config-default budget."""
+    assert db.env is not None
+    if not any(a in ("--budget", "--budget-usd") for a in args):
+        budget, warn_pct = load_budget_defaults(db.env.claudes_dir)
+        if budget > 0:
+            args = [*args, "--budget", str(budget), "--warn-pct", str(warn_pct)]
+    cmd_usage(db.env.project_root, args)
 
 
 def _print_detail(sessions: list[dict]) -> None:
