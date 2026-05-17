@@ -188,7 +188,9 @@ class BlogDB:
                 c.execute("ALTER TABLE blog_users ADD COLUMN avatar_url TEXT")
             if "github_id" not in cols:
                 c.execute("ALTER TABLE blog_users ADD COLUMN github_id INTEGER")
-                c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_users_github ON blog_users(github_id) WHERE github_id IS NOT NULL")
+                c.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_users_github ON blog_users(github_id) WHERE github_id IS NOT NULL"
+                )
 
     # ── users ──
 
@@ -258,7 +260,9 @@ class BlogDB:
             c.execute("DELETE FROM blog_posts WHERE id = ?", (post_id,))
             return c.total_changes > 0
 
-    def get_or_create_github_user(self, github_id: int, login: str, name: str | None, avatar_url: str | None) -> dict[str, Any]:
+    def get_or_create_github_user(
+        self, github_id: int, login: str, name: str | None, avatar_url: str | None
+    ) -> dict[str, Any]:
         with self.conn() as c:
             row = c.execute("SELECT * FROM blog_users WHERE github_id = ?", (github_id,)).fetchone()
             if row:
@@ -280,8 +284,13 @@ class BlogDB:
                 (username, display, token, github_id, avatar_url, now),
             )
             return {
-                "id": cur.lastrowid, "username": username, "display_name": display,
-                "role": "human", "token": token, "github_id": github_id, "avatar_url": avatar_url,
+                "id": cur.lastrowid,
+                "username": username,
+                "display_name": display,
+                "role": "human",
+                "token": token,
+                "github_id": github_id,
+                "avatar_url": avatar_url,
             }
 
     def delete_comment(self, comment_id: int) -> bool:
@@ -303,7 +312,7 @@ class BlogDB:
         if not updates:
             return False
         set_clause = ", ".join(f"{k} = ?" for k in updates)
-        params = tuple(updates.values()) + (user_id,)
+        params = (*tuple(updates.values()), user_id)
         with self.conn() as c:
             c.execute(f"UPDATE blog_users SET {set_clause} WHERE id = ?", params)
             return c.total_changes > 0
@@ -328,8 +337,10 @@ class BlogDB:
 
     def set_url_meta(self, post_id: int, url_title: str, url_desc: str = "", url_image: str = "") -> None:
         with self.conn() as c:
-            c.execute("UPDATE blog_posts SET url_title = ?, url_desc = ?, url_image = ? WHERE id = ?",
-                      (url_title, url_desc or None, url_image or None, post_id))
+            c.execute(
+                "UPDATE blog_posts SET url_title = ?, url_desc = ?, url_image = ? WHERE id = ?",
+                (url_title, url_desc or None, url_image or None, post_id),
+            )
 
     def update_post(self, post_id: int, author_id: int, title: str | None = None, body: str | None = None) -> bool:
         with self.conn() as c:
@@ -459,7 +470,10 @@ class BlogDB:
             if existing:
                 c.execute("DELETE FROM blog_comment_likes WHERE comment_id = ? AND user_id = ?", (comment_id, user_id))
                 return False
-            c.execute("INSERT INTO blog_comment_likes (comment_id, user_id, created_at) VALUES (?, ?, ?)", (comment_id, user_id, now))
+            c.execute(
+                "INSERT INTO blog_comment_likes (comment_id, user_id, created_at) VALUES (?, ?, ?)",
+                (comment_id, user_id, now),
+            )
             return True
 
     def pin_comment(self, comment_id: int, pinned: bool = True) -> bool:
@@ -483,17 +497,25 @@ class BlogDB:
                 (follower_id, following_id),
             ).fetchone()
             if existing:
-                c.execute("DELETE FROM blog_follows WHERE follower_id = ? AND following_id = ?", (follower_id, following_id))
+                c.execute(
+                    "DELETE FROM blog_follows WHERE follower_id = ? AND following_id = ?", (follower_id, following_id)
+                )
                 return False
-            c.execute("INSERT INTO blog_follows (follower_id, following_id, created_at) VALUES (?, ?, ?)", (follower_id, following_id, now))
+            c.execute(
+                "INSERT INTO blog_follows (follower_id, following_id, created_at) VALUES (?, ?, ?)",
+                (follower_id, following_id, now),
+            )
             return True
 
     def is_following(self, follower_id: int, following_id: int) -> bool:
         with self.conn() as c:
-            return c.execute(
-                "SELECT 1 FROM blog_follows WHERE follower_id = ? AND following_id = ?",
-                (follower_id, following_id),
-            ).fetchone() is not None
+            return (
+                c.execute(
+                    "SELECT 1 FROM blog_follows WHERE follower_id = ? AND following_id = ?",
+                    (follower_id, following_id),
+                ).fetchone()
+                is not None
+            )
 
     def get_follower_count(self, user_id: int) -> int:
         with self.conn() as c:
@@ -538,7 +560,9 @@ class BlogDB:
             rows = c.execute("SELECT following_id FROM blog_follows WHERE follower_id = ?", (user_id,)).fetchall()
             return {r[0] for r in rows}
 
-    def get_recommend_feed(self, user_id: int | None, before: int | None = None, limit: int = 20, role_filter: str = "all") -> list[sqlite3.Row]:
+    def get_recommend_feed(
+        self, user_id: int | None, before: int | None = None, limit: int = 20, role_filter: str = "all"
+    ) -> list[sqlite3.Row]:
         role_clause = ""
         if role_filter == "human":
             role_clause = " AND u.role != 'agent'"
@@ -698,7 +722,9 @@ class BlogDB:
 
     # ── notifications ──
 
-    def notify(self, user_id: int, type: str, actor_id: int, post_id: int | None = None, comment_id: int | None = None) -> None:
+    def notify(
+        self, user_id: int, type: str, actor_id: int, post_id: int | None = None, comment_id: int | None = None
+    ) -> None:
         if user_id == actor_id:
             return
         now = _utc_now()

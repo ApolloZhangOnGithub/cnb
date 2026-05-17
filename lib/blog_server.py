@@ -7,12 +7,16 @@ no external dependencies.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
+import os
 import re
 import secrets
 import signal
 import sqlite3
-import sys
+import threading
+import urllib.request
+from html.parser import HTMLParser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -20,24 +24,14 @@ from socketserver import ThreadingMixIn
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-import os
-import urllib.request
-
 from lib.blog_db import BlogDB
-
-import ipaddress
-import threading
-from html.parser import HTMLParser
-
-GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
-GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 from lib.blog_html import (
+    edit_page,
     error_page,
     feed_page,
     follow_list_page,
     inbox_page,
     landing_page,
-    edit_page,
     login_page,
     notifications_page,
     post_page,
@@ -48,6 +42,9 @@ from lib.blog_html import (
     thread_page,
     user_page,
 )
+
+GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 
 MAX_BODY_BYTES = 1_048_576
 
@@ -92,6 +89,7 @@ class _MetaParser(HTMLParser):
 def _is_safe_url(url: str) -> bool:
     try:
         from urllib.parse import urlparse as _up
+
         parsed = _up(url)
         if parsed.scheme not in ("http", "https"):
             return False
@@ -128,11 +126,14 @@ def _fetch_url_meta(url: str, db, post_id: int) -> None:
         image = p.og_image.strip()
         if image and not image.startswith("http"):
             from urllib.parse import urljoin
+
             image = urljoin(url, image)
         if title:
             db.set_url_meta(post_id, title, desc, image)
     except Exception:
         pass
+
+
 DEFAULT_PORT = 8080
 
 
@@ -163,6 +164,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
     def _get_cookie_user(self) -> dict | None:
         from http.cookies import SimpleCookie
+
         cookie = SimpleCookie(self.headers.get("Cookie", ""))
         token_morsel = cookie.get("token")
         if not token_morsel:
@@ -174,6 +176,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
     def _make_csrf(self, user: dict) -> str:
         import hmac
+
         return hmac.new(user["token"].encode(), b"csrf", "sha256").hexdigest()[:32]
 
     def _check_csrf(self, user: dict | None, form: dict) -> bool:
@@ -189,7 +192,6 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         lang = self._get_lang(params, user)
 
         unread = self.server.db.get_unread_count(user["id"]) if user else 0
-        notif_count = self.server.db.get_notif_unread_count(user["id"]) if user else 0
 
         if route == "/":
             self._send_html(landing_page(lang, user))
@@ -207,7 +209,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self._handle_github_callback(params, lang)
             return
         if route == "/logout":
-            self._send_html_with_headers(landing_page(lang), [("Set-Cookie", "token=; Path=/; Domain=.c-n-b.space; Max-Age=0")])
+            self._send_html_with_headers(
+                landing_page(lang), [("Set-Cookie", "token=; Path=/; Domain=.c-n-b.space; Max-Age=0")]
+            )
             return
         if route == "/submit":
             csrf = self._make_csrf(user) if user else ""
@@ -448,8 +452,19 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             has_more = len(posts) > limit
             post_list = [dict(p) for p in posts[:limit]]
             next_cursor = post_list[-1]["id"] if has_more and post_list else None
-            self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids,
-                                      followed_users, filter_user or None))
+            self._send_html(
+                feed_page(
+                    post_list,
+                    has_more,
+                    next_cursor,
+                    lang,
+                    user,
+                    tab,
+                    following_ids,
+                    followed_users,
+                    filter_user or None,
+                )
+            )
             return
 
         # recommend (default)
@@ -458,7 +473,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         has_more = len(posts) > limit
         post_list = [dict(p) for p in posts[:limit]]
         next_cursor = post_list[-1]["id"] if has_more and post_list else None
-        self._send_html(feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids, role_filter=role_filter))
+        self._send_html(
+            feed_page(post_list, has_more, next_cursor, lang, user, tab, following_ids, role_filter=role_filter)
+        )
 
     def _handle_user_page(self, username: str, params: dict, lang: str = "zh", user: dict | None = None) -> None:
         profile = self.server.db.get_user_by_username(username)
@@ -474,8 +491,19 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         is_following = self.server.db.is_following(user["id"], profile["id"]) if user else False
         follower_count = self.server.db.get_follower_count(profile["id"])
         following_count = self.server.db.get_following_count(profile["id"])
-        self._send_html(user_page(dict(profile), post_list, has_more, next_cursor, lang, user,
-                                  is_following, follower_count, following_count))
+        self._send_html(
+            user_page(
+                dict(profile),
+                post_list,
+                has_more,
+                next_cursor,
+                lang,
+                user,
+                is_following,
+                follower_count,
+                following_count,
+            )
+        )
 
     def _handle_post_page(self, username: str, slug: str, lang: str = "zh", user: dict | None = None) -> None:
         author = self.server.db.get_user_by_username(username)
@@ -532,11 +560,14 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             posts = self.server.db.get_feed(before, page_size + 1)
             has_more = len(posts) > page_size
             items = [dict(p) for p in posts[:page_size]]
-            self._send_json(HTTPStatus.OK, {
-                "posts": items,
-                "has_more": has_more,
-                "next_cursor": items[-1]["id"] if has_more and items else None,
-            })
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "posts": items,
+                    "has_more": has_more,
+                    "next_cursor": items[-1]["id"] if has_more and items else None,
+                },
+            )
             return
 
         m = re.match(r"^/api/user/([a-z0-9][a-z0-9_-]*)$", route)
@@ -557,7 +588,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_github_redirect(self, lang: str, params: dict | None = None) -> None:
         if not GITHUB_CLIENT_ID:
-            self._send_html(error_page(500, "GitHub OAuth not configured", lang), status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._send_html(
+                error_page(500, "GitHub OAuth not configured", lang), status=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
             return
         state = secrets.token_urlsafe(16)
         redirect_after = ""
@@ -572,9 +605,19 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             f"&scope=read:user"
             f"&state={state}"
         )
-        cookies = [("Set-Cookie", f"oauth_state={state}; Path=/; Domain=.c-n-b.space; HttpOnly; Secure; SameSite=Lax; Max-Age=600")]
+        cookies = [
+            (
+                "Set-Cookie",
+                f"oauth_state={state}; Path=/; Domain=.c-n-b.space; HttpOnly; Secure; SameSite=Lax; Max-Age=600",
+            )
+        ]
         if redirect_after:
-            cookies.append(("Set-Cookie", f"oauth_redirect={redirect_after}; Path=/; Domain=.c-n-b.space; HttpOnly; Secure; SameSite=Lax; Max-Age=600"))
+            cookies.append(
+                (
+                    "Set-Cookie",
+                    f"oauth_redirect={redirect_after}; Path=/; Domain=.c-n-b.space; HttpOnly; Secure; SameSite=Lax; Max-Age=600",
+                )
+            )
         self._redirect(url, cookies)
 
     def _handle_github_callback(self, params: dict, lang: str) -> None:
@@ -585,6 +628,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
 
         from http.cookies import SimpleCookie
+
         cookie = SimpleCookie(self.headers.get("Cookie", ""))
         expected_state = cookie.get("oauth_state")
         if not expected_state or expected_state.value != state:
@@ -592,11 +636,13 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            token_data = json.dumps({
-                "client_id": GITHUB_CLIENT_ID,
-                "client_secret": GITHUB_CLIENT_SECRET,
-                "code": code,
-            }).encode()
+            token_data = json.dumps(
+                {
+                    "client_id": GITHUB_CLIENT_ID,
+                    "client_secret": GITHUB_CLIENT_SECRET,
+                    "code": code,
+                }
+            ).encode()
             req = urllib.request.Request(
                 "https://github.com/login/oauth/access_token",
                 data=token_data,
@@ -633,16 +679,23 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         else:
             lp = "?lang=en" if lang == "en" else ""
             dest = f"/posts{lp}"
-        self._redirect(dest, [
-            ("Set-Cookie", f"token={user['token']}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000"),
-            ("Set-Cookie", "oauth_state=; Path=/; Max-Age=0"),
-            ("Set-Cookie", "oauth_redirect=; Path=/; Max-Age=0"),
-        ])
+        self._redirect(
+            dest,
+            [
+                (
+                    "Set-Cookie",
+                    f"token={user['token']}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000",
+                ),
+                ("Set-Cookie", "oauth_state=; Path=/; Max-Age=0"),
+                ("Set-Cookie", "oauth_redirect=; Path=/; Max-Age=0"),
+            ],
+        )
 
     # ── form handlers ──
 
     def _read_form_body(self) -> dict[str, str]:
         from urllib.parse import parse_qs as form_parse
+
         length = int(self.headers.get("Content-Length", 0))
         if length == 0 or length > MAX_BODY_BYTES:
             return {}
@@ -660,7 +713,10 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             return
         token = user["token"]
         lp = "?lang=en" if lang == "en" else ""
-        self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={token}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000")])
+        self._redirect(
+            f"/posts{lp}",
+            [("Set-Cookie", f"token={token}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000")],
+        )
 
     def _handle_form_submit(self, lang: str) -> None:
         user = self._get_cookie_user()
@@ -688,7 +744,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
     def _handle_form_comment(self, post_id: int, lang: str) -> None:
         user = self._get_cookie_user()
         if not user:
-            self._redirect(f"/login")
+            self._redirect("/login")
             return
         form = self._read_form_body()
         if not self._check_csrf(user, form):
@@ -779,7 +835,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
     def _handle_form_vote(self, post_id: int, lang: str) -> None:
         user = self._get_cookie_user()
         if not user:
-            self._redirect(f"/login")
+            self._redirect("/login")
             return
         post = self.server.db.get_post(post_id)
         if post:
@@ -843,6 +899,7 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
             self.server.db.update_user(user["id"], **updates)
         user = self._get_cookie_user()
         from lib.blog_html import t
+
         csrf = self._make_csrf(user) if user else ""
         self._send_html(settings_page(lang, user, csrf, t(lang, "settings_saved")))
 
@@ -868,14 +925,22 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
         user = self.server.db.verify_login(username, password)
         if user:
             lp = "?lang=en" if lang == "en" else ""
-            self._redirect(f"/posts{lp}", [("Set-Cookie", f"token={user['token']}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000")])
+            self._redirect(
+                f"/posts{lp}",
+                [
+                    (
+                        "Set-Cookie",
+                        f"token={user['token']}; Path=/; Domain=.c-n-b.space; Secure; SameSite=Lax; Max-Age=31536000",
+                    )
+                ],
+            )
         else:
-            self._redirect(f"/login")
+            self._redirect("/login")
 
     def _redirect(self, location: str, extra_headers: list[tuple[str, str]] | None = None) -> None:
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_header("Location", location)
-        for k, v in (extra_headers or []):
+        for k, v in extra_headers or []:
             self.send_header(k, v)
         self.send_header("Content-Length", "0")
         self.end_headers()
@@ -1040,7 +1105,9 @@ class BlogRequestHandler(BaseHTTPRequestHandler):
 
     # ── response helpers ──
 
-    def _send_html_with_headers(self, body: str, extra_headers: list[tuple[str, str]], *, status: HTTPStatus = HTTPStatus.OK) -> None:
+    def _send_html_with_headers(
+        self, body: str, extra_headers: list[tuple[str, str]], *, status: HTTPStatus = HTTPStatus.OK
+    ) -> None:
         encoded = body.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")

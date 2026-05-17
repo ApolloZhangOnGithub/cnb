@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def escape(text: str) -> str:
@@ -22,7 +22,7 @@ def format_timestamp(iso_str: str) -> str:
 def relative_time(iso_str: str) -> str:
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         diff = now - dt
         secs = int(diff.total_seconds())
         if secs < 60:
@@ -234,6 +234,7 @@ def _avatar_url(user_or_post: dict, size: int = 24) -> str:
         return f"{url}&s={size}" if "?" in url else f"{url}?s={size}"
     name = user_or_post.get("display_name", "?")
     from urllib.parse import quote
+
     return f"https://ui-avatars.com/api/?name={quote(name)}&background=ddd&color=555&size={size}&bold=true"
 
 
@@ -303,11 +304,15 @@ def markdown_to_html(text: str) -> str:
             elif size in ("large", "lg", "l", "full"):
                 size_cls = "img-large"
             elif size.endswith("px"):
-                blocks.append(f"<figure class='fig-custom'><img src='{url}' alt='{caption}' loading='lazy' style='max-width:{size}'><figcaption>{caption}</figcaption></figure>")
+                blocks.append(
+                    f"<figure class='fig-custom'><img src='{url}' alt='{caption}' loading='lazy' style='max-width:{size}'><figcaption>{caption}</figcaption></figure>"
+                )
                 return f"\x00BLOCK{len(blocks) - 1}\x00"
             else:
                 size_cls = "img-medium"
-        blocks.append(f"<figure class='{size_cls}'><img src='{url}' alt='{caption}' loading='lazy'><figcaption>{caption}</figcaption></figure>")
+        blocks.append(
+            f"<figure class='{size_cls}'><img src='{url}' alt='{caption}' loading='lazy'><figcaption>{caption}</figcaption></figure>"
+        )
         return f"\x00BLOCK{len(blocks) - 1}\x00"
 
     text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", _img, text)
@@ -337,11 +342,19 @@ def markdown_to_html(text: str) -> str:
 
     # ordered lists
     text = re.sub(r"^\d+\.\s+(.+)$", r"<oli>\1</oli>", text, flags=re.MULTILINE)
-    text = re.sub(r"(<oli>.*?</oli>\n?)+", lambda m: "<ol>" + m.group(0).replace("<oli>", "<li>").replace("</oli>", "</li>") + "</ol>", text)
+    text = re.sub(
+        r"(<oli>.*?</oli>\n?)+",
+        lambda m: "<ol>" + m.group(0).replace("<oli>", "<li>").replace("</oli>", "</li>") + "</ol>",
+        text,
+    )
 
     # unordered lists
     text = re.sub(r"^[-*]\s+(.+)$", r"<uli>\1</uli>", text, flags=re.MULTILINE)
-    text = re.sub(r"(<uli>.*?</uli>\n?)+", lambda m: "<ul>" + m.group(0).replace("<uli>", "<li>").replace("</uli>", "</li>") + "</ul>", text)
+    text = re.sub(
+        r"(<uli>.*?</uli>\n?)+",
+        lambda m: "<ul>" + m.group(0).replace("<uli>", "<li>").replace("</uli>", "</li>") + "</ul>",
+        text,
+    )
 
     # paragraphs
     text = re.sub(r"\n\n+", "</p><p>", text)
@@ -593,13 +606,14 @@ def _lang_param(lang: str) -> str:
     return f"?lang={lang}" if lang != "zh" else ""
 
 
-def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None, unread: int = 0, notif_count: int = 0) -> str:
+def _page_wrap(
+    title: str, body: str, lang: str = "zh", user: dict | None = None, unread: int = 0, notif_count: int = 0
+) -> str:
     lp = _lang_param(lang)
-    tl = t(lang, "lang_target")
     html_lang = "zh" if lang == "zh" else "en"
     if user:
-        uname = user.get('username', '')
-        display = escape(user.get('display_name', ''))
+        uname = user.get("username", "")
+        display = escape(user.get("display_name", ""))
         user_avatar = _avatar_url(user, 20)
         right = (
             f"<div class='nav-right'>"
@@ -610,11 +624,11 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
             f"<a href='/blog/{escape(uname)}'>{t(lang, 'my_page')}</a>"
             f"<a href='/submit{lp}'>{t(lang, 'submit')}</a>"
             f"<a href='/notifications{lp}'>{t(lang, 'notifications')}"
-            + (f" <span class='unread-badge'>{notif_count}</span>" if notif_count else "") +
-            f"</a>"
+            + (f" <span class='unread-badge'>{notif_count}</span>" if notif_count else "")
+            + f"</a>"
             f"<a href='/messages{lp}'>{t(lang, 'messages')}"
-            + (f" <span class='unread-badge'>{unread}</span>" if unread else "") +
-            f"</a>"
+            + (f" <span class='unread-badge'>{unread}</span>" if unread else "")
+            + f"</a>"
             f"<a href='/settings{lp}'>{t(lang, 'settings')}</a>"
             f"<a href='/logout'>{t(lang, 'logout')}</a>"
             f"</div></div></div>"
@@ -664,7 +678,9 @@ def _page_wrap(title: str, body: str, lang: str = "zh", user: dict | None = None
     )
 
 
-def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict | None = None, following_ids: set | None = None) -> str:
+def _post_card(
+    post: dict, lang: str = "zh", *, full: bool = False, user: dict | None = None, following_ids: set | None = None
+) -> str:
     badge = " <span class='agent-badge'>bot</span>" if post.get("role") == "agent" else ""
     avatar = _avatar_url(post, 20)
     author_id = post.get("author_id")
@@ -697,6 +713,7 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
     link_card = ""
     if post_url and full:
         from urllib.parse import urlparse as _urlparse
+
         domain = _urlparse(post_url).netloc.replace("www.", "")
         url_title = post.get("url_title", "")
         url_desc = post.get("url_desc", "")
@@ -738,7 +755,9 @@ def _post_card(post: dict, lang: str = "zh", *, full: bool = False, user: dict |
         vote = f"<a href='/vote/{post_id}' class='vote-link'>&#9650;</a> "
     else:
         vote = "<span class='vote-link dim'>&#9650;</span> "
-    stats = f"<div class='post-stats'>{vote}{like_count} {t(lang, 'likes')} · {comment_count} {t(lang, 'comments')}</div>"
+    stats = (
+        f"<div class='post-stats'>{vote}{like_count} {t(lang, 'likes')} · {comment_count} {t(lang, 'comments')}</div>"
+    )
 
     if thumb_html:
         return (
@@ -767,7 +786,11 @@ def landing_page(lang: str = "zh", user: dict | None = None) -> str:
 def _feed_tabs(active: str, lang: str, user: dict | None = None) -> str:
     lp = _lang_param(lang)
     if user:
-        tabs = [("recommend", t(lang, "tab_recommend")), ("following", t(lang, "tab_following")), ("hot", t(lang, "tab_hot"))]
+        tabs = [
+            ("recommend", t(lang, "tab_recommend")),
+            ("following", t(lang, "tab_following")),
+            ("hot", t(lang, "tab_hot")),
+        ]
         default_tab = "recommend"
     else:
         tabs = [("recommend", t(lang, "tab_recommend")), ("hot", t(lang, "tab_hot"))]
@@ -775,7 +798,11 @@ def _feed_tabs(active: str, lang: str, user: dict | None = None) -> str:
     parts = []
     for key, label in tabs:
         cls = "tab active" if key == active else "tab"
-        href = f"/posts{lp}" if key == default_tab else f"/posts{'&' if lp else '?'}tab={key}{lp.replace('?', '&') if lp and key != default_tab else ''}"
+        href = (
+            f"/posts{lp}"
+            if key == default_tab
+            else f"/posts{'&' if lp else '?'}tab={key}{lp.replace('?', '&') if lp and key != default_tab else ''}"
+        )
         if key != default_tab:
             sep = "&" if lp else "?"
             href = f"/posts{lp}{sep}tab={key}"
@@ -792,7 +819,9 @@ def _following_bar(followed_users: list[dict], active_user: str | None, lang: st
     sep = "&" if lp else "?"
     items = []
     all_cls = "fu-item active" if not active_user else "fu-item"
-    items.append(f"<a class='{all_cls}' href='/posts{lp}{sep}tab=following'><div class='fu-all'>{t(lang, 'tab_all')}</div></a>")
+    items.append(
+        f"<a class='{all_cls}' href='/posts{lp}{sep}tab=following'><div class='fu-all'>{t(lang, 'tab_all')}</div></a>"
+    )
     for u in followed_users:
         av = _avatar_url(dict(u), 36)
         cls = "fu-item active" if u.get("username") == active_user else "fu-item"
@@ -820,10 +849,18 @@ def _filter_bar(active: str, lang: str, tab: str) -> str:
     return f"<div class='filter-bar'>{''.join(parts)}</div>"
 
 
-def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: str = "zh",
-              user: dict | None = None, tab: str = "recommend", following_ids: set | None = None,
-              followed_users: list[dict] | None = None, active_follow_user: str | None = None,
-              role_filter: str = "all") -> str:
+def feed_page(
+    posts: list[dict],
+    has_more: bool,
+    next_cursor: int | None,
+    lang: str = "zh",
+    user: dict | None = None,
+    tab: str = "recommend",
+    following_ids: set | None = None,
+    followed_users: list[dict] | None = None,
+    active_follow_user: str | None = None,
+    role_filter: str = "all",
+) -> str:
     tabs_html = _feed_tabs(tab, lang, user)
     fu_bar = ""
     if tab == "following" and followed_users is not None:
@@ -847,24 +884,32 @@ def feed_page(posts: list[dict], has_more: bool, next_cursor: int | None, lang: 
     return _page_wrap(t(lang, "posts"), f"{tabs_html}{fu_bar}{filter_html}{items}{pagination}", lang, user)
 
 
-def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor: int | None,
-              lang: str = "zh", user: dict | None = None,
-              is_following: bool = False, follower_count: int = 0, following_count: int = 0) -> str:
+def user_page(
+    profile_user: dict,
+    posts: list[dict],
+    has_more: bool,
+    next_cursor: int | None,
+    lang: str = "zh",
+    user: dict | None = None,
+    is_following: bool = False,
+    follower_count: int = 0,
+    following_count: int = 0,
+) -> str:
     lp = _lang_param(lang)
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
-    bio = profile_user.get('bio', '')
+    bio = profile_user.get("bio", "")
     bio_html = f"<div class='profile-bio'>{escape(bio)}</div>" if bio else ""
 
     follow_html = ""
     if user and user.get("id") != profile_user.get("id"):
-        pu = escape(profile_user['username'])
+        pu = escape(profile_user["username"])
         if is_following:
             follow_html = f"<a href='/follow/{pu}' class='follow-btn following'>{t(lang, 'unfollow')}</a>"
         else:
             follow_html = f"<a href='/follow/{pu}' class='follow-btn'>{t(lang, 'follow')}</a>"
         follow_html += f" <a href='/messages/{pu}' class='follow-btn'>{t(lang, 'send_msg')}</a>"
 
-    pu = escape(profile_user['username'])
+    pu = escape(profile_user["username"])
     stats_html = (
         f"<div class='profile-stats'>"
         f"<a href='/blog/{pu}/followers'><span>{follower_count}</span> {t(lang, 'followers')}</a> · "
@@ -895,15 +940,15 @@ def user_page(profile_user: dict, posts: list[dict], has_more: bool, next_cursor
         lp = _lang_param(lang)
         sep = "&" if lp else "?"
         pagination = (
-            f"<div class='pagination'>"
-            f"<a href='/blog/{uname}{lp}{sep}before={next_cursor}'>{t(lang, 'older')}</a>"
-            f"</div>"
+            f"<div class='pagination'><a href='/blog/{uname}{lp}{sep}before={next_cursor}'>{t(lang, 'older')}</a></div>"
         )
 
     return _page_wrap(profile_user["display_name"], f"{back}{profile}{items}{pagination}", lang, user)
 
 
-def _render_comment_tree(comments: list[dict], parent_id: int | None, post_id: int, lang: str, user: dict | None, csrf: str, depth: int = 0) -> str:
+def _render_comment_tree(
+    comments: list[dict], parent_id: int | None, post_id: int, lang: str, user: dict | None, csrf: str, depth: int = 0
+) -> str:
     children = [c for c in comments if c.get("parent_id") == parent_id]
     children.sort(key=lambda c: (-c.get("is_pinned", 0), -c.get("like_count", 0), c["id"]))
     if not children:
@@ -925,7 +970,9 @@ def _render_comment_tree(comments: list[dict], parent_id: int | None, post_id: i
                 f"style='cursor:pointer'>{t(lang, 'reply')}</a>"
             )
             if c.get("author_id") == user.get("id") or user.get("role") == "admin":
-                actions.append(f"<a href='/delete-comment/{cid}' onclick='return confirm(\"确定？\")' style='color:#e55'>×</a>")
+                actions.append(
+                    f"<a href='/delete-comment/{cid}' onclick='return confirm(\"确定？\")' style='color:#e55'>×</a>"
+                )
             if user.get("role") == "admin":
                 act = "unpin" if c.get("is_pinned") else "pin"
                 actions.append(f"<a href='/pin-comment/{cid}?action={act}'>{t(lang, act)}</a>")
@@ -967,7 +1014,9 @@ def _render_comment_tree(comments: list[dict], parent_id: int | None, post_id: i
     return "".join(html_parts)
 
 
-def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", user: dict | None = None, csrf: str = "") -> str:
+def post_page(
+    post: dict, author: dict, comments: list[dict], lang: str = "zh", user: dict | None = None, csrf: str = ""
+) -> str:
     lp = _lang_param(lang)
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     card = _post_card(post, lang, full=True, user=user)
@@ -981,7 +1030,9 @@ def post_page(post: dict, author: dict, comments: list[dict], lang: str = "zh", 
 
     comment_tree = _render_comment_tree(comments, None, post_id, lang, user, csrf)
     if comment_tree:
-        comments_section = f"<div style='margin-top:16px'><h3>{t(lang, 'comments_title')} ({count})</h3>{comment_tree}</div>"
+        comments_section = (
+            f"<div style='margin-top:16px'><h3>{t(lang, 'comments_title')} ({count})</h3>{comment_tree}</div>"
+        )
     else:
         comments_section = f"<div style='margin-top:16px;color:var(--dim)'>{t(lang, 'no_comments')}</div>"
 
@@ -1037,9 +1088,11 @@ def login_page(lang: str = "zh", error: bool = False) -> str:
 def submit_page(lang: str = "zh", user: dict | None = None, csrf: str = "") -> str:
     lp = _lang_param(lang)
     if not user:
-        return _page_wrap(t(lang, "submit_title"),
+        return _page_wrap(
+            t(lang, "submit_title"),
             f"<section class='register-section'><p><a href='/login{lp}'>{t(lang, 'login_to_submit')}</a></p></section>",
-            lang)
+            lang,
+        )
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     body = (
         f"{back}"
@@ -1107,7 +1160,9 @@ def register_page(lang: str = "zh", error: str = "") -> str:
     return _page_wrap(t(lang, "reg_title"), body, lang)
 
 
-def follow_list_page(profile_user: dict, users: list[dict], kind: str, lang: str = "zh", user: dict | None = None) -> str:
+def follow_list_page(
+    profile_user: dict, users: list[dict], kind: str, lang: str = "zh", user: dict | None = None
+) -> str:
     title = t(lang, "followers") if kind == "followers" else t(lang, "following")
     items = ""
     for u in users:
@@ -1121,7 +1176,7 @@ def follow_list_page(profile_user: dict, users: list[dict], kind: str, lang: str
         )
     if not items:
         items = f"<div style='color:var(--dim);padding:24px 0'>{t(lang, 'no_posts')}</div>"
-    pu = escape(profile_user['username'])
+    pu = escape(profile_user["username"])
     back = f"<a class='back' href='/blog/{pu}'>{t(lang, 'back')}</a>"
     heading = f"<h2>{escape(profile_user['display_name'])} — {title}</h2>"
     return _page_wrap(title, f"{back}<section style='padding:24px 0'>{heading}{items}</section>", lang, user)
@@ -1152,7 +1207,9 @@ def inbox_page(conversations: list[dict], lang: str = "zh", user: dict | None = 
     return _page_wrap(t(lang, "inbox"), f"{back}<h2>{t(lang, 'inbox')}</h2>{items}", lang, user, unread)
 
 
-def thread_page(messages: list[dict], other_user: dict, lang: str = "zh", user: dict | None = None, csrf: str = "", unread: int = 0) -> str:
+def thread_page(
+    messages: list[dict], other_user: dict, lang: str = "zh", user: dict | None = None, csrf: str = "", unread: int = 0
+) -> str:
     lp = _lang_param(lang)
     back = f"<a class='back' href='/messages{lp}'>{t(lang, 'back')}</a>"
     user_id = user.get("id") if user else None
@@ -1160,7 +1217,7 @@ def thread_page(messages: list[dict], other_user: dict, lang: str = "zh", user: 
     for m in messages:
         is_self = m.get("sender_id") == user_id
         side = "self" if is_self else "other"
-        time_str = format_timestamp(m['created_at'])
+        time_str = format_timestamp(m["created_at"])
         read_status = ""
         if is_self:
             read_status = " <span class='msg-read'>✓✓</span>" if m.get("is_read") else " <span>✓</span>"
@@ -1187,12 +1244,22 @@ def thread_page(messages: list[dict], other_user: dict, lang: str = "zh", user: 
         f"<button class='btn' type='submit' style='margin-top:8px'>{t(lang, 'send_btn')}</button>"
         f"</form>"
     )
-    return _page_wrap(escape(other_user.get("display_name", "")), f"{back}{header}<div style='min-height:200px'>{items}</div>{form}", lang, user, unread)
+    return _page_wrap(
+        escape(other_user.get("display_name", "")),
+        f"{back}{header}<div style='min-height:200px'>{items}</div>{form}",
+        lang,
+        user,
+        unread,
+    )
 
 
 def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", msg: str = "") -> str:
     if not user:
-        return _page_wrap(t(lang, "settings"), f"<section class='register-section'><p><a href='/login'>{t(lang, 'login')}</a></p></section>", lang)
+        return _page_wrap(
+            t(lang, "settings"),
+            f"<section class='register-section'><p><a href='/login'>{t(lang, 'login')}</a></p></section>",
+            lang,
+        )
     lp = _lang_param(lang)
     msg_html = f"<div class='msg ok'>{escape(msg)}</div>" if msg else ""
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
@@ -1209,8 +1276,8 @@ def settings_page(lang: str = "zh", user: dict | None = None, csrf: str = "", ms
         f"<input name='bio' value='{escape(user.get('bio', ''))}'></div>"
         f"<div class='form-row'><label>{t(lang, 'settings_lang')}</label>"
         f"<select name='lang' style='background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:6px 10px;font-size:14px'>"
-        f"<option value='zh'{'selected' if user.get('lang','zh')=='zh' else ''}>中文</option>"
-        f"<option value='en'{' selected' if user.get('lang')=='en' else ''}>English</option>"
+        f"<option value='zh'{'selected' if user.get('lang', 'zh') == 'zh' else ''}>中文</option>"
+        f"<option value='en'{' selected' if user.get('lang') == 'en' else ''}>English</option>"
         f"</select></div>"
         f"<div class='form-row'><label></label><button class='btn' type='submit'>{t(lang, 'settings_save')}</button></div>"
         "</form>"
@@ -1239,7 +1306,7 @@ def notifications_page(notifications: list[dict], lang: str = "zh", user: dict |
             link = "#"
         # find the actual post author for the link
         if post_id and ntype in ("like", "comment", "reply"):
-            link = f"/posts"  # fallback, will be overridden by server if needed
+            link = "/posts"  # fallback, will be overridden by server if needed
         items += (
             f"<a class='{cls}' href='{link}' style='text-decoration:none;display:flex'>"
             f"<img class='avatar' src='{escape(av)}' alt=''>"
@@ -1254,7 +1321,13 @@ def notifications_page(notifications: list[dict], lang: str = "zh", user: dict |
     return _page_wrap(t(lang, "notifications"), f"{back}<h2>{t(lang, 'notifications')}</h2>{items}", lang, user)
 
 
-def search_page(query: str, post_results: list[dict], user_results: list[dict] | None = None, lang: str = "zh", user: dict | None = None) -> str:
+def search_page(
+    query: str,
+    post_results: list[dict],
+    user_results: list[dict] | None = None,
+    lang: str = "zh",
+    user: dict | None = None,
+) -> str:
     lp = _lang_param(lang)
     back = f"<a class='back' href='/posts{lp}'>{t(lang, 'back')}</a>"
     search_form = (

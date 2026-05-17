@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.76-dev (unreleased)
+
+### Bug Fixes
+
+- **CI lint + mypy on lib/blog_*** — Fixed 12 ruff errors (auto-fixable formatting + 4 manual: tuple unpacking, unused locals, import ordering) and added a per-module mypy override so the 15 `no-any-return` warnings from sqlite3.Row/cursor returns don't block CI. Code in `lib/blog_db.py`, `lib/blog_html.py`, `lib/blog_server.py` was pulled from the production server in 9ed0d65 without lint/mypy and broke master CI for every PR.
+
 ## 0.5.75-dev (unreleased)
 
 ### Tests
