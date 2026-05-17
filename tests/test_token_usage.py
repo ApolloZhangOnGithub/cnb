@@ -657,6 +657,15 @@ class TestShortModelLabel:
     def test_gpt_family(self):
         assert _short_model_label("gpt-5.4") == "5.4"
 
+    def test_gpt_bare_falls_back_to_truncated(self):
+        """`gpt-` alone has an empty second segment — must not render as empty string."""
+        assert _short_model_label("gpt-") == "gpt-"
+
+    def test_gpt_double_dash_falls_back(self):
+        """`gpt--5.4` splits to ('gpt', '', '5.4') — empty segment must fall back."""
+        # split("-", 2) gives ['gpt', '', '5.4'], parts[1] is "", must fall back.
+        assert _short_model_label("gpt--5.4") == "gpt--5.4"[:8]
+
 
 class TestSessionModelBadges:
     def test_empty_when_no_jsonls(self, tmp_path):

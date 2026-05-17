@@ -203,7 +203,11 @@ def _short_model_label(model: str) -> str:
         return "sonnet"
     if lowered.startswith("gpt-"):
         # gpt-5.4-mini already handled above; for plain gpt-5.x return the family marker.
-        return lowered.split("-", 2)[1] if "-" in lowered else lowered
+        # Guard the empty-second-segment case ("gpt-" alone, or "gpt--5.4") so the badge
+        # never renders as just an arrow with nothing on one side.
+        parts = lowered.split("-", 2)
+        candidate = parts[1] if len(parts) > 1 else ""
+        return candidate or model[:8]
     return model[:8]
 
 
