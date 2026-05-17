@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.87-dev (unreleased)
+
+### Features
+
+- **Proactive association hints — phase 1 plumbing (#158)** — Added `migrations/010_hints.sql` (three tables: `hints` / `hint_events` / `hint_mutes`) and `lib/board_hint.py` with `emit_hint` / `list_hints` / `clear_hints` / `mute` / `unmute` and a `board hint {emit|list|clear|mute|unmute}` CLI. Guardrails wired in: hard rate cap (default 3/hr/sender/recipient, status=`dropped_rate` on overflow), per-recipient mute by sender or topic (issue: / path:), confidence threshold (default 0.6), TTL (default 7d), with `[hints] enabled=false` flag opt-in via `notifications.toml`. Hints are isolated from inbox — clearing them does not touch message read state. Detection (phase 2) + surface UI (phase 3) are separate per the design doc. 40 unit tests cover schema, emit, rate cap, mute scopes, list filters, clear-isolation, and CLI dispatch.
+
 ## 0.5.78-dev (unreleased)
 
 ### Features

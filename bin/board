@@ -327,6 +327,14 @@ COMMANDS: list[Command] = [
         "update-check [--force]",
         needs_identity=False,
     ),
+    # ── hints (#158 proactive association, phase 1: plumbing only) ──
+    Command(
+        "hint",
+        "lib.board_hint",
+        "cmd_hint",
+        "proactive association hints (#158)",
+        "hint {emit|list|clear|mute|unmute} ...",
+    ),
     # ── maintenance ──
     Command(
         "prune",
