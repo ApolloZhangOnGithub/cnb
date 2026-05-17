@@ -10,10 +10,18 @@ else
     B='' D='' G='' Y='' N=''
 fi
 
-# ---- Update-owner resolution (still used by `cnb exec` sender fallback) ----
-# Version-check logic itself lives in lib/update_check.py; invoked via
-# `bin/board update-check`. Keeping owner resolution in bash here so `cnb exec`
-# can use it without spinning up a Python interpreter just to look up a name.
+# ---- Version update check (non-blocking, user-facing only at interactive startup) ----
+_CACHE="$HOME/.cnb/latest-version"
+_NOTIFIED="$HOME/.cnb/update-notified"
+_in_virtualenv() {
+    [ -n "${VIRTUAL_ENV:-}" ] && return 0
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - <<'PY'
+import sys
+raise SystemExit(0 if sys.prefix != sys.base_prefix else 1)
+PY
+}
+
 _read_update_owner() {
     if [ -n "${CNB_UPDATE_OWNER:-}" ]; then
         printf '%s\n' "$CNB_UPDATE_OWNER"
@@ -86,15 +94,75 @@ if isinstance(names, list):
 PY
 }
 
+_notify_update_owner() {
+    local latest="$1"
+    local current="$2"
+    local owner
+    owner="$(_read_update_owner 2>/dev/null | head -n 1 || true)"
+    [ -n "$owner" ] || return 0
+    [ -f "$CNB_PROJECT/.cnb/board.db" ] || [ -f "$CNB_PROJECT/.claudes/board.db" ] || return 0
+
+    local key="${owner}:${current}->${latest}"
+    if [ -f "$_NOTIFIED" ] && [ "$(cat "$_NOTIFIED" 2>/dev/null || true)" = "$key" ]; then
+        return 0
+    fi
+
+    local msg="[cnb update] cnb v${latest} 已发布，当前 v${current}。请由本机 cnb 负责人执行：npm install -g claude-nb"
+    if CNB_PROJECT="$CNB_PROJECT" "$CLAUDES_HOME/bin/board" --as dispatcher send "$owner" "$msg" >/dev/null 2>&1; then
+        printf '%s\n' "$key" > "$_NOTIFIED"
+    fi
+}
+
+_version_gt() {
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$1" "$2" <<'PY'
+import re
+import sys
+
+
+def normalize(version: str) -> tuple[int, ...]:
+    version = version.strip().lstrip("vV")
+    version = re.sub(r"\.dev\d*$", "", version)
+    version = re.sub(r"[-+].*$", "", version)
+    parts = []
+    for part in version.split("."):
+        match = re.match(r"\d+", part)
+        parts.append(int(match.group(0)) if match else 0)
+    return tuple(parts + [0] * (4 - len(parts)))
+
+
+raise SystemExit(0 if normalize(sys.argv[1]) > normalize(sys.argv[2]) else 1)
+PY
+}
+
+_check_update() {
+    local mode="${1:-interactive}"
+    _in_virtualenv && return 0
+
+    mkdir -p "$HOME/.cnb"
+    if [ ! -f "$_CACHE" ] || [ "$(find "$_CACHE" -mmin +60 2>/dev/null)" ]; then
+        (npm view claude-nb version 2>/dev/null > "$_CACHE.tmp" && mv "$_CACHE.tmp" "$_CACHE" || rm -f "$_CACHE.tmp") &
+    fi
+    if [ -f "$_CACHE" ]; then
+        local latest
+        local current
+        latest=$(cat "$_CACHE" 2>/dev/null | tr -d '[:space:]')
+        current=$(echo "$VERSION" | sed -E 's/-dev$//; s/\.dev[0-9]+$//')
+        if [ -n "$latest" ] && _version_gt "$latest" "$current"; then
+            if [ "$mode" = "notify" ]; then
+                _notify_update_owner "$latest" "$VERSION"
+            else
+                printf "${Y}⬆ cnb v${latest} 已发布，当前 v${VERSION}。运行 npm install -g claude-nb 更新。${N}\n"
+            fi
+        fi
+    fi
+}
+
 # ---- Export project root so all subprocesses can find .cnb/ ----
 export CNB_PROJECT="${CNB_PROJECT:-$(pwd)}"
 
 if [ $# -gt 0 ]; then
-    # Isolate hook in a subshell + redirect both streams so a hung Python or rogue
-    # stdout cannot pollute a downstream subcommand whose output we capture (e.g.
-    # `cnb projects scan --json`). Detach via & + disown so we don't block dispatch.
-    ( CNB_SKIP_UPDATE_CHECK=1 "$CLAUDES_HOME/bin/board" update-check --quiet </dev/null >/dev/null 2>&1 ) &
-    disown 2>/dev/null || true
+    _check_update notify
 fi
 
 # ---- Subcommands (exact match, always first) ----
@@ -487,7 +555,7 @@ fi
 
 # ---- Banner + launch ----
 clear
-CNB_SKIP_UPDATE_CHECK=1 "$CLAUDES_HOME/bin/board" update-check --terminal 2>/dev/null || true
+_check_update
 printf "${B}${G}◆ cnb${N} ${D}v${VERSION}${N}\n"
 printf "${D}  「${LABEL}」engine: ${_LEAD_AGENT}，你是 ${ME}，同学: ${WORKERS}${N}\n\n"
 
