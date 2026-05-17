@@ -15,6 +15,7 @@ from lib.token_usage import (
     load_budget_defaults,
     model_state_alerts,
     parse_session_usage,
+    tongxue_token_summary,
 )
 
 
@@ -563,3 +564,75 @@ class TestCmdUsage:
         assert "WARNING: alice: model downgraded claude-opus-4-7 -> claude-sonnet-4-7" in out
         assert "预算: $100.00" in out
         assert "WARNING: token budget usage" in out
+
+
+class TestTongxueTokenSummary:
+    def test_returns_none_when_no_jsonls(self, tmp_path):
+        project_dir = tmp_path / "empty"
+        project_dir.mkdir()
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            assert tongxue_token_summary(tmp_path / "project", "alice") is None
+
+    def test_returns_none_when_name_not_found(self, tmp_path):
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [{"type": "custom-title", "customTitle": "bob"}, _make_assistant_msg()],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            assert tongxue_token_summary(tmp_path / "project", "alice") is None
+
+    def test_returns_aggregated_data(self, tmp_path):
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "alice"},
+                _make_assistant_msg(input_tokens=100, output_tokens=200, model="claude-opus-4-7"),
+            ],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            result = tongxue_token_summary(tmp_path / "project", "alice")
+        assert result is not None
+        assert result["name"] == "alice"
+        assert result["input"] == 100
+        assert result["output"] == 200
+        assert result["latest_model"] == "claude-opus-4-7"
+        assert result["messages"] == 1
+
+    def test_name_match_is_case_insensitive(self, tmp_path):
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [{"type": "custom-title", "customTitle": "Alice"}, _make_assistant_msg()],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            result = tongxue_token_summary(tmp_path / "project", "ALICE")
+        assert result is not None
+        assert result["name"] == "Alice"
+
+    def test_merges_multiple_jsonls(self, tmp_path):
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "alice"},
+                _make_assistant_msg(input_tokens=10, output_tokens=50),
+            ],
+        )
+        _write_jsonl(
+            project_dir / "s2.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "alice"},
+                _make_assistant_msg(input_tokens=20, output_tokens=100),
+            ],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            result = tongxue_token_summary(tmp_path / "project", "alice")
+        assert result["input"] == 30
+        assert result["output"] == 150
+        assert result["messages"] == 2

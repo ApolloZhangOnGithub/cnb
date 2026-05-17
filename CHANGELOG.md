@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.74-dev (unreleased)
+
+### Features
+
+- **Token + 模型 section in `board daily` report** (#153) — Auto-generated per-tongxue daily reports now include a `## Token + 模型` block: current model (with first-model trail if it changed during the shift), message count, token totals (input / output / cache-read / cache-write), and an estimated cost. Scoped to the last 24h by default; missing JSONL data is silent so the daily flow never fails on this. Stacks on #221.
+
 ## 0.5.70-dev (unreleased)
 
 ### Features
