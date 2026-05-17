@@ -37,8 +37,9 @@ def _already_queued(sess: str, marker: str) -> bool:
 
 
 class NudgeCoordinator(Concern):
-    interval = 5
+    interval = 2
     COOLDOWN = 15
+    LEAD_COOLDOWN = 3
     MAX_BACKOFF_MULTIPLIER = 8
 
     def __init__(self, cfg: DispatcherConfig, idle) -> None:
@@ -59,11 +60,12 @@ class NudgeCoordinator(Concern):
         return self._session_ok[name]
 
     def _effective_cooldown(self, name: str) -> int:
+        base = self.LEAD_COOLDOWN if name == "lead" else self.COOLDOWN
         rec = self._records.get(name)
         if not rec or rec.consecutive_ineffective <= 1:
-            return self.COOLDOWN
+            return base
         backoff_exp = min(rec.consecutive_ineffective - 1, 3)
-        return int(self.COOLDOWN * min(2**backoff_exp, self.MAX_BACKOFF_MULTIPLIER))
+        return int(base * min(2**backoff_exp, self.MAX_BACKOFF_MULTIPLIER))
 
     def _can_nudge(self, name: str, now: int) -> bool:
         rec = self._records.get(name)
