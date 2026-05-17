@@ -6,6 +6,10 @@
 
 - **`board update-check` + silent startup hook** (#43) — Ported the bash-only version check from `bin/cnb` into a reusable Python module (`lib/update_check.py`) and wired it into `bin/board`'s main(), so tongxue who run `board` directly (skipping the `cnb` wrapper) now also detect a stale install. Detection routes a single board message to the device-supervisor tongxue (one notification per `current→latest` pair); each tongxue does not self-update. Skipped in venv. `CNB_SKIP_UPDATE_CHECK=1` disables the hook for tests / quick runs. New `board update-check [--force]` command for manual triggering and debugging.
 
+### Refactoring
+
+- **Consolidate update-check in `bin/cnb`** (#43) — Removed the duplicate bash version-check (~120 lines: `_check_update`, `_notify_update_owner`, `_version_gt`, `_in_virtualenv`, cache file paths). Both entry points (`cnb <subcmd>` and the interactive banner) now call `bin/board update-check` so there is one implementation. Added `--quiet` (no stdout; cron / subcommand path) and `--terminal` (silent unless stale, then prints the historical yellow banner line) modes to keep UX identical. Kept `_read_update_owner` in bash since `cnb exec` still calls it directly.
+
 ## 0.5.76-dev (unreleased)
 
 ### Bug Fixes

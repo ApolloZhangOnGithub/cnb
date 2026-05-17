@@ -409,9 +409,15 @@ def print_help() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _maybe_check_update(env: ClaudesEnv) -> None:
-    """Silent best-effort version check. Never blocks the dispatch."""
+def _maybe_check_update(env: ClaudesEnv, cmd_name: str) -> None:
+    """Silent best-effort version check. Never blocks the dispatch.
+
+    Skipped for `update-check` itself (the command does its own check) and when
+    the explicit opt-out env is set.
+    """
     if os.environ.get("CNB_SKIP_UPDATE_CHECK") == "1":
+        return
+    if cmd_name == "update-check":
         return
     try:
         from lib.update_check import _read_local_version, check_update
@@ -447,7 +453,7 @@ def main() -> None:
     if identity:
         validate_identity(db, identity)
 
-    _maybe_check_update(env)
+    _maybe_check_update(env, cmd.name)
     _dispatch(cmd, db, identity, rest)
 
 

@@ -320,3 +320,69 @@ class TestCmdUpdateCheck:
         out = capsys.readouterr().out
         # --force cleared CACHE_NOTIFIED, so notify proceeds
         assert "notified boss" in out
+
+    def test_quiet_mode_silent_when_stale(self, env, cache, monkeypatch, capsys):
+        """--quiet suppresses all stdout but still notifies the owner."""
+        monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+        monkeypatch.setattr(sys, "base_prefix", sys.prefix)
+        monkeypatch.setenv("CNB_UPDATE_OWNER", "boss")
+        env.board_db.write_text("")
+        (env.install_home / "VERSION").write_text("0.5.67-dev")
+        update_check.CACHE_LATEST.write_text("9.99.99")
+        called = []
+
+        def fake_run(cmd, **kwargs):
+            called.append(cmd)
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr(update_check.subprocess, "run", fake_run)
+        db = SimpleNamespace(env=env)
+        update_check.cmd_update_check(db, ["--quiet"])
+        out = capsys.readouterr().out
+        assert out == ""
+        # owner still notified
+        assert any("boss" in arg for arg in called[0])
+
+    def test_quiet_mode_silent_when_up_to_date(self, env, cache, monkeypatch, capsys):
+        monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+        monkeypatch.setattr(sys, "base_prefix", sys.prefix)
+        (env.install_home / "VERSION").write_text("0.5.67-dev")
+        update_check.CACHE_LATEST.write_text("0.5.44")
+        db = SimpleNamespace(env=env)
+        update_check.cmd_update_check(db, ["--quiet"])
+        assert capsys.readouterr().out == ""
+
+    def test_terminal_mode_silent_when_up_to_date(self, env, cache, monkeypatch, capsys):
+        monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+        monkeypatch.setattr(sys, "base_prefix", sys.prefix)
+        (env.install_home / "VERSION").write_text("0.5.67-dev")
+        update_check.CACHE_LATEST.write_text("0.5.44")
+        db = SimpleNamespace(env=env)
+        update_check.cmd_update_check(db, ["--terminal"])
+        assert capsys.readouterr().out == ""
+
+    def test_terminal_mode_prints_yellow_when_stale(self, env, cache, monkeypatch, capsys):
+        """--terminal prints the user-facing yellow banner line, no OK summary."""
+        monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+        monkeypatch.setattr(sys, "base_prefix", sys.prefix)
+        monkeypatch.setenv("CNB_UPDATE_OWNER", "boss")
+        env.board_db.write_text("")
+        (env.install_home / "VERSION").write_text("0.5.67-dev")
+        update_check.CACHE_LATEST.write_text("9.99.99")
+        monkeypatch.setattr(update_check.subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0))
+        db = SimpleNamespace(env=env)
+        update_check.cmd_update_check(db, ["--terminal"])
+        out = capsys.readouterr().out
+        assert "已发布" in out
+        assert "9.99.99" in out
+        assert "0.5.67-dev" in out
+        assert "npm install -g claude-nb" in out
+        assert "OK" not in out  # no status summary in --terminal mode
+
+    def test_terminal_mode_silent_in_venv(self, env, cache, monkeypatch, capsys):
+        monkeypatch.setenv("VIRTUAL_ENV", "/tmp/v")
+        (env.install_home / "VERSION").write_text("0.5.67-dev")
+        update_check.CACHE_LATEST.write_text("9.99.99")
+        db = SimpleNamespace(env=env)
+        update_check.cmd_update_check(db, ["--terminal"])
+        assert capsys.readouterr().out == ""
