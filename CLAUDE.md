@@ -168,13 +168,11 @@ board --as <name> scan                 # scan issues/CI, route to owners
 
 ### Sessions
 
+- **lead** — 项目主管
 - **bezos**
-- **codex**
-- **forge**
-- **lead**
-- **lisa-su**
 - **musk**
-- **smoke**
 - **sutskever**
-- **tester** — 测试工程师 Claude Frostbite，怀疑一切，亲手验证每个命令
+- **lisa-su**
+- **hopper** — QA
+- **codex**
 <!-- cnb:end -->
