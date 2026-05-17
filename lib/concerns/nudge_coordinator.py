@@ -191,7 +191,7 @@ class NudgeCoordinator(Concern):
         if not self._can_nudge("lead", now):
             return
         for nudge_type, try_fn in [
-            ("inbox", lambda n="lead": self._try_inbox(n)),
+            ("inbox", lambda: self._try_inbox("lead")),
             ("lead_idle", lambda: self._try_lead_idle()),
         ]:
             if try_fn():

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.98-dev (unreleased)
+
+### Bug Fixes
+
+- **CI hotfix round 3 after #244 merge** — Fixed three master CI failures introduced by the lead-keepalive refactor: (1) `lib/concerns/nudge_coordinator.py:184` had mixed lambda signatures in a list (one with `n="lead"` default, one bare) that mypy couldn't unify — normalized both to no-arg lambdas. (2) `lib/concerns/helpers.py` had a `# noqa: F401 — re-export for concerns` directive that ruff RUF100 flagged as unused — removed the redundant noqa. (3) `VERSION` was bumped to `0.5.79-dev` in #244 without `bin/sync-version` running, so `pyproject.toml` and `package.json` stayed at `0.5.78-dev` and tripped the check-consistency gate — synced all three. Then bumped to `0.5.81-dev` after rebase against master at `0.5.80-dev` (user shipped another version-bump in c990ba9).
+
 ## 0.5.78-dev (unreleased)
 
 ### Features
