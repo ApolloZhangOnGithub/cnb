@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.78-dev (unreleased)
+
+### Features
+
+- **Supervisor stall detection (#160 L1)** — `check_pilot_health` now reads the existing `feishu_activity.json` state and reports unhealthy when an inbound Feishu message has been sitting unanswered past `stall_threshold_seconds` (default 300s). Closes the user's 2026-05-11 silence pattern: model-side compact freezes / silent hangs no longer pass the keyword-only pane check. New `[feishu] stall_threshold_seconds` config option (min 30s). Heartbeat consequence is unchanged — N consecutive unhealthy still dispatches diagnosis, then failovers. Layers 2 (pane-hash decay) and 3 (failover with latest-message handoff) tracked in same issue, separate PRs.
+
 ## 0.5.76-dev (unreleased)
 
 ### Bug Fixes
