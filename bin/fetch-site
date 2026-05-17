@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""fetch-site — Fetch c-n-b.space pages bypassing local proxy.
+
+Uses raw TLS socket via openssl to avoid proxy interference.
+All tongxue should use this instead of curl/requests for c-n-b.space.
+
+Usage:
+    bin/fetch-site https://platform.c-n-b.space/docs/zh
+    bin/fetch-site https://blog.c-n-b.space/posts
+    bin/fetch-site --head https://blog.c-n-b.space
+"""
+import subprocess
+import sys
+import re
+from urllib.parse import urlparse
+
+SERVER_IP = "47.106.190.199"
+KNOWN_HOSTS = {
+    "platform.c-n-b.space",
+    "blog.c-n-b.space",
+    "c-n-b.space",
+}
+
+
+def fetch(url: str, head_only: bool = False) -> tuple[int, dict[str, str], str]:
+    parsed = urlparse(url)
+    host = parsed.hostname
+    path = parsed.path or "/"
+    if parsed.query:
+        path += f"?{parsed.query}"
+
+    if host not in KNOWN_HOSTS:
+        print(f"ERROR: {host} 不在已知站点列表，直接用 curl", file=sys.stderr)
+        raise SystemExit(1)
+
+    method = "HEAD" if head_only else "GET"
+    request = (
+        f"{method} {path} HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        f"Connection: close\r\n"
+        f"User-Agent: cnb-fetch/1.0\r\n"
+        f"\r\n"
+    )
+
+    result = subprocess.run(
+        ["openssl", "s_client", "-connect", f"{SERVER_IP}:443",
+         "-servername", host, "-quiet"],
+        input=request.encode(),
+        capture_output=True,
+        timeout=15,
+    )
+
+    raw = result.stdout.decode("utf-8", errors="replace")
+
+    # Split headers and body
+    if "\r\n\r\n" in raw:
+        header_block, body = raw.split("\r\n\r\n", 1)
+    elif "\n\n" in raw:
+        header_block, body = raw.split("\n\n", 1)
+    else:
+        header_block, body = raw, ""
+
+    lines = header_block.split("\r\n") if "\r\n" in header_block else header_block.split("\n")
+    status_match = re.match(r"HTTP/[\d.]+ (\d+)", lines[0]) if lines else None
+    status = int(status_match.group(1)) if status_match else 0
+
+    headers = {}
+    for line in lines[1:]:
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            headers[k.lower()] = v
+
+    return status, headers, body
+
+
+def main():
+    args = sys.argv[1:]
+    head_only = False
+
+    if "--head" in args:
+        head_only = True
+        args.remove("--head")
+
+    if not args:
+        print("Usage: bin/fetch-site [--head] <url>")
+        print("Supported: platform.c-n-b.space, blog.c-n-b.space, c-n-b.space")
+        raise SystemExit(1)
+
+    url = args[0]
+    if not url.startswith("http"):
+        url = "https://" + url
+
+    status, headers, body = fetch(url, head_only)
+
+    if head_only:
+        print(f"HTTP {status}")
+        for k, v in headers.items():
+            print(f"{k}: {v}")
+    else:
+        print(body)
+
+
+if __name__ == "__main__":
+    main()
