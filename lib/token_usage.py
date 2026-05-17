@@ -190,6 +190,57 @@ def tongxue_token_summary(
     return agg[0] if agg else None
 
 
+def _short_model_label(model: str) -> str:
+    """Pick a one-word label suitable for a row badge: opus/sonnet/haiku/gpt-5.x/mini/other."""
+    lowered = model.lower()
+    if "mini" in lowered:
+        return "mini"
+    if "haiku" in lowered:
+        return "haiku"
+    if "opus" in lowered:
+        return "opus"
+    if "sonnet" in lowered:
+        return "sonnet"
+    if lowered.startswith("gpt-"):
+        # gpt-5.4-mini already handled above; for plain gpt-5.x return the family marker.
+        return lowered.split("-", 2)[1] if "-" in lowered else lowered
+    return model[:8]
+
+
+def session_model_badges(
+    project_root: Path,
+    *,
+    recent_hours: float | None = DEFAULT_RECENT_HOURS,
+) -> dict[str, str]:
+    """Return `{tongxue_name_lower: "opus→sonnet"}` for downgraded sessions only.
+
+    Uses the same tier-aware filtering as `model_state_alerts` so cross-provider
+    switches do not produce badges. Names are lowercased to match how the board DB
+    stores session names. Sessions without a downgrade are omitted; consumers can
+    treat a missing key as "all clear".
+    """
+    sessions = _load_project_sessions(project_root, recent_hours=recent_hours)
+    if not sessions:
+        return {}
+    badges: dict[str, str] = {}
+    for s in aggregate_by_name(sessions):
+        models = [m for m in s.get("models", []) if m]
+        if len(models) < 2:
+            continue
+        first, latest = models[0], models[-1]
+        first_tier = _model_tier(first)
+        latest_tier = _model_tier(latest)
+        if first_tier == 0 or latest_tier == 0:
+            continue
+        if latest_tier >= first_tier:
+            continue
+        name = (s.get("name") or "").lower()
+        if not name:
+            continue
+        badges[name] = f"{_short_model_label(first)}→{_short_model_label(latest)}"
+    return badges
+
+
 def _parse_usage_args(args: list[str]) -> dict[str, Any]:
     parsed: dict[str, Any] = {"detail": False, "budget": 0.0, "warn_pct": DEFAULT_BUDGET_WARN_PCT}
     i = 0

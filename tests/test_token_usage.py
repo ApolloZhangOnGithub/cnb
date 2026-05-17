@@ -8,6 +8,7 @@ import pytest
 
 from lib.token_usage import (
     _project_slug,
+    _short_model_label,
     aggregate_by_name,
     cmd_usage,
     collect_runtime_alerts,
@@ -15,6 +16,7 @@ from lib.token_usage import (
     load_budget_defaults,
     model_state_alerts,
     parse_session_usage,
+    session_model_badges,
     tongxue_token_summary,
 )
 
@@ -636,3 +638,110 @@ class TestTongxueTokenSummary:
         assert result["input"] == 30
         assert result["output"] == 150
         assert result["messages"] == 2
+
+
+class TestShortModelLabel:
+    def test_opus(self):
+        assert _short_model_label("claude-opus-4-7") == "opus"
+
+    def test_sonnet(self):
+        assert _short_model_label("claude-sonnet-4-7") == "sonnet"
+
+    def test_haiku(self):
+        assert _short_model_label("claude-haiku-4-5-20251001") == "haiku"
+
+    def test_mini_takes_precedence(self):
+        # gpt-5.4-mini should label as "mini" (the downgrade tier signal), not the family.
+        assert _short_model_label("gpt-5.4-mini") == "mini"
+
+    def test_gpt_family(self):
+        assert _short_model_label("gpt-5.4") == "5.4"
+
+
+class TestSessionModelBadges:
+    def test_empty_when_no_jsonls(self, tmp_path):
+        project_dir = tmp_path / "empty"
+        project_dir.mkdir()
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            assert session_model_badges(tmp_path / "project") == {}
+
+    def test_no_badge_when_all_clear(self, tmp_path):
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "alice"},
+                _make_assistant_msg(model="claude-opus-4-7"),
+            ],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            assert session_model_badges(tmp_path / "project") == {}
+
+    def test_emits_badge_for_downgrade(self, tmp_path):
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "alice"},
+                _make_assistant_msg(model="claude-opus-4-7"),
+                _make_assistant_msg(model="claude-sonnet-4-7"),
+            ],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            badges = session_model_badges(tmp_path / "project")
+        assert badges == {"alice": "opus→sonnet"}
+
+    def test_skips_cross_provider_switch(self, tmp_path):
+        """User-initiated cnb model use shouldn't surface as a badge either."""
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "alice"},
+                _make_assistant_msg(model="claude-opus-4-7"),
+                _make_assistant_msg(model="deepseek-v4-pro"),
+            ],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            assert session_model_badges(tmp_path / "project") == {}
+
+    def test_name_is_lowercased(self, tmp_path):
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "Alice"},
+                _make_assistant_msg(model="claude-opus-4-7"),
+                _make_assistant_msg(model="claude-haiku-4-5-20251001"),
+            ],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            badges = session_model_badges(tmp_path / "project")
+        assert "alice" in badges
+        assert badges["alice"] == "opus→haiku"
+
+    def test_merges_multiple_jsonls_per_session(self, tmp_path):
+        """Two JSONLs for the same tongxue should aggregate via aggregate_by_name first."""
+        project_dir = tmp_path / "jsonls"
+        project_dir.mkdir()
+        _write_jsonl(
+            project_dir / "s1.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "bob"},
+                _make_assistant_msg(model="claude-opus-4-7"),
+            ],
+        )
+        _write_jsonl(
+            project_dir / "s2.jsonl",
+            [
+                {"type": "custom-title", "customTitle": "bob"},
+                _make_assistant_msg(model="claude-sonnet-4-7"),
+            ],
+        )
+        with patch("lib.token_usage._find_project_dir", return_value=project_dir):
+            badges = session_model_badges(tmp_path / "project")
+        assert badges == {"bob": "opus→sonnet"}

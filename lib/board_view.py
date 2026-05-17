@@ -9,7 +9,7 @@ from lib.board_db import BoardDB
 from lib.common import validate_identity
 from lib.fmt import error, heading, ok, warn
 from lib.tmux_utils import capture_pane, has_session, pane_command
-from lib.token_usage import collect_runtime_alerts, load_budget_defaults
+from lib.token_usage import collect_runtime_alerts, load_budget_defaults, session_model_badges
 
 SHELL_COMMANDS = {"zsh", "bash", "sh", "-zsh", "-bash", ""}
 SPINNER_RE = re.compile(r"^\s*(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|●)", re.MULTILINE)
@@ -149,6 +149,9 @@ def cmd_overview(db: BoardDB) -> None:
     print(heading(f"=== {db.env.project_root.name}  {now} ==="))
     print()
 
+    # Compute once so the per-session loop is just a dict lookup.
+    badges = session_model_badges(db.env.project_root)
+
     # ── sessions ──
     for row in db.query("SELECT name, status, last_heartbeat FROM sessions WHERE name != 'all' ORDER BY name"):
         name, task, last_hb = row[0], row[1], row[2]
@@ -161,7 +164,10 @@ def cmd_overview(db: BoardDB) -> None:
         else:
             task = "(no status)"
 
-        line = f"  {status:12s} {name:<10s} {task}"
+        badge = badges.get(name.lower(), "")
+        badge_str = f" {warn(f'[{badge}]')}" if badge else ""
+
+        line = f"  {status:12s} {name:<10s}{badge_str} {task}"
         if ago:
             line += f"  {ago}"
         if inbox:

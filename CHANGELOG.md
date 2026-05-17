@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.79-dev (unreleased)
+
+### Features
+
+- **Per-session model badge on overview row** (#153) — `board overview` now annotates each tongxue's row with a compact `[opus→sonnet]` badge when their session has downgraded. Builds on the alert path from PR #221 — the alert block still shows the full picture below; the badge is the instant-glance signal that matches a specific row. Same noise filters apply: cross-provider switches and `<synthetic>` placeholders don't trigger a badge. Stacks on #221.
+
 ## 0.5.78-dev (unreleased)
 
 ### Features
