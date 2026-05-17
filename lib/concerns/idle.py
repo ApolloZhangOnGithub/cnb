@@ -21,7 +21,7 @@ from .helpers import (
 
 
 class IdleDetector(Concern):
-    interval = 5
+    interval = 2
 
     def __init__(self, cfg: DispatcherConfig) -> None:
         super().__init__()
