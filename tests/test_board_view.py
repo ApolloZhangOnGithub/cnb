@@ -17,7 +17,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib.board_files import cmd_files, cmd_get
 from lib.board_msg import cmd_history
 from lib.board_view import (
+    _format_age,
+    _git,
     _heartbeat_status,
+    _pane_work_state,
+    _parse_board_time,
+    _stall_reason,
+    _tmux_status,
     cmd_dashboard,
     cmd_dirty,
     cmd_freshness,
@@ -30,6 +36,97 @@ from lib.board_view import (
     cmd_stalls,
     cmd_view,
 )
+
+
+class TestGit:
+    def test_returns_stdout_on_success(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        completed = MagicMock(stdout="branch info\n", returncode=0)
+        with patch("lib.board_view.subprocess.run", return_value=completed):
+            assert _git(tmp_path, "status") == "branch info\n"
+
+    def test_returns_empty_on_timeout(self, tmp_path):
+        import subprocess as sp
+
+        with patch("lib.board_view.subprocess.run", side_effect=sp.TimeoutExpired("git", 5)):
+            assert _git(tmp_path, "status") == ""
+
+    def test_returns_empty_on_oserror(self, tmp_path):
+        with patch("lib.board_view.subprocess.run", side_effect=OSError("git not installed")):
+            assert _git(tmp_path, "status") == ""
+
+
+class TestPaneWorkState:
+    @patch("lib.board_view.capture_pane", return_value="some output\nbypass permissions to continue\n❯ ")
+    def test_blocked_when_bypass_permissions_prompt(self, _pane):
+        assert _pane_work_state("cc-test-alice") == "blocked"
+
+    @patch("lib.board_view.capture_pane", return_value="• Working on something\n")
+    def test_working_when_work_label(self, _pane):
+        assert _pane_work_state("cc-test-alice") == "working"
+
+    @patch("lib.board_view.capture_pane", return_value="just sitting at the prompt\n❯ ")
+    def test_idle_otherwise(self, _pane):
+        assert _pane_work_state("cc-test-alice") == "idle"
+
+
+class TestTmuxStatus:
+    @patch("lib.board_view.capture_pane", return_value="bypass permissions\n")
+    @patch("lib.board_view.pane_command", return_value="node")
+    @patch("lib.board_view.has_session", return_value=True)
+    def test_blocked_branch(self, _has, _cmd, _pane):
+        status, _ago = _tmux_status("cc", "alice")
+        assert status == "● alive blocked"
+
+
+class TestParseBoardTime:
+    def test_parses_with_seconds_format(self):
+        assert _parse_board_time("2026-05-17 12:00:00") == datetime(2026, 5, 17, 12, 0, 0)
+
+    def test_falls_back_to_minute_format(self):
+        assert _parse_board_time("2026-05-17 12:00") == datetime(2026, 5, 17, 12, 0)
+
+    def test_returns_none_on_invalid(self):
+        assert _parse_board_time("not a date") is None
+
+    def test_returns_none_on_empty(self):
+        assert _parse_board_time(None) is None
+        assert _parse_board_time("") is None
+
+
+class TestFormatAge:
+    def test_unknown_for_none(self):
+        assert _format_age(None) == "unknown"
+
+    def test_seconds_under_a_minute(self):
+        assert _format_age(45) == "45s"
+
+    def test_minutes_under_an_hour(self):
+        assert _format_age(125) == "2m"
+
+    def test_hours_above(self):
+        assert _format_age(3660) == "1h"
+
+
+class TestStallReason:
+    def test_returns_none_when_no_unread(self):
+        assert _stall_reason("● working", heartbeat_age=999, unread=0, latest_unread_age=999) is None
+
+    def test_working_pane_with_stale_heartbeat_and_old_unread(self):
+        reason = _stall_reason("● working", heartbeat_age=999, unread=1, latest_unread_age=999)
+        assert reason == "working pane has unread inbox and stale heartbeat"
+
+    def test_alive_pane_with_stale_heartbeat_and_old_unread(self):
+        reason = _stall_reason("● alive idle", heartbeat_age=999, unread=1, latest_unread_age=999)
+        assert reason == "live pane has unread inbox and stale heartbeat"
+
+    def test_pulse_stale_with_old_unread(self):
+        reason = _stall_reason("○ pulse stale", heartbeat_age=999, unread=1, latest_unread_age=999)
+        assert reason == "stale heartbeat with unread inbox"
+
+    def test_returns_none_when_heartbeat_fresh(self):
+        assert _stall_reason("● working", heartbeat_age=10, unread=1, latest_unread_age=120) is None
 
 
 class TestHeartbeatStatus:
@@ -368,6 +465,69 @@ class TestCmdOverview:
         output = capsys.readouterr().out
         assert "No sessions running" in output
 
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_truncates_long_status(self, _mock, db, capsys):
+        long_status = "x" * 200
+        db.execute("UPDATE sessions SET status=? WHERE name='alice'", (long_status,))
+        cmd_overview(db)
+        output = capsys.readouterr().out
+        # Truncated at 60 chars in cmd_overview
+        assert "x" * 60 in output
+        assert "x" * 70 not in output
+
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_unread_count_when_present(self, _mock, db, capsys):
+        db.execute("INSERT INTO messages(ts, sender, recipient, body) VALUES ('2025-01-01', 'bob', 'alice', 'hi')")
+        msg_id = db.scalar("SELECT id FROM messages ORDER BY id DESC LIMIT 1")
+        db.execute("INSERT INTO inbox(session, message_id) VALUES ('alice', ?)", (msg_id,))
+        cmd_overview(db)
+        output = capsys.readouterr().out
+        assert "[1 msg]" in output
+
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_heartbeat_ago_when_known(self, _mock, db, capsys):
+        recent = (datetime.now() - timedelta(seconds=20)).strftime("%Y-%m-%d %H:%M:%S")
+        db.execute("UPDATE sessions SET last_heartbeat=? WHERE name='alice'", (recent,))
+        cmd_overview(db)
+        output = capsys.readouterr().out
+        assert "s ago" in output
+
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_shows_open_proposals(self, _mock, db, capsys):
+        db.execute(
+            "INSERT INTO proposals(number, slug, content, status) VALUES (?, ?, ?, 'OPEN')",
+            ("1", "test", "Test proposal"),
+        )
+        cmd_overview(db)
+        output = capsys.readouterr().out
+        assert "Open proposals: 1" in output
+
+    def test_dispatcher_running_when_session_present(self, db, capsys):
+        prefix = db.env.prefix
+
+        def has_session_mock(sess):
+            return sess == f"{prefix}-dispatcher"
+
+        with patch("lib.board_view.has_session", side_effect=has_session_mock):
+            cmd_overview(db)
+        output = capsys.readouterr().out
+        assert "dispatcher: running" in output
+
+    def test_dispatcher_not_running_with_active_sessions(self, db, capsys):
+        prefix = db.env.prefix
+
+        def has_session_mock(sess):
+            # dispatcher off but alice on
+            return sess == f"{prefix}-alice"
+
+        with (
+            patch("lib.board_view.has_session", side_effect=has_session_mock),
+            patch("lib.board_view.pane_command", return_value="zsh"),
+        ):
+            cmd_overview(db)
+        output = capsys.readouterr().out
+        assert "dispatcher: NOT RUNNING" in output
+
 
 class TestCmdView:
     @patch("lib.board_view.has_session", return_value=False)
@@ -388,6 +548,29 @@ class TestCmdView:
         output = capsys.readouterr().out
         assert "1 条未读" in output
 
+    @patch("lib.board_view.has_session", return_value=False)
+    @patch("lib.board_view.pane_command", return_value="")
+    def test_truncates_long_session_status(self, _cmd, _has, db, capsys):
+        long_status = "y" * 200
+        db.execute("UPDATE sessions SET status=? WHERE name='alice'", (long_status,))
+        cmd_view(db, "alice")
+        output = capsys.readouterr().out
+        # cmd_view truncates >60 chars to 57 + "..."
+        assert "..." in output
+        assert "y" * 70 not in output
+
+    @patch("lib.board_view.has_session", return_value=False)
+    @patch("lib.board_view.pane_command", return_value="")
+    def test_lists_open_proposals(self, _cmd, _has, db, capsys):
+        db.execute(
+            "INSERT INTO proposals(number, slug, content, status) VALUES (?, ?, ?, 'OPEN')",
+            ("7", "feature", "Add feature"),
+        )
+        cmd_view(db, "alice")
+        output = capsys.readouterr().out
+        assert "7-feature" in output
+        assert "[OPEN]" in output
+
 
 class TestCmdDashboard:
     @patch("lib.board_view.has_session", return_value=False)
@@ -402,6 +585,17 @@ class TestCmdDashboard:
         cmd_dashboard(db)
         output = capsys.readouterr().out
         assert "dispatcher" in output
+
+    def test_dispatcher_running_branch(self, db, capsys):
+        prefix = db.env.prefix
+
+        def has_session_mock(sess):
+            return sess == f"{prefix}-dispatcher"
+
+        with patch("lib.board_view.has_session", side_effect=has_session_mock):
+            cmd_dashboard(db)
+        output = capsys.readouterr().out
+        assert "dispatcher: running" in output
 
 
 class TestCmdProgress:
@@ -432,6 +626,16 @@ class TestCmdProgress:
         assert "missing tracking" in output
         assert "pending actions" in output
 
+    @patch("lib.board_view.has_session", return_value=False)
+    def test_empty_lists_show_placeholders(self, _mock, db, capsys):
+        db.execute("DELETE FROM sessions WHERE name != 'all'")
+        cmd_progress(db)
+        output = capsys.readouterr().out
+        assert "(no sessions)" in output
+        # Active tasks, pending queue and open bugs all empty.
+        # Each section prints "  (none)" — assert it appears at least 3 times.
+        assert output.count("(none)") >= 3
+
 
 class TestCmdDirty:
     def test_no_git_repo(self, db, capsys):
@@ -444,6 +648,18 @@ class TestCmdDirty:
         with patch("lib.board_view._git", return_value=" M lib/foo.py\n M lib/bar.py\n"):
             cmd_dirty(db)
         output = capsys.readouterr().out
+        assert "foo.py" in output
+
+    def test_shows_board_files_separately(self, db, capsys):
+        def git_mock(_root, *args):
+            if "log" in args:
+                return "abc123 last commit\n"
+            return " M lib/foo.py\n M board/things.md\n M board/other.md\n"
+
+        with patch("lib.board_view._git", side_effect=git_mock):
+            cmd_dirty(db)
+        output = capsys.readouterr().out
+        assert "Board: 2 files" in output
         assert "foo.py" in output
 
 

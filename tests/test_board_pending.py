@@ -202,6 +202,17 @@ class TestPendingList:
         out = capsys.readouterr().out
         assert "⏳" in out
 
+    def test_list_shows_resolved_timestamp(self, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        aid = _add_action(db)
+        db.execute(
+            "UPDATE pending_actions SET status='done', resolved_at='2026-05-17 12:00:00' WHERE id=?",
+            (aid,),
+        )
+        cmd_pending(db, "alice", ["list", "--all"])
+        out = capsys.readouterr().out
+        assert "完成于: 2026-05-17 12:00:00" in out
+
 
 class TestPendingVerify:
     def test_no_verifiable_actions(self, tmp_path, capsys):
@@ -314,6 +325,39 @@ class TestPendingVerify:
             cmd_pending(db, "alice", ["verify", "notanumber"])
         assert exc.value.code == 1
 
+    def test_verify_too_many_positional_args_exits(self, tmp_path):
+        db = _setup_db(tmp_path)
+        with pytest.raises(SystemExit) as exc:
+            cmd_pending(db, "alice", ["verify", "#1", "#2"])
+        assert exc.value.code == 1
+
+    @patch("lib.board_pending.subprocess.run", side_effect=OSError("command not found"))
+    def test_verify_oserror_records_error_detail(self, mock_run, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        _add_action(db)
+        cmd_pending(db, "alice", ["verify"])
+        out = capsys.readouterr().out
+        assert "验证失败" in out
+        assert "出错" in out
+
+    def test_verify_specific_id_skips_missing_verify_command(self, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        aid = _add_action(db, verify_command=None)
+        cmd_pending(db, "alice", ["verify", f"#{aid}"])
+        out = capsys.readouterr().out
+        assert f"#{aid}: 无验证命令" in out
+        assert "1 未通过" in out
+
+    @patch("lib.board_pending.subprocess.run")
+    def test_verify_with_retry_skips_when_no_retry_command(self, mock_run, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        _add_action(db, retry_command=None)
+        mock_run.return_value.returncode = 0
+        cmd_pending(db, "alice", ["verify", "--retry"])
+        out = capsys.readouterr().out
+        assert "无重试命令，跳过 retry" in out
+        assert "重试结果: 0 成功, 0 失败, 1 跳过" in out
+
 
 class TestPendingRetry:
     def test_no_retryable_actions(self, tmp_path, capsys):
@@ -374,6 +418,44 @@ class TestPendingRetry:
         with pytest.raises(SystemExit) as exc:
             cmd_pending(db, "alice", ["retry", "xyz"])
         assert exc.value.code == 1
+
+    @patch("lib.board_pending.subprocess.run")
+    def test_retry_specific_id_targets_only_one(self, mock_run, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        a1 = _add_action(db, retry_command="cmd-1")
+        a2 = _add_action(db, retry_command="cmd-2")
+        db.execute("UPDATE pending_actions SET status='done' WHERE id IN (?, ?)", (a1, a2))
+
+        mock_run.return_value.returncode = 0
+        cmd_pending(db, "alice", ["retry", f"#{a1}"])
+        capsys.readouterr()
+
+        row1 = db.query_one("SELECT status FROM pending_actions WHERE id=?", (a1,))
+        row2 = db.query_one("SELECT status FROM pending_actions WHERE id=?", (a2,))
+        assert row1 is not None and row1[0] == "retried"
+        assert row2 is not None and row2[0] == "done"
+
+    def test_retry_specific_id_warns_when_no_retry_command(self, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        aid = _add_action(db, retry_command=None)
+        db.execute("UPDATE pending_actions SET status='done' WHERE id=?", (aid,))
+        cmd_pending(db, "alice", ["retry", f"#{aid}"])
+        out = capsys.readouterr().out
+        assert f"#{aid}: 无重试命令" in out
+
+    @patch("lib.board_pending.subprocess.run")
+    def test_retry_timeout_marks_failed(self, mock_run, tmp_path, capsys):
+        db = _setup_db(tmp_path)
+        aid = _add_action(db, retry_command="hangs-forever")
+        db.execute("UPDATE pending_actions SET status='done' WHERE id=?", (aid,))
+
+        mock_run.side_effect = subprocess.TimeoutExpired("hangs-forever", 60)
+        cmd_pending(db, "alice", ["retry"])
+        out = capsys.readouterr().out
+        assert "重试超时" in out
+
+        row = db.query_one("SELECT status FROM pending_actions WHERE id=?", (aid,))
+        assert row is not None and row[0] == "failed"
 
 
 class TestPendingResolve:
