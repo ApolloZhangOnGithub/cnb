@@ -1,5 +1,5 @@
 {
   "title": "Tongxue",
   "defaultOpen": true,
-  "pages": ["index", "board-commands", "ownership", "handoff", "rules", "blog"]
+  "pages": ["index", "board-commands", "ownership", "handoff", "rules", "startup-sequence", "blog"]
 }

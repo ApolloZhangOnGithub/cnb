@@ -1,0 +1,91 @@
+---
+title: Startup sequence
+description: Start a shift the way you start a factory line — inspect the line and bring up infrastructure first, then bring people in. Skipping this order means paving the road while you drive on it.
+---
+
+Think of a session start the way a factory floor brings up a line: inspect the equipment, stand up the infrastructure, *then* bring people in. Starting in the wrong order is paving the road while you drive on it — guaranteed rework.
+
+## The sequence
+
+Every fresh shift or session resume, do these in order. **Do not skip steps.**
+
+### 0. Confirm who you are
+
+- Are you the user-facing tongxue, are you the lead, or are you a project tongxue?
+- Check your `--name` startup argument. If you have no name, you are the user-facing tongxue, not the lead.
+- The lead lives in its own tmux session (`cc-<prefix>-lead`) managed by swarm. It is not an alias of any other claude session.
+
+### 1. Inspect infrastructure (do not touch people)
+
+Run these checks in order. If any one fails, **fix it first**. Do not bring people in.
+
+| Check | Command | Pass criterion |
+|---|---|---|
+| git worktree clean | `git status --short` | No one else's dirty changes in the main worktree |
+| master in sync | `git fetch && git log master..origin/master` | Not behind origin/master |
+| dispatcher running | `pgrep -f "bin/dispatcher$"` | At least one PID |
+| dispatcher is current | `ps -o lstart= -p <PID>` | Started after the most recent dispatcher PR merge |
+| Model available | (start a session, check for "model not available") | No error |
+| Stale worktrees | `git worktree list` | No dead branches under `/tmp/` |
+
+If any check fails → fix that check (open PR, land PR, restart the relevant service), **then** move on.
+
+### 2. Bring people up in role order
+
+```bash
+swarm start lead         # project lead first — every employee waits for lead to dispatch
+swarm start <dev>        # bring up the minimum set you need, not everyone
+```
+
+**Do not start all at once.** After each one:
+
+1. Wait 10 seconds.
+2. `tmux capture-pane` to confirm it's healthy (no model error, no stuck queue).
+3. If unhealthy → kill and restart.
+4. If healthy → start the next one.
+
+Full headcount ≠ high output. 3-4 sharp tongxue > 7 confused ones.
+
+### 3. Look at the PR queue before assigning
+
+```bash
+gh pr list --state open --json number,title,mergeable
+```
+
+Look at:
+
+- How many PRs are waiting on review/merge.
+- How many have conflicts that need rebase.
+- Which PRs are blocking master CI (those must merge first).
+
+**Clear master CI first**, then let people open new branches. Otherwise every new PR is born into the old conflict.
+
+### 4. The first wave of work must be independent
+
+When you hand out the first batch:
+
+- Each tongxue works in its own `/tmp/cnb-<name>-<issue>` worktree — do not touch the main worktree.
+- No file overlap between issues (check `gh pr diff` history; stagger hot files).
+- Avoid simultaneous edits to `lib/concerns/*` or `lib/board_*` — high-conflict areas.
+
+### 5. Set up the monitoring loop *after* dispatch
+
+Confirm the lead's work mode (lead keeps itself busy; employees idle is fine and does not get nudged), and *then* open up parallel development.
+
+## Anti-patterns — don't
+
+- ❌ `swarm start` everyone at once: triggers 7 claudes × N init bugs simultaneously and you can't tell who is stuck.
+- ❌ Fix infrastructure while you dispatch: the code people receive may be rewritten one PR later.
+- ❌ "Let them run while I patch things": that's seven production lines all in debug mode at once.
+- ❌ Restart the dispatcher after every component fix: 6+ restarts in a row reset nudge state continuously.
+- ❌ Switch the main worktree onto an employee's branch to rebase for them: locks their worktree and blocks them.
+
+## Calibration
+
+30 minutes into the shift, stop and reconcile:
+
+- How many PRs merged.
+- How much time went into fixing self-inflicted problems (your / lead's / employees' process errors).
+- If the ratio is below 50% → the process is broken; stop developing and fix the process instead.
+
+Industry calls this **OEE (Overall Equipment Effectiveness)**. When OEE is low, fix the equipment before pushing more output through.
