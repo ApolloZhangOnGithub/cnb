@@ -53,6 +53,11 @@ def get_dev_sessions(cfg: DispatcherConfig) -> list[str]:
     return [line[len(pfx) :] for line in raw.splitlines() if line.startswith(pfx) and line[len(pfx) :] not in protected]
 
 
+def has_lead_session(cfg: DispatcherConfig) -> bool:
+    sess = f"{cfg.prefix}-lead"
+    return tmux_ok("has-session", "-t", sess)
+
+
 def pane_md5(sess: str) -> str:
     content = tmux_run("capture-pane", "-t", sess, "-p") or ""
     return hashlib.md5(content.encode()).hexdigest()
