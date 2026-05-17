@@ -13,7 +13,7 @@ from lib.common import is_suspended
 
 from .base import Concern
 from .config import DispatcherConfig
-from .helpers import db, get_dev_sessions, is_claude_running, log, tmux, tmux_ok, tmux_send
+from .helpers import db, get_dev_sessions, get_lead_session, is_claude_running, log, tmux, tmux_ok, tmux_send
 
 
 @dataclass
@@ -128,6 +128,26 @@ class NudgeCoordinator(Concern):
         )
         return True
 
+    def _try_lead_idle(self, name: str) -> bool:
+        """Lead-specific idle nudge (#223).
+
+        Employees idling waiting for orders is normal; lead idling is not —
+        nobody is dispatching work. Use copy that tells lead to look at the
+        team and assign, not to "continue their own work".
+        """
+        sess = f"{self.cfg.prefix}-{name}"
+        if not self.idle.is_idle(sess):
+            return False
+        if _already_queued(sess, "分派下一批活"):
+            return False
+        tmux_send(
+            sess,
+            "检查团队状态：跑 `cnb board --as lead view` 看谁空、谁卡住；"
+            "处理你的 inbox；扫一遍 open PR 看需要谁 review 或 rebase；"
+            "主动分派下一批活给空闲同学。不要等。",
+        )
+        return True
+
     def get_nudge_stats(self, name: str) -> dict:
         rec = self._records.get(name)
         if not rec:
@@ -159,6 +179,29 @@ class NudgeCoordinator(Concern):
                 self._record(name, nudge_type, now)
                 break
 
+    def _process_lead_session(self, now: int) -> None:
+        """Process the lead session with lead-specific idle copy (#223)."""
+        name = "lead"
+        if is_suspended(name, self.cfg.suspended_file):
+            return
+        if not self._session_ready(name, now):
+            return
+
+        if name in self._records:
+            self._check_effectiveness(name)
+
+        if not self._can_nudge(name, now):
+            return
+
+        for nudge_type, try_fn in [
+            ("inbox", self._try_inbox),
+            ("flush", self._try_queued_flush),
+            ("lead_idle", self._try_lead_idle),
+        ]:
+            if try_fn(name):
+                self._record(name, nudge_type, now)
+                break
+
     def check_session(self, name: str, now: int) -> None:
         """Check and nudge a specific session immediately."""
         self._process_session(name, now)
@@ -166,3 +209,5 @@ class NudgeCoordinator(Concern):
     def tick(self, now: int) -> None:
         for name in get_dev_sessions(self.cfg):
             self._process_session(name, now)
+        if get_lead_session(self.cfg):
+            self._process_lead_session(now)

@@ -9,7 +9,7 @@ from pathlib import Path
 from lib.board_db import BoardDB
 from lib.tmux_utils import is_agent_running as is_claude_running  # noqa: F401 — re-export
 from lib.tmux_utils import (
-    tmux_ok,  # noqa: F401 — re-export for concerns
+    tmux_ok,
     tmux_run,
 )
 from lib.tmux_utils import tmux_send as _tmux_send_raw
@@ -45,12 +45,30 @@ def tmux_send(sess: str, text: str) -> bool:
 
 
 def get_dev_sessions(cfg: DispatcherConfig) -> list[str]:
+    """List non-lead, non-infra tmux sessions ("员工" tongxue).
+
+    `dispatcher` is the dispatcher's own session and is always excluded.
+    `lead` is excluded from this list because dispatcher must nudge it on a
+    different cadence and with different copy than employees — see
+    `get_lead_session` and `NudgeCoordinator._process_lead_session` (#223).
+    """
     raw = tmux_run("list-sessions", "-F", "#{session_name}")
     if not raw:
         return []
     pfx = f"{cfg.prefix}-"
     protected = {"dispatcher", "lead"}
     return [line[len(pfx) :] for line in raw.splitlines() if line.startswith(pfx) and line[len(pfx) :] not in protected]
+
+
+def get_lead_session(cfg: DispatcherConfig) -> str | None:
+    """Return the lead session name if a `{prefix}-lead` tmux session exists.
+
+    Returned name is bare (`"lead"`), not the full tmux session. Callers
+    construct the tmux session with `f"{cfg.prefix}-{name}"` as elsewhere.
+    """
+    if not tmux_ok("has-session", "-t", f"{cfg.prefix}-lead"):
+        return None
+    return "lead"
 
 
 def pane_md5(sess: str) -> str:

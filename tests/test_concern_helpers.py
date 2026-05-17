@@ -9,6 +9,7 @@ from lib.concerns.config import DispatcherConfig
 from lib.concerns.helpers import (
     board_send,
     get_dev_sessions,
+    get_lead_session,
     has_tool_process,
     is_claude_running,
     is_pane_typing,
@@ -201,6 +202,24 @@ class TestGetDevSessions:
         cfg = make_cfg(tmp_path)
         mock_tmux.return_value = None
         assert get_dev_sessions(cfg) == []
+
+
+# ===========================================================================
+# get_lead_session()
+# ===========================================================================
+
+
+class TestGetLeadSession:
+    @patch("lib.concerns.helpers.tmux_ok", return_value=True)
+    def test_returns_lead_when_session_exists(self, mock_ok, tmp_path):
+        cfg = make_cfg(tmp_path)
+        assert get_lead_session(cfg) == "lead"
+        mock_ok.assert_called_once_with("has-session", "-t", "cc-test-lead")
+
+    @patch("lib.concerns.helpers.tmux_ok", return_value=False)
+    def test_returns_none_when_session_missing(self, mock_ok, tmp_path):
+        cfg = make_cfg(tmp_path)
+        assert get_lead_session(cfg) is None
 
 
 # ===========================================================================

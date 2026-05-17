@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.83-dev (unreleased)
+
+### Features
+
+- **Dispatcher keeps the lead session alive (#223)** — Added `get_lead_session()` helper and routed the `lead` session through `NudgeCoordinator._process_lead_session()`. Lead gets its own idle copy (`检查团队状态 / 处理 inbox / 看 PR / 主动分派下一批活`) rather than the employee OKR prompt — employees idling is normal (they wait for orders), but lead idling stalls the whole team. Inbox/queued-flush nudges still take priority over the lead-idle nudge.
+
 ## 0.5.76-dev (unreleased)
 
 ### Bug Fixes

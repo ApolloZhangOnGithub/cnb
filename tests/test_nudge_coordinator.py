@@ -453,6 +453,123 @@ class TestAlreadyQueued:
         assert mock_send.call_count >= 1, "fresh prompt — nudge must still fire"
 
 
+class TestLeadKeepAlive:
+    """#223: dispatcher must nudge the lead session when it's idle, using
+    lead-specific copy ("dispatch work") rather than the employee OKR copy."""
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=[])
+    @patch("lib.concerns.nudge_coordinator.get_lead_session", return_value="lead")
+    @patch("lib.concerns.nudge_coordinator.tmux", return_value="some output\n❯\n")
+    def test_idle_lead_gets_lead_specific_nudge(
+        self, _tmux, _lead, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path
+    ):
+        cfg = make_cfg(tmp_path, [])
+        idle = make_idle({"cc-test-lead"})
+        coord = NudgeCoordinator(cfg, idle)
+
+        with patch("lib.concerns.nudge_coordinator.db") as mock_db:
+            mock_db.return_value.scalar.return_value = 0  # no unread → falls to idle
+            coord.tick(1000)
+
+        assert mock_send.call_count == 1, "lead idle should nudge exactly once"
+        sess, text = mock_send.call_args[0]
+        assert sess == "cc-test-lead"
+        # Lead copy must talk about dispatching to the team, not about the
+        # lead's "own OKR".
+        assert "团队" in text
+        assert "分派" in text
+        assert "OKR" not in text, "lead nudge must not reuse employee OKR copy"
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=[])
+    @patch("lib.concerns.nudge_coordinator.get_lead_session", return_value="lead")
+    @patch("lib.concerns.nudge_coordinator.tmux", return_value="some output\n❯ working\n")
+    def test_active_lead_is_not_nudged(self, _tmux, _lead, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path):
+        cfg = make_cfg(tmp_path, [])
+        idle = make_idle(set())  # lead is NOT idle
+        coord = NudgeCoordinator(cfg, idle)
+
+        with patch("lib.concerns.nudge_coordinator.db") as mock_db:
+            mock_db.return_value.scalar.return_value = 0
+            coord.tick(1000)
+
+        assert mock_send.call_count == 0, "active lead must not be nudged"
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=[])
+    @patch("lib.concerns.nudge_coordinator.get_lead_session", return_value=None)
+    def test_no_lead_session_no_nudge(self, _lead, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path):
+        cfg = make_cfg(tmp_path, [])
+        idle = make_idle({"cc-test-lead"})  # would be idle if it existed
+        coord = NudgeCoordinator(cfg, idle)
+
+        coord.tick(1000)
+
+        assert mock_send.call_count == 0, "without a lead session there is nothing to nudge"
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=[])
+    @patch("lib.concerns.nudge_coordinator.get_lead_session", return_value="lead")
+    def test_lead_unread_inbox_takes_priority_over_idle(
+        self, _lead, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path, monkeypatch
+    ):
+        cfg = make_cfg(tmp_path, [])
+        from lib.concerns import nudge_coordinator as nc
+
+        class _FakeDB:
+            def scalar(self, *_args):
+                return 5  # lead has 5 unread
+
+        monkeypatch.setattr(nc, "db", lambda _cfg: _FakeDB())
+        monkeypatch.setattr(nc, "tmux", lambda *args: "❯\n" if args[0] == "capture-pane" else "")
+        idle = make_idle({"cc-test-lead"})
+        coord = NudgeCoordinator(cfg, idle)
+
+        coord.tick(1000)
+
+        assert mock_send.call_count == 1
+        sent = mock_send.call_args[0][1]
+        # Inbox nudge wins over lead-idle nudge.
+        assert "inbox" in sent
+        assert "分派" not in sent
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=[])
+    @patch("lib.concerns.nudge_coordinator.get_lead_session", return_value="lead")
+    def test_lead_idle_skipped_when_already_queued(
+        self, _lead, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path, monkeypatch
+    ):
+        cfg = make_cfg(tmp_path, [])
+        from lib.concerns import nudge_coordinator as nc
+
+        monkeypatch.setattr(
+            nc,
+            "tmux",
+            lambda *args: (
+                "❯ 检查团队状态：... 主动分派下一批活给空闲同学。不要等。\n" if args[0] == "capture-pane" else ""
+            ),
+        )
+        idle = make_idle({"cc-test-lead"})
+        coord = NudgeCoordinator(cfg, idle)
+
+        with patch("lib.concerns.nudge_coordinator.db") as mock_db:
+            mock_db.return_value.scalar.return_value = 0
+            coord.tick(1000)
+
+        assert mock_send.call_count == 0, "must not re-stuff lead idle prompt already at prompt"
+
+
 class TestStructure:
     def test_is_concern_subclass(self, NudgeCoordinator):
         assert issubclass(NudgeCoordinator, Concern)
