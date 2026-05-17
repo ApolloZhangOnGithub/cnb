@@ -647,6 +647,124 @@ class TestRouting:
 
         assert result.handled is True
 
+    def test_check_pilot_health_detects_stall(self, tmp_path, monkeypatch):
+        """Pane scan returns no errors but an inbound has been sitting > threshold."""
+        monkeypatch.setattr(feishu_bridge, "has_session", lambda name: True)
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="❯ Working on task...\n", stderr="")
+
+        monkeypatch.setattr(feishu_bridge.subprocess, "run", fake_run)
+
+        cfg = _cfg(tmp_path, stall_threshold_seconds=300)
+        # Plant an outstanding inbound 10 minutes old.
+        import time as _time
+
+        old_ts = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(_time.time() - 600))
+        path = feishu_bridge.activity_state_path(cfg)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "messages": {
+                        "msg_old": {
+                            "routed_to_self": True,
+                            "started_at": old_ts,
+                            "done_at": "",
+                        }
+                    }
+                }
+            )
+        )
+
+        result = feishu_bridge.check_pilot_health(cfg, "cnb-test")
+
+        assert result.handled is False
+        assert "no reply to msg_old" in result.detail
+
+
+class TestOldestOutstandingInbound:
+    def test_returns_none_when_no_state(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        assert feishu_bridge.oldest_outstanding_inbound(cfg) is None
+
+    def test_returns_none_when_all_done(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        path = feishu_bridge.activity_state_path(cfg)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "messages": {
+                        "msg1": {
+                            "routed_to_self": True,
+                            "started_at": "2026-05-17 14:00:00",
+                            "done_at": "2026-05-17 14:01:00",
+                        }
+                    }
+                }
+            )
+        )
+        assert feishu_bridge.oldest_outstanding_inbound(cfg) is None
+
+    def test_picks_oldest_outstanding(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        import time as _time
+
+        old_ts = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(_time.time() - 600))
+        new_ts = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(_time.time() - 60))
+        path = feishu_bridge.activity_state_path(cfg)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "messages": {
+                        "newer": {"routed_to_self": True, "started_at": new_ts, "done_at": ""},
+                        "older": {"routed_to_self": True, "started_at": old_ts, "done_at": ""},
+                    }
+                }
+            )
+        )
+
+        result = feishu_bridge.oldest_outstanding_inbound(cfg)
+
+        assert result is not None
+        message_id, age = result
+        assert message_id == "older"
+        assert age >= 599
+
+
+class TestStallStatusForPilot:
+    def test_empty_when_under_threshold(self, tmp_path):
+        cfg = _cfg(tmp_path, stall_threshold_seconds=3600)
+        import time as _time
+
+        recent_ts = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(_time.time() - 60))
+        path = feishu_bridge.activity_state_path(cfg)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"messages": {"msg1": {"routed_to_self": True, "started_at": recent_ts, "done_at": ""}}})
+        )
+        assert feishu_bridge.stall_status_for_pilot(cfg) == ""
+
+    def test_returns_reason_over_threshold(self, tmp_path):
+        cfg = _cfg(tmp_path, stall_threshold_seconds=60)
+        import time as _time
+
+        old_ts = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(_time.time() - 600))
+        path = feishu_bridge.activity_state_path(cfg)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"messages": {"stalled": {"routed_to_self": True, "started_at": old_ts, "done_at": ""}}})
+        )
+        reason = feishu_bridge.stall_status_for_pilot(cfg)
+        assert reason.startswith("no reply to stalled for ")
+        assert "threshold 60s" in reason
+
+    def test_empty_when_state_missing(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        assert feishu_bridge.stall_status_for_pilot(cfg) == ""
+
     def test_failover_renames_standby_to_primary(self, tmp_path, monkeypatch):
         cfg = _cfg(tmp_path, standby_enabled=True, standby_agent="codex", allowed_chat_ids=frozenset({"oc_test"}))
         renames = []

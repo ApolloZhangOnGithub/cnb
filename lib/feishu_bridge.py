@@ -139,6 +139,11 @@ SUPPORTED_PILOT_AGENTS = frozenset({"claude", "codex"})
 DEFAULT_STANDBY_AGENT = ""
 DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 60
 HEARTBEAT_UNHEALTHY_THRESHOLD = 3
+# Default stall window: how long an inbound user message can sit unanswered
+# before check_pilot_health reports the supervisor stuck. Tuned at 5 minutes —
+# long enough that normal tool exec / model thinking does not trigger, short
+# enough that users notice silence within a Feishu thread.
+DEFAULT_STALL_THRESHOLD_SECONDS = 300
 SUPPORTED_PILOT_ROLES = frozenset({DEFAULT_PILOT_ROLE, DEVICE_CHIEF_ROLE})
 SUPPORTED_TRANSPORTS = frozenset({"local_openapi", "hermes_lark_cli"})
 SUPPORTED_ACTIVITY_RENDER_STYLES = frozenset({"auto", "codex", "claude"})
@@ -284,6 +289,7 @@ class FeishuBridgeConfig:
     standby_agent: str = DEFAULT_STANDBY_AGENT
     standby_pilot_tmux: str = ""
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
+    stall_threshold_seconds: int = DEFAULT_STALL_THRESHOLD_SECONDS
 
     @classmethod
     def load(cls, config_path: Path | None = None, project_root: Path | None = None) -> FeishuBridgeConfig:
@@ -440,6 +446,9 @@ class FeishuBridgeConfig:
             standby_pilot_tmux=str(section.get("standby_pilot_tmux") or ""),
             heartbeat_interval_seconds=max(
                 10, _int(section.get("heartbeat_interval_seconds"), DEFAULT_HEARTBEAT_INTERVAL_SECONDS)
+            ),
+            stall_threshold_seconds=max(
+                30, _int(section.get("stall_threshold_seconds"), DEFAULT_STALL_THRESHOLD_SECONDS)
             ),
         )
 
@@ -1084,7 +1093,66 @@ def check_pilot_health(cfg: FeishuBridgeConfig, tmux_session: str | None = None)
         return BridgeResult(False, "stuck at trust prompt")
     if "error" in joined.lower() and ("FATAL" in joined or "panic" in joined or "Traceback" in joined):
         return BridgeResult(False, "crash detected in pane output")
+    stall = stall_status_for_pilot(cfg)
+    if stall:
+        return BridgeResult(False, stall)
     return BridgeResult(True, "healthy")
+
+
+def oldest_outstanding_inbound(cfg: FeishuBridgeConfig) -> tuple[str, float] | None:
+    """Return (message_id, age_seconds) for the oldest inbound still awaiting reply.
+
+    Reads the same feishu_activity.json state that record_activity_start / mark_activity_done
+    maintain. A message is outstanding when it was routed to the supervisor (routed_to_self)
+    but has not yet been marked done. Returns None if no such message exists.
+    """
+    payload = _load_activity_state(activity_state_path(cfg))
+    messages = payload.get("messages", {})
+    if not isinstance(messages, dict):
+        return None
+    now = time.time()
+    oldest_id = ""
+    oldest_age = 0.0
+    for message_id, item in messages.items():
+        if not isinstance(item, dict):
+            continue
+        if not item.get("routed_to_self"):
+            continue
+        if item.get("done_at"):
+            continue
+        started_at = item.get("started_at", "")
+        if not isinstance(started_at, str) or not started_at:
+            continue
+        try:
+            t = time.mktime(time.strptime(started_at, "%Y-%m-%d %H:%M:%S"))
+        except ValueError:
+            continue
+        age = now - t
+        if age > oldest_age:
+            oldest_age = age
+            oldest_id = message_id
+    if not oldest_id:
+        return None
+    return oldest_id, oldest_age
+
+
+def stall_status_for_pilot(cfg: FeishuBridgeConfig) -> str:
+    """Return a non-empty stall reason string when the supervisor has gone quiet
+    on an inbound past the configured threshold; empty string when fine.
+
+    Stall here means: an inbound user message was delivered to the supervisor
+    (recorded by record_activity_start) but has not been marked done within
+    stall_threshold_seconds. Distinct from the pane-keyword crash check —
+    supervisor can look fine in the pane while silently failing to advance the
+    turn (compact freeze, model hang, etc.).
+    """
+    outstanding = oldest_outstanding_inbound(cfg)
+    if outstanding is None:
+        return ""
+    message_id, age_seconds = outstanding
+    if age_seconds < cfg.stall_threshold_seconds:
+        return ""
+    return f"no reply to {message_id} for {int(age_seconds)}s (threshold {cfg.stall_threshold_seconds}s)"
 
 
 def failover_to_standby(cfg: FeishuBridgeConfig) -> BridgeResult:
