@@ -6,6 +6,7 @@
 
 - **Model downgrade + budget alerts in board view** (#153) — Wired `board usage` command exposing the existing token aggregation, and surfaced model-downgrade + over-budget warnings directly in `board overview` and `board view` so tongxue see degraded state immediately on startup. Cross-provider switches (claude → deepseek) no longer trigger false downgrade alerts, `<synthetic>` placeholders are filtered, and live alerts scan only the last 6h of JSONLs to stay snappy on hot project dirs. Optional `[budget] usd / warn_pct` config in `.cnb/config.toml`.
 - **Token + 模型 section in `board daily` report** (#153) — Auto-generated per-tongxue daily reports now include a `## Token + 模型` block: current model (with first-model trail if it changed during the shift), message count, token totals (input / output / cache-read / cache-write), and an estimated cost. Scoped to the last 24h by default; missing JSONL data is silent so the daily flow never fails on this.
+- **Per-session model badge on overview row** (#153) — `board overview` now annotates each tongxue's row with a compact `[opus→sonnet]` badge when their session has downgraded. The alert block still shows the full picture below; the badge is the instant-glance signal that matches a specific row. Same noise filters apply: cross-provider switches and `<synthetic>` placeholders don't trigger a badge.
 
 ## 0.5.76-dev (unreleased)
 
