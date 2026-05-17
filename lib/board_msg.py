@@ -121,6 +121,17 @@ def cmd_send(db: BoardDB, identity: str, args: list[str]) -> None:
         )
         db.deliver_to_inbox(name, to, msg_id, c=c)
 
+    # Proactive association detection (#158 phase 2). Post-commit so a slow or
+    # failing detector cannot break message delivery. Broad-except in the
+    # detector itself; this call adds an outer guard for any import-time error.
+    try:
+        from lib.hint_detector import run_for_message
+
+        if to != "all":
+            run_for_message(db, to, full_msg)
+    except Exception:
+        pass
+
     print(ok("OK sent"))
     if attach_ref:
         print(f"  附件已存储: {stored_path}")
