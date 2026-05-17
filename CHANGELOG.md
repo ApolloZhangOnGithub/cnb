@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.77-dev (unreleased)
+
+### Features
+
+- **Worktree checkpoint guard** — `board checkpoint` classifies dirty state into secret/config risk, code/docs change, untracked, generated artifact, and board/runtime churn buckets, then warns before shutdown/migration/handoff. `board dirty` reuses the same bucketed view. Fixes #135; redo of closed PR #189 with `.cnb/`/`.claudes/` paths correctly recognised as runtime churn.
+
 ## 0.5.76-dev (unreleased)
 
 ### Bug Fixes
