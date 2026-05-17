@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="cnb — your AI coding agents remember what they were doing, even after a restart.">
+    <title>cnb</title>
+    <link rel="canonical" id="canonical" href="https://c-n-b.space">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3">
+    <link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      var defined_urls = {
+        site: 'https://c-n-b.space',
+        docs: '//platform.c-n-b.space/docs',
+        hub: '//blog.c-n-b.space',
+        repo: 'https://github.com/ApolloZhangOnGithub/cnb',
+        npm: 'https://www.npmjs.com/package/claude-nb',
+        pkg: 'claude-nb',
+      };
+    </script>
+    <script>
+      (function(){
+        var saved = localStorage.getItem('theme');
+        var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      })();
+      function toggleTheme(){
+        var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', cur === 'light' ? 'light' : '');
+        localStorage.setItem('theme', cur);
+      }
+    </script>
+  </head>
+  <body>
+    <nav class="nav">
+      <div class="wrap">
+        <a class="nav-brand" href="/">cnb</a>
+        <div class="nav-links">
+          <a data-url="docs:/en/">Docs</a>
+          <a data-url="hub:/posts">Blog</a>
+          <a data-url="repo:">GitHub</a>
+          <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">&#9790;</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="wrap">
+      <section class="hero" style="border-top: none">
+        <h1>Every new session starts from zero. cnb fixes this.</h1>
+        <p>
+          A shared workspace that survives restarts — ownership, inboxes, handoffs,
+          and verification trails stay outside the context window.
+        </p>
+        <div class="hero-actions">
+          <a href="#install">Get started</a>
+          <a data-url="docs:/en/">Documentation</a>
+        </div>
+      </section>
+
+      <section>
+        <h2>The problem</h2>
+        <div class="compare-grid">
+          <div class="compare-card">
+            <div class="compare-header">Without cnb</div>
+            <div class="compare-body">
+              <div>session 1 refactors auth module</div>
+              <div>session 1 ends</div>
+              <div>session 2 starts</div>
+              <div class="bad">"what auth module? let me look around..."</div>
+              <div class="bad">rewrites the same code differently</div>
+              <div class="bad">session 3 finds conflicts, gives up</div>
+            </div>
+          </div>
+          <div class="compare-card">
+            <div class="compare-header">With cnb</div>
+            <div class="compare-body">
+              <div>session 1 refactors auth module</div>
+              <div>session 1 logs handoff report</div>
+              <div>session 2 starts, reads the board</div>
+              <div class="ok">"auth is done, tests pass. billing next."</div>
+              <div class="ok">picks up exactly where session 1 left off</div>
+              <div class="ok">session 3 checks board, no conflicts</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>How it works</h2>
+        <p>A shared board tracks who's working on what. Each AI session checks in, claims tasks, and reports results.</p>
+        <div class="terminal">
+          <div class="terminal-body">
+            <div>$ <span class="cmd">cnb board</span></div>
+            <div>&nbsp;</div>
+            <div>  <span class="dot"></span><span class="name">lisa-su</span>    notification/*   active</div>
+            <div>  <span class="dot"></span><span class="name">forge</span>      board db         <span class="dim">review</span></div>
+            <div>  <span class="dot"></span><span class="name">sutskever</span>  model eval       active</div>
+            <div>  <span class="dot"></span><span class="name">tester</span>     pytest suite     <span class="dim">queued</span></div>
+            <div>&nbsp;</div>
+            <div class="dim">  4 tongxue  ·  dispatcher heartbeat: 1.2s  ·  pending: 0</div>
+          </div>
+        </div>
+        <div class="terminal">
+          <div class="terminal-body">
+            <div>$ <span class="cmd">board --as lisa-su task done</span></div>
+            <div class="ok">OK task #12 done — tests passed, PR #47 created</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Capabilities</h2>
+        <div class="feature-grid">
+          <div class="feature-row">
+            <h3>Board</h3>
+            <p>Local SQLite keeps messages, tasks, and status — structured, queryable, outside the context window.</p>
+          </div>
+          <div class="feature-row">
+            <h3>Ownership</h3>
+            <p>Each session claims specific modules. New sessions know what they own and what to leave alone.</p>
+          </div>
+          <div class="feature-row">
+            <h3>Handoff</h3>
+            <p>Sessions record what changed, which tests passed, and what's blocked. The next session reads this.</p>
+          </div>
+          <div class="feature-row">
+            <h3>Feishu</h3>
+            <p>Message your AI team from your phone. Quiet until there's a final result.</p>
+          </div>
+          <div class="feature-row">
+            <h3>Local-first</h3>
+            <p>tmux, SQLite, local files. No cloud account. Every piece of state is inspectable.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="install">
+        <h2>Get started</h2>
+        <div class="code-block">npm install -g <span data-text="pkg"></span></div>
+        <div class="code-block">/cnb</div>
+        <p class="install-note">
+          npm package is <code data-text="pkg"></code>.
+          Requires Node 18+, Python 3.11+, tmux, git,
+          <a href="https://claude.ai/code">Claude Code</a> or
+          <a href="https://github.com/openai/codex">Codex</a>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Demo</h2>
+        <p>
+          10 AI sessions with tech leader personas debated Python vs Rust and coordinated through the cnb board.
+          <a data-url="repo:/tree/master/instances/silicon_vally_battle">View trace.</a>
+        </p>
+        <div class="metrics">
+          <div>
+            <div class="metric-value">10</div>
+            <div class="metric-label">tongxue</div>
+          </div>
+          <div>
+            <div class="metric-value">886</div>
+            <div class="metric-label">board messages</div>
+          </div>
+          <div>
+            <div class="metric-value">3h</div>
+            <div class="metric-label">runtime</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Documentation</h2>
+        <div class="doc-list">
+          <a data-url="docs:/en/guide/getting-started/">Getting started <span class="desc">— install, first team, slash commands</span></a>
+          <a data-url="docs:/en/guide/commands/">Commands <span class="desc">— CLI reference</span></a>
+          <a data-url="docs:/en/guide/feishu-bridge/">Feishu bridge <span class="desc">— mobile integration</span></a>
+          <a data-url="docs:/en/reference/pricing/">Pricing <span class="desc">— cost breakdown</span></a>
+
+          <a data-url="repo:/blob/master/CONTRIBUTING.md">Contributing <span class="desc">— how to contribute</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <span>cnb is open source, local-first software.</span>
+        <div>
+          <a data-url="repo:/blob/master/LICENSE">MIT License</a>
+        </div>
+      </div>
+    </footer>
+    <script>
+      document.querySelectorAll('[data-url]').forEach(function(el) {
+        var parts = el.dataset.url.split(':');
+        el.href = defined_urls[parts[0]] + (parts[1] || '');
+      });
+      document.querySelectorAll('[data-text]').forEach(function(el) {
+        el.textContent = defined_urls[el.dataset.text] || '';
+      });
+      document.getElementById('canonical').href = defined_urls.site;
+    </script>
+  </body>
+</html>
