@@ -347,6 +347,48 @@ class TestRunShutdown:
         assert marker.exists()
         assert marker.read_text().strip() == "2"
 
+    @patch("subprocess.run")
+    def test_broadcast_and_wait_path(self, mock_run, tmp_path, capsys):
+        """skip_broadcast=False exercises broadcast + wait-for-acks branches."""
+        env = self._make_env(tmp_path)
+        _setup_db_at(env.board_db)
+        # Seed an unread row so wait_for_acks reports a "timed out" entry.
+        conn = sqlite3.connect(str(env.board_db))
+        conn.execute("INSERT INTO messages(ts, sender, recipient, body) VALUES ('t', 'sys', 'alice', 'x')")
+        msg_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.execute("INSERT INTO inbox(session, message_id, read) VALUES ('alice', ?, 0)", (msg_id,))
+        conn.commit()
+        conn.close()
+
+        run_shutdown(env, skip_broadcast=False, skip_stop=True, timeout=1)
+
+        out = capsys.readouterr().out
+        assert "广播收工通知" in out
+        assert "OK 已广播" in out
+        assert "等待 ack" in out
+        # alice has unread → timed-out branch fires; bob has none → acked branch fires
+        assert "超时未 ack: alice" in out
+        assert "已 ack: bob" in out
+
+    @patch("lib.shutdown.stop_dispatcher_session", return_value=True)
+    @patch("lib.swarm.SwarmManager")
+    @patch("lib.swarm.SwarmConfig.load")
+    def test_stop_sessions_path(self, mock_cfg, mock_mgr, mock_stop_disp, tmp_path, capsys):
+        """skip_stop=False exercises the swarm-stop + dispatcher-stop branch."""
+        env = self._make_env(tmp_path)
+        _setup_db_at(env.board_db)
+        mgr_instance = mock_mgr.return_value
+        mgr_instance.stop.return_value = None
+
+        run_shutdown(env, skip_broadcast=True, skip_stop=False, timeout=1)
+
+        mgr_instance.stop.assert_called_once_with([], force=True)
+        mock_stop_disp.assert_called_once()
+        out = capsys.readouterr().out
+        assert "关停 session" in out
+        assert "dispatcher: stopped" in out
+        assert "全部关停" in out
+
 
 def _setup_db_at(db_path: Path) -> None:
     conn = sqlite3.connect(str(db_path))

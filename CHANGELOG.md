@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.75-dev (unreleased)
+
+### Tests
+
+- **shutdown coverage** — Added 2 tests covering the remaining branches in `lib/shutdown.py`: the broadcast + wait-for-acks path (skip_broadcast=False, mixing acked and timed-out sessions) and the stop-sessions path (skip_stop=False, mocking SwarmManager and stop_dispatcher_session). Brings coverage from 89% to 100%. Contributes to #88.
+
 ## 0.5.69-dev (unreleased)
 
 ### Bug Fixes
