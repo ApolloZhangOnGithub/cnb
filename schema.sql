@@ -211,7 +211,9 @@ CREATE TABLE IF NOT EXISTS hints(
     confidence REAL NOT NULL DEFAULT 0.0,
     refs TEXT NOT NULL DEFAULT '{}',
     ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now','localtime')),
-    expires_at TEXT NOT NULL,
+    -- Default TTL keeps the schema self-contained for ad-hoc INSERTs / sqlite shell use.
+    -- Production callers (emit_hint) override this with the per-config ttl_days.
+    expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now','+7 days','localtime')),
     surfaced_at TEXT DEFAULT NULL,
     status TEXT NOT NULL DEFAULT 'pending'
 );

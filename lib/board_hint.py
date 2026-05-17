@@ -27,10 +27,12 @@ STATUS_SURFACED = "surfaced"
 STATUS_EXPIRED = "expired"
 STATUS_MUTED = "muted"
 STATUS_DROPPED_RATE = "dropped_rate"
+STATUSES = frozenset({STATUS_PENDING, STATUS_SURFACED, STATUS_EXPIRED, STATUS_MUTED, STATUS_DROPPED_RATE})
 
 # Mute scopes.
 SCOPE_SENDER = "sender"
 SCOPE_TOPIC = "topic"
+SCOPES = frozenset({SCOPE_SENDER, SCOPE_TOPIC})
 
 
 def _hints_config(db: BoardDB) -> dict[str, Any]:
@@ -90,7 +92,12 @@ def _is_muted(db: BoardDB, recipient: str, sender: str, refs: dict) -> bool:
 
 
 def _rate_capped(db: BoardDB, sender: str, recipient: str, rate_per_hour: int) -> bool:
-    """True if sender has already emitted >= rate_per_hour hints to recipient in last 1h."""
+    """True if the (sender, recipient) pair has already accumulated rate_per_hour hints in last 1h.
+
+    Per-pair semantics: rate is scoped to the *pair*, not the sender alone. The same sender
+    emitting to multiple distinct recipients does not draw against each other's budget.
+    Mirrors how mute is per-(recipient, sender) — both guardrails share the same granularity.
+    """
     cutoff = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
     count = db.scalar(
         "SELECT COUNT(*) FROM hints WHERE sender=? AND recipient=? AND ts > ? AND status != ?",
@@ -127,6 +134,7 @@ def emit_hint(
     else:
         status = STATUS_PENDING  # eligible to surface; phase 3 will surface it
 
+    assert status in STATUSES, f"emit_hint: status {status!r} not in STATUSES — typo or stale code"
     hint_id = db.execute(
         "INSERT INTO hints(sender, recipient, body, signals, confidence, refs, expires_at, status) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
