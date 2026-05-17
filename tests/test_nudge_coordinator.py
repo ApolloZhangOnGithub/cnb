@@ -371,6 +371,88 @@ class TestOfflineSessions:
 # ---------------------------------------------------------------------------
 
 
+class TestAlreadyQueued:
+    """Nudges must not re-stuff a command/prompt that is already typed at the
+    prompt waiting to be processed. Regression for #226 where dispatcher
+    stacked duplicate `board --as <name> inbox` prompt lines on busy panes."""
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice"])
+    def test_inbox_skipped_when_same_command_already_at_prompt(
+        self, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path, monkeypatch
+    ):
+        cfg = make_cfg(tmp_path, ["alice"])
+        # Pretend alice has unread, so _try_inbox would normally fire.
+        from lib.concerns import nudge_coordinator as nc
+
+        class _FakeDB:
+            def scalar(self, *_args):
+                return 1
+
+        monkeypatch.setattr(nc, "db", lambda _cfg: _FakeDB())
+        monkeypatch.setattr(
+            nc,
+            "tmux",
+            lambda *args: (
+                "previous output\n❯ /Users/x/bin/board --as alice inbox\n" if args[0] == "capture-pane" else ""
+            ),
+        )
+        idle = make_idle(set())
+        coord = NudgeCoordinator(cfg, idle)
+
+        coord.tick(1000)
+        assert mock_send.call_count == 0, "must not re-stuff inbox command already at prompt"
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice"])
+    def test_idle_skipped_when_idle_prompt_already_at_prompt(
+        self, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path, monkeypatch
+    ):
+        cfg = make_cfg(tmp_path, ["alice"])
+        from lib.concerns import nudge_coordinator as nc
+
+        monkeypatch.setattr(
+            nc,
+            "tmux",
+            lambda *args: (
+                "❯ 继续工作。检查你的 OKR (/x/alice.md)，推进你的活跃 KR。自己决定优先级。\n"
+                if args[0] == "capture-pane"
+                else ""
+            ),
+        )
+        idle = make_idle({"cc-test-alice"})
+        coord = NudgeCoordinator(cfg, idle)
+
+        coord.tick(1000)
+        assert mock_send.call_count == 0, "must not re-stuff idle prompt already at prompt"
+
+    @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
+    @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice"])
+    def test_inbox_fires_when_pane_does_not_contain_command(
+        self, _devs, mock_send, _running, _ok, NudgeCoordinator, tmp_path, monkeypatch
+    ):
+        cfg = make_cfg(tmp_path, ["alice"])
+        from lib.concerns import nudge_coordinator as nc
+
+        class _FakeDB:
+            def scalar(self, *_args):
+                return 1
+
+        monkeypatch.setattr(nc, "db", lambda _cfg: _FakeDB())
+        monkeypatch.setattr(nc, "tmux", lambda *args: "idle prompt\n❯ \n" if args[0] == "capture-pane" else "")
+        idle = make_idle(set())
+        coord = NudgeCoordinator(cfg, idle)
+
+        coord.tick(1000)
+        assert mock_send.call_count >= 1, "fresh prompt — nudge must still fire"
+
+
 class TestStructure:
     def test_is_concern_subclass(self, NudgeCoordinator):
         assert issubclass(NudgeCoordinator, Concern)
