@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.98-dev (unreleased)
+
+### Features
+
+- **Proactive association hints — phase 3 surface UI (#158)** — Added `_print_hints(db, recipient)` to `lib/board_view.py` and hooked it into `cmd_view` after the unread-count alert. Eligible hints (status=pending, confidence ≥ threshold) surface as a yellow `💡 association hints:` block at the top of `board view`, reusing the warn() formatter from PR #221's runtime-alert block. The block is bounded (`LIMIT 5`, ordered by confidence desc), each surfaced hint flips `status → surfaced` and logs a `surface` event to `hint_events` so it does not re-appear on the next view. Feature stays off by default — gated on `[hints] enabled=true` in `notifications.toml`. 11 unit tests cover the feature-flag guard, threshold gate, eligible surface formatting, status transition, telemetry, no-re-surface invariant, confidence ordering, the LIMIT 5 cap, and full `cmd_view` integration. Stacks on #250 (phase 2) — completes the three-phase #158 chain.
+
 ## 0.5.91-dev (unreleased)
 
 ### Features

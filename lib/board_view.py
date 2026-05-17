@@ -10,6 +10,43 @@ from lib.common import validate_identity
 from lib.fmt import error, heading, ok, warn
 from lib.tmux_utils import capture_pane, has_session, pane_command
 
+
+def _print_hints(db: BoardDB, recipient: str) -> None:
+    """Surface eligible hints (#158 phase 3) — yellow block at top of view.
+
+    Borrows the surface placement from PR #221's runtime-alert block: same
+    visual weight, ignorable, doesn't poison inbox. Marks each surfaced hint
+    with `surfaced_at` and a `surface` event so phase-2 telemetry stays clean.
+    """
+    from lib.board_hint import STATUS_PENDING, STATUS_SURFACED, _hints_config, _log_event
+
+    cfg = _hints_config(db)
+    if not cfg.get("enabled", False):
+        return
+    threshold = float(cfg.get("threshold", 0.6))
+
+    rows = db.query(
+        "SELECT id, sender, body, confidence, ts FROM hints "
+        "WHERE recipient=? AND status=? AND confidence >= ? "
+        "ORDER BY confidence DESC, id DESC LIMIT 5",
+        (recipient, STATUS_PENDING, threshold),
+    )
+    if not rows:
+        return
+
+    print(warn("💡 association hints:"))
+    for hint_id, sender, body, confidence, ts in rows:
+        # truncate long bodies to one line in the surface block
+        body_short = body if len(body) <= 78 else body[:75] + "..."
+        print(warn(f"   from {sender} ({ts}, conf {confidence:.2f}): {body_short}"))
+        db.execute(
+            "UPDATE hints SET status=?, surfaced_at=strftime('%Y-%m-%d %H:%M:%S','now','localtime') WHERE id=?",
+            (STATUS_SURFACED, hint_id),
+        )
+        _log_event(db, hint_id, "surface")
+    print()
+
+
 SHELL_COMMANDS = {"zsh", "bash", "sh", "-zsh", "-bash", ""}
 SPINNER_RE = re.compile(r"^\s*(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|●)", re.MULTILINE)
 WORK_LABEL_RE = re.compile(r"^\s*[•●]\s+(Working|Thinking|Running)\b", re.IGNORECASE | re.MULTILINE)
@@ -218,6 +255,7 @@ def cmd_view(db: BoardDB, identity: str) -> None:
         count = db.scalar("SELECT COUNT(*) FROM inbox WHERE session=? AND read=0", (me,))
         if count:
             print(warn(f">>> 你有 {count} 条未读消息，运行 {board} --as {me} inbox 查看 <<<\n"))
+        _print_hints(db, me)
 
     prefix = db.env.prefix
     print(heading("Status:"))
