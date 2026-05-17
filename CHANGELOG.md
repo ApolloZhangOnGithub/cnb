@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.95-dev (unreleased)
+
+### Tests
+
+- **github_app_guard coverage** — Added 29 tests covering the previously uncovered branches in `lib/github_app_guard.py`: `GuardDecision.as_dict`, default path helpers, `load_json` error paths (missing/invalid/non-object), validator branches (rules-not-list, rule-not-object, missing account+id, missing repositories), `normalize_repository` edge cases, `_installation_account` string form, `_optional_int` integer-coercion error, `_parse_expires_at` (blank/invalid date/Z timestamp/naive/invalid timestamp), and full `main()` CLI dispatch for both `validate` and `check` subcommands (explicit-allowlist, --app default-path resolution, missing args, allowed-vs-denied exit codes). Brings coverage from 58% to 99% (only `__main__` guard remains). Contributes to #88.
+
 ## 0.5.78-dev (unreleased)
 
 ### Features
