@@ -509,6 +509,30 @@ class TestRouting:
         assert "设备主管同学" in prompt
         assert "bridge/tunnel/watch 基础设施要分别列出" in prompt
 
+    def test_supervisor_prompt_uses_clean_identity_phrasing(self, tmp_path):
+        cfg = _cfg(tmp_path)
+
+        prompt = feishu_bridge.build_pilot_system_prompt(cfg)
+
+        # No legacy 身份名是 robotic phrasing (issue #213).
+        assert "身份名是" not in prompt
+        # Identity starts with name-first, not role-first.
+        assert f"你叫 {cfg.pilot_name}" in prompt
+        # Explicit self-intro directive to avoid "我是 agent-X" or "Claude Code 会话" paraphrasing.
+        assert f"我是 {cfg.pilot_name}" in prompt
+        assert "不要自称 agent" in prompt
+        assert "对面是真人用户" in prompt
+
+    def test_chief_prompt_uses_clean_identity_phrasing(self, tmp_path):
+        cfg = _cfg(tmp_path, pilot_role="device_chief")
+
+        prompt = feishu_bridge.build_pilot_system_prompt(cfg)
+
+        assert "身份名是" not in prompt
+        assert f"你叫 {cfg.pilot_name}" in prompt
+        assert f"我是 {cfg.pilot_name}" in prompt
+        assert "不要自称 agent" in prompt
+
     def test_build_pilot_command_uses_codex(self, tmp_path):
         cfg = _cfg(tmp_path, agent="codex")
 

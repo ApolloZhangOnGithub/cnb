@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.86-dev (unreleased)
+
+### Bug Fixes
+
+- **Supervisor identity wording** — Replaced robotic `身份名是 X` phrasing in `build_pilot_system_prompt` with `你叫 X` and an explicit self-introduction directive. Supervisor/chief no longer paraphrases itself as "your Claude Code 会话" or refers to the human user as "tongxue"/"agent"/"会话". Fixes #213.
+
 ## 0.5.78-dev (unreleased)
 
 ### Features

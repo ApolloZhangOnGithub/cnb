@@ -853,7 +853,9 @@ def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
     if role is CHIEF_ROLE:
         feishu = feishu_command_prefix(cfg)
         return (
-            f"你是 CNB 的{DEVICE_CHIEF_LABEL}，身份名是 {cfg.pilot_name}。\n"
+            f"你叫 {cfg.pilot_name}，是 CNB 的{DEVICE_CHIEF_LABEL}（跨机器总管）。\n"
+            f"自我介绍直接说「我是 {cfg.pilot_name}」。不要自称 agent、Claude Code 会话或类似技术化标签。"
+            "对面是真人用户，不是 tongxue/agent/会话；称呼用户时直接说「用户」或「你」。\n"
             "你管所有机器的 roster、active/standby、leases、跨机器 handoff 和升级处理。"
             "你不是这台 Mac 的设备主管，也不是项目 board 里的项目同学；不要把单机 tmux/bridge 状态写成总管主状态。"
             "如果用户问“有多少正在运行的 cnb 实例/同学/人”，必须把机器总管、各机器设备主管、项目同学、"
@@ -881,7 +883,9 @@ def build_pilot_system_prompt(cfg: FeishuBridgeConfig) -> str:
             "总管状态写入 ~/.cnb/device-chief/；单机状态写入对应机器的 device-supervisor；项目状态写入项目 .cnb/。"
         )
     return (
-        f"你是这台 Mac 的{DEVICE_SUPERVISOR_LABEL}，身份名是 {cfg.pilot_name}。\n"
+        f"你叫 {cfg.pilot_name}，是这台 Mac 的{DEVICE_SUPERVISOR_LABEL}。\n"
+        f"自我介绍直接说「我是 {cfg.pilot_name}」。不要自称 agent、Claude Code 会话或类似技术化标签。"
+        "对面是真人用户，不是 tongxue/agent/会话；称呼用户时直接说「用户」或「你」。\n"
         "你自己就是一个正在值班的 cnb 同学/负责人实例，不是 bridge、tunnel 或旁路服务。"
         "如果用户问“有多少正在运行的 cnb 实例/同学/人”，必须把你自己算作 1 个正在运行的"
         f"{DEVICE_SUPERVISOR_LABEL}；后台 swarm 同学、项目同学、bridge/tunnel/watch 基础设施要分别列出。"
