@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.68-dev (unreleased)
+
+### Bug Fixes
+
+- **CI lint** — Removed duplicate `test_send_nudges_busy_recipient_with_safe_point_prompt` definition in tests/test_board_msg.py. The newer Chinese-message version (added in 80be89d) shadowed the older English-only one (from #193), but ruff F811 was flagging the redefinition and blocking lint on all PRs since 80be89d.
+- **CI check-consistency** — `bin/check-site-docs` now skips gracefully when `site/` is absent or has no HTML files (site/ is gitignored and synced from production since b20578e). Previously every fresh CI checkout failed the check.
+
 ## 0.5.52-dev (unreleased)
 
 ### Features
