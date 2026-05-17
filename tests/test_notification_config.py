@@ -169,6 +169,13 @@ class TestSubscribersFor:
         result = cfg.subscribers_for("daily-digest", ["alice", "human"])
         assert result == ["alice", "human"]
 
+    def test_deduplicates_repeated_members_in_input(self):
+        """Same name listed twice (or with different casing) shouldn't get the digest twice."""
+        cfg = NotificationConfig(defaults=dict(BUILTIN_DEFAULTS))
+        result = cfg.subscribers_for("daily-digest", ["alice", "alice", "Alice", "bob"])
+        # alice (lowered) appears 3 times; only one should land in subscribers.
+        assert result == ["alice", "bob"]
+
 
 class TestLoadMissingFile:
     def test_returns_builtin_defaults(self, tmp_path):
