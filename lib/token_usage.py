@@ -17,10 +17,19 @@ DEFAULT_RECENT_HOURS = 6.0
 # not real model assignments, so they should never count toward downgrade detection.
 SYNTHETIC_MODELS = frozenset({"<synthetic>"})
 
+_OPUS_PRICING = {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_create": 18.75}
+_SONNET_PRICING = {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_create": 3.75}
+_HAIKU_PRICING = {"input": 0.80, "output": 4.0, "cache_read": 0.08, "cache_create": 1.0}
+
+# Legacy 4-6 keys kept as aliases — historical JSONLs on disk reference them and
+# would otherwise fall through to the default opus pricing (3-5x over-estimate
+# for sonnet sessions).
 PRICING = {
-    "claude-opus-4-7": {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_create": 18.75},
-    "claude-sonnet-4-7": {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_create": 3.75},
-    "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.0, "cache_read": 0.08, "cache_create": 1.0},
+    "claude-opus-4-6": _OPUS_PRICING,
+    "claude-opus-4-7": _OPUS_PRICING,
+    "claude-sonnet-4-6": _SONNET_PRICING,
+    "claude-sonnet-4-7": _SONNET_PRICING,
+    "claude-haiku-4-5-20251001": _HAIKU_PRICING,
 }
 
 DEFAULT_PRICING = {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_create": 18.75}
@@ -252,7 +261,13 @@ def _print_runtime_state(sessions: list[dict], *, budget: float, warn_pct: float
 
 
 def _load_project_sessions(project_root: Path, *, recent_hours: float | None = None) -> list[dict]:
-    """Parse all session JSONLs. If `recent_hours` is set, skip files older than that window."""
+    """Parse all session JSONLs. If `recent_hours` is set, skip files older than that window.
+
+    Tradeoff on mtime: a long-running session whose JSONL hasn't been written to in
+    `recent_hours` is excluded — its model state is treated as stale. This is the right
+    default for live alerts (we want recent runtime signals) but cmd_usage opts into
+    full history (`recent_hours=None`) for the historical breakdown.
+    """
     project_dir = _find_project_dir(project_root)
     if not project_dir:
         return []
@@ -272,7 +287,9 @@ def _load_project_sessions(project_root: Path, *, recent_hours: float | None = N
 def load_budget_defaults(claudes_dir: Path) -> tuple[float, float]:
     """Read [budget] from .cnb/config.toml. Returns (usd, warn_pct).
 
-    Defaults: usd=0.0 (disabled), warn_pct=DEFAULT_BUDGET_WARN_PCT.
+    Defaults: usd=0.0 (disabled), warn_pct=DEFAULT_BUDGET_WARN_PCT. Malformed values
+    (typo'd strings like "50usd") fall back to defaults rather than raising — the
+    runtime alert hook must never break a board call because of a config typo.
     """
     toml_file = claudes_dir / "config.toml"
     if not toml_file.exists():
@@ -282,8 +299,14 @@ def load_budget_defaults(claudes_dir: Path) -> tuple[float, float]:
     except (tomllib.TOMLDecodeError, OSError):
         return 0.0, DEFAULT_BUDGET_WARN_PCT
     section = cfg.get("budget", {})
-    usd = float(section.get("usd", 0) or 0)
-    warn_pct = float(section.get("warn_pct", DEFAULT_BUDGET_WARN_PCT))
+    try:
+        usd = float(section.get("usd", 0) or 0)
+    except (TypeError, ValueError):
+        usd = 0.0
+    try:
+        warn_pct = float(section.get("warn_pct", DEFAULT_BUDGET_WARN_PCT))
+    except (TypeError, ValueError):
+        warn_pct = DEFAULT_BUDGET_WARN_PCT
     return usd, warn_pct
 
 

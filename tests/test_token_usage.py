@@ -168,6 +168,28 @@ class TestEstimateCost:
         usage = {"model": "claude-opus-4-7", "input": 0, "output": 0, "cache_read": 0, "cache_create": 0}
         assert estimate_cost(usage) == 0.0
 
+    def test_legacy_sonnet_4_6_uses_sonnet_pricing(self):
+        """Historical 4-6 JSONLs must not silently re-price as opus."""
+        usage = {
+            "model": "claude-sonnet-4-6",
+            "input": 1_000_000,
+            "output": 1_000_000,
+            "cache_read": 0,
+            "cache_create": 0,
+        }
+        # Sonnet pricing: 3 + 15 = 18 per million. Opus would be 90.
+        assert estimate_cost(usage) == pytest.approx(18.0)
+
+    def test_legacy_opus_4_6_uses_opus_pricing(self):
+        usage = {
+            "model": "claude-opus-4-6",
+            "input": 1_000_000,
+            "output": 1_000_000,
+            "cache_read": 0,
+            "cache_create": 0,
+        }
+        assert estimate_cost(usage) == pytest.approx(90.0)
+
 
 class TestAggregateByName:
     def test_merges_same_name(self):
@@ -469,6 +491,19 @@ class TestLoadBudgetDefaults:
         (tmp_path / "config.toml").write_text("not = valid = toml = at = all = =")
         budget, warn_pct = load_budget_defaults(tmp_path)
         assert budget == 0.0
+        assert warn_pct == 80.0
+
+    def test_unparseable_usd_falls_back(self, tmp_path):
+        """A typo'd string like '50usd' must not raise — fall back to disabled."""
+        (tmp_path / "config.toml").write_text('[budget]\nusd = "50usd"\nwarn_pct = 60\n')
+        budget, warn_pct = load_budget_defaults(tmp_path)
+        assert budget == 0.0
+        assert warn_pct == 60.0
+
+    def test_unparseable_warn_pct_falls_back(self, tmp_path):
+        (tmp_path / "config.toml").write_text('[budget]\nusd = 50.0\nwarn_pct = "high"\n')
+        budget, warn_pct = load_budget_defaults(tmp_path)
+        assert budget == 50.0
         assert warn_pct == 80.0
 
 
