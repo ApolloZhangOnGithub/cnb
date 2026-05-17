@@ -81,55 +81,66 @@ class TestCooldown:
     @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
     @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
     @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.nudge_coordinator.tmux", return_value="normal output\n❯ working")
     def test_second_nudge_within_cooldown_is_suppressed(
-        self, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path
+        self, mock_tmux, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path
     ):
         cfg = make_cfg(tmp_path, ["alice"])
         idle = make_idle({"cc-test-alice"})
         coord = NudgeCoordinator(cfg, idle)
 
-        coord.tick(1000)
-        first_count = mock_send.call_count
-        assert first_count >= 1, "first tick should nudge idle alice"
+        with patch("lib.concerns.nudge_coordinator.db") as mock_db:
+            mock_db.return_value.scalar.return_value = 5  # has unread inbox
+            coord.tick(1000)
+            first_count = mock_send.call_count
+            assert first_count >= 1, "first tick should nudge inbox for alice"
 
-        mock_send.reset_mock()
-        coord.tick(1001)
-        assert mock_send.call_count == 0, "second tick 1s later must be suppressed"
+            mock_send.reset_mock()
+            coord.tick(1001)
+            assert mock_send.call_count == 0, "second tick 1s later must be suppressed"
 
     @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
     @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
     @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
     @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.nudge_coordinator.tmux", return_value="normal output\n❯ working")
     def test_nudge_allowed_after_cooldown_expires(
-        self, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path
+        self, mock_tmux, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path
     ):
         cfg = make_cfg(tmp_path, ["alice"])
         idle = make_idle({"cc-test-alice"})
         coord = NudgeCoordinator(cfg, idle)
 
-        coord.tick(1000)
-        assert mock_send.call_count >= 1
+        with patch("lib.concerns.nudge_coordinator.db") as mock_db:
+            mock_db.return_value.scalar.return_value = 5
+            coord.tick(1000)
+            assert mock_send.call_count >= 1
 
-        mock_send.reset_mock()
-        coord.tick(1000 + coord.COOLDOWN + 1)
-        assert mock_send.call_count >= 1, "nudge should fire again after cooldown"
+            mock_send.reset_mock()
+            coord.tick(1000 + coord.COOLDOWN + 1)
+            assert mock_send.call_count >= 1, "nudge should fire again after cooldown"
 
     @patch("lib.concerns.nudge_coordinator.tmux_ok", return_value=True)
     @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
     @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
     @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice", "bob"])
-    def test_cooldown_is_per_session(self, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path):
+    @patch("lib.concerns.nudge_coordinator.tmux", return_value="normal output\n❯ working")
+    def test_cooldown_is_per_session(
+        self, mock_tmux, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path
+    ):
         cfg = make_cfg(tmp_path, ["alice", "bob"])
         idle = make_idle({"cc-test-alice", "cc-test-bob"})
         coord = NudgeCoordinator(cfg, idle)
 
-        coord.tick(1000)
-        calls_t0 = mock_send.call_count
-        assert calls_t0 >= 2, "both alice and bob should be nudged"
+        with patch("lib.concerns.nudge_coordinator.db") as mock_db:
+            mock_db.return_value.scalar.return_value = 5
+            coord.tick(1000)
+            calls_t0 = mock_send.call_count
+            assert calls_t0 >= 2, "both alice and bob should be nudged"
 
-        mock_send.reset_mock()
-        coord.tick(1001)
-        assert mock_send.call_count == 0, "both suppressed during cooldown"
+            mock_send.reset_mock()
+            coord.tick(1001)
+            assert mock_send.call_count == 0, "both suppressed during cooldown"
 
 
 # ---------------------------------------------------------------------------
@@ -146,17 +157,20 @@ class TestEffectivenessCheck:
     @patch("lib.concerns.nudge_coordinator.is_claude_running", return_value=True)
     @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
     @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice"])
+    @patch("lib.concerns.nudge_coordinator.tmux", return_value="normal output\n❯ working")
     def test_tracks_consecutive_ineffective_nudges(
-        self, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path
+        self, mock_tmux, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path
     ):
         cfg = make_cfg(tmp_path, ["alice"])
         idle = make_idle({"cc-test-alice"})
         coord = NudgeCoordinator(cfg, idle)
 
-        t = 1000
-        for _ in range(3):
-            coord.tick(t)
-            t += coord.COOLDOWN + 1
+        with patch("lib.concerns.nudge_coordinator.db") as mock_db:
+            mock_db.return_value.scalar.return_value = 5
+            t = 1000
+            for _ in range(3):
+                coord.tick(t)
+                t += coord.COOLDOWN + 1
 
         stats = coord.get_nudge_stats("alice")
         assert stats["consecutive_ineffective"] >= 2, (
@@ -277,9 +291,13 @@ class TestPriority:
     @patch("lib.concerns.nudge_coordinator.tmux_send", return_value=True)
     @patch("lib.concerns.nudge_coordinator.get_dev_sessions", return_value=["alice"])
     @patch("lib.concerns.nudge_coordinator.tmux", return_value="normal output\n❯ working")
-    def test_idle_nudge_when_no_other_reasons(
+    def test_dev_idle_is_not_nudged(
         self, mock_tmux, mock_devs, mock_send, mock_running, mock_ok, NudgeCoordinator, tmp_path
     ):
+        """Workers (dev) idle is normal — they wait for lead. Don't nudge them.
+
+        Only lead idle gets nudged (tested separately).
+        """
         cfg = make_cfg(tmp_path, ["alice"])
         idle = make_idle({"cc-test-alice"})
         coord = NudgeCoordinator(cfg, idle)
@@ -288,11 +306,7 @@ class TestPriority:
             mock_db.return_value.scalar.return_value = 0
             coord.tick(1000)
 
-        assert mock_send.call_count == 1
-        sent_text = mock_send.call_args[0][1]
-        assert "继续" in sent_text or "KR" in sent_text or "okr" in sent_text.lower(), (
-            "fallback idle nudge should prompt to continue work"
-        )
+        assert mock_send.call_count == 0, "dev idle should not be nudged"
 
 
 # ---------------------------------------------------------------------------

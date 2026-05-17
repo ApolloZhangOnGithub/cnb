@@ -13,7 +13,7 @@ from lib.common import is_suspended
 
 from .base import Concern
 from .config import DispatcherConfig
-from .helpers import db, get_dev_sessions, is_claude_running, log, tmux, tmux_ok, tmux_send
+from .helpers import db, get_dev_sessions, has_lead_session, is_claude_running, log, tmux, tmux_ok, tmux_send
 
 
 @dataclass
@@ -117,14 +117,21 @@ class NudgeCoordinator(Concern):
         return True
 
     def _try_idle(self, name: str) -> bool:
-        sess = f"{self.cfg.prefix}-{name}"
+        # Workers (dev) idle is normal — they wait for lead to assign work.
+        # Do not nudge dev idle. Only inbox / queued_flush apply to workers.
+        # Lead idle is handled separately in tick() with a different message.
+        return False
+
+    def _try_lead_idle(self) -> bool:
+        sess = f"{self.cfg.prefix}-lead"
         if not self.idle.is_idle(sess):
             return False
-        if _already_queued(sess, "推进你的活跃 KR"):
+        if _already_queued(sess, "扫描团队"):
             return False
         tmux_send(
             sess,
-            f"继续工作。检查你的 OKR ({self.cfg.okr_dir}/{name}.md)，推进你的活跃 KR。自己决定优先级。",
+            "lead 不能 idle。扫描团队状态：谁空闲、谁阻塞、PR queue、master CI、open issues。"
+            "主动给空闲员工派下一个 issue，不要等他们汇报。",
         )
         return True
 
@@ -163,6 +170,25 @@ class NudgeCoordinator(Concern):
         """Check and nudge a specific session immediately."""
         self._process_session(name, now)
 
+    def _process_lead(self, now: int) -> None:
+        if not has_lead_session(self.cfg):
+            return
+        sess = f"{self.cfg.prefix}-lead"
+        if not (tmux_ok("has-session", "-t", sess) and is_claude_running(sess)):
+            return
+        if "lead" in self._records:
+            self._check_effectiveness("lead")
+        if not self._can_nudge("lead", now):
+            return
+        for nudge_type, try_fn in [
+            ("inbox", lambda n="lead": self._try_inbox(n)),
+            ("lead_idle", lambda: self._try_lead_idle()),
+        ]:
+            if try_fn():
+                self._record("lead", nudge_type, now)
+                break
+
     def tick(self, now: int) -> None:
         for name in get_dev_sessions(self.cfg):
             self._process_session(name, now)
+        self._process_lead(now)
