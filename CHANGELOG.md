@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.78-dev (unreleased)
+
+### Features
+
+- **`board update-check` + silent startup hook** (#43) — Ported the bash-only version check from `bin/cnb` into a reusable Python module (`lib/update_check.py`) and wired it into `bin/board`'s main(), so tongxue who run `board` directly (skipping the `cnb` wrapper) now also detect a stale install. Detection routes a single board message to the device-supervisor tongxue (one notification per `current→latest` pair); each tongxue does not self-update. Skipped in venv. `CNB_SKIP_UPDATE_CHECK=1` disables the hook for tests / quick runs. New `board update-check [--force]` command for manual triggering and debugging.
+
 ## 0.5.76-dev (unreleased)
 
 ### Bug Fixes
