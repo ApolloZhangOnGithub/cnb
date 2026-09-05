@@ -2,7 +2,7 @@
 number: 99
 title: "Adopt Markrun as cnb documentation source of truth"
 state: OPEN
-labels: ["documentation", "phase:2", "infra"]
+labels: ["documentation", "phase:2", "infra", "priority:p2"]
 assignees: []
 created: 2026-05-10
 updated: 2026-05-10
@@ -11,7 +11,7 @@ updated: 2026-05-10
 # #99 Adopt Markrun as cnb documentation source of truth
 
 **State:** OPEN
-**Labels:** documentation, phase:2, infra
+**Labels:** documentation, phase:2, infra, priority:p2
 
 ---
 
