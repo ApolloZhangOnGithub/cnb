@@ -1,16 +1,17 @@
 ---
 number: 49
 title: "Ownership handoff: protocol for tongxue departure/migration"
-state: OPEN
+state: CLOSED
 labels: ["phase:2", "ownership", "org-design"]
 assignees: []
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-17
+closed: 2026-05-17
 ---
 
 # #49 Ownership handoff: protocol for tongxue departure/migration
 
-**State:** OPEN
+**State:** CLOSED
 **Labels:** phase:2, ownership, org-design
 
 ---

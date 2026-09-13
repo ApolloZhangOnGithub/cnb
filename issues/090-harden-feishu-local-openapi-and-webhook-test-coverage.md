@@ -1,17 +1,18 @@
 ---
 number: 90
 title: "Harden Feishu local_openapi and webhook test coverage"
-state: OPEN
-labels: ["phase:1", "infra"]
+state: CLOSED
+labels: ["phase:1", "infra", "priority:p1"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-10
+closed: 2026-05-10
 ---
 
 # #90 Harden Feishu local_openapi and webhook test coverage
 
-**State:** OPEN
-**Labels:** phase:1, infra
+**State:** CLOSED
+**Labels:** phase:1, infra, priority:p1
 
 ---
 

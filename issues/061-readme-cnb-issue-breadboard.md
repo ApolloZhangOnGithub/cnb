@@ -1,16 +1,17 @@
 ---
 number: 61
 title: "README 应注明：cnb 是独立仓库，issue 不要提到 Breadboard"
-state: OPEN
+state: CLOSED
 labels: ["documentation", "phase:1", "infra"]
 assignees: []
 created: 2026-05-08
-updated: 2026-05-09
+updated: 2026-05-17
+closed: 2026-05-17
 ---
 
 # #61 README 应注明：cnb 是独立仓库，issue 不要提到 Breadboard
 
-**State:** OPEN
+**State:** CLOSED
 **Labels:** documentation, phase:1, infra
 
 ---

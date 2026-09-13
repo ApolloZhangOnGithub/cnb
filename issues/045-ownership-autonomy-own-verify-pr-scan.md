@@ -1,16 +1,17 @@
 ---
 number: 45
 title: "Ownership autonomy: own/verify/pr/scan"
-state: OPEN
+state: CLOSED
 labels: ["phase:2", "ownership"]
 assignees: []
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-17
+closed: 2026-05-17
 ---
 
 # #45 Ownership autonomy: own/verify/pr/scan
 
-**State:** OPEN
+**State:** CLOSED
 **Labels:** phase:2, ownership
 
 ---
