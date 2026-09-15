@@ -2,16 +2,16 @@
 number: 96
 title: "Terminal supervisor should inspect Mac resource pressure and recommend safe actions"
 state: OPEN
-labels: ["enhancement"]
+labels: ["enhancement", "phase:1", "infra", "module:runtime", "priority:p2"]
 assignees: []
 created: 2026-05-10
-updated: 2026-05-10
+updated: 2026-05-17
 ---
 
 # #96 Terminal supervisor should inspect Mac resource pressure and recommend safe actions
 
 **State:** OPEN
-**Labels:** enhancement
+**Labels:** enhancement, phase:1, infra, module:runtime, priority:p2
 
 ---
 
