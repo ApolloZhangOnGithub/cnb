@@ -1,17 +1,18 @@
 ---
 number: 73
 title: "sync-issues workflow records failed push run with no jobs or logs"
-state: OPEN
-labels: ["bug", "phase:1", "infra"]
+state: CLOSED
+labels: ["bug", "phase:1", "infra", "priority:p0"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-15
+closed: 2026-05-15
 ---
 
 # #73 sync-issues workflow records failed push run with no jobs or logs
 
-**State:** OPEN
-**Labels:** bug, phase:1, infra
+**State:** CLOSED
+**Labels:** bug, phase:1, infra, priority:p0
 
 ---
 
