@@ -1,17 +1,18 @@
 ---
 number: 42
 title: "Global ~/.cnb/ dashboard: auto-discover and manage all local projects"
-state: OPEN
-labels: ["phase:2", "infra"]
+state: CLOSED
+labels: ["phase:2", "infra", "priority:p2"]
 assignees: []
 created: 2026-05-07
-updated: 2026-05-08
+updated: 2026-05-17
+closed: 2026-05-17
 ---
 
 # #42 Global ~/.cnb/ dashboard: auto-discover and manage all local projects
 
-**State:** OPEN
-**Labels:** phase:2, infra
+**State:** CLOSED
+**Labels:** phase:2, infra, priority:p2
 
 ---
 

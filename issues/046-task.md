@@ -1,16 +1,17 @@
 ---
 number: 46
 title: "调研：task 功能使用情况及推广"
-state: OPEN
+state: CLOSED
 labels: ["phase:2"]
 assignees: []
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-17
+closed: 2026-05-17
 ---
 
 # #46 调研：task 功能使用情况及推广
 
-**State:** OPEN
+**State:** CLOSED
 **Labels:** phase:2
 
 ---
