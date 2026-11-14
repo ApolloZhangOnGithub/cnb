@@ -1,17 +1,18 @@
 ---
 number: 41
 title: "Automated shift report: cnb shutdown flow"
-state: OPEN
-labels: ["phase:2", "infra"]
+state: CLOSED
+labels: ["phase:2", "infra", "priority:p2"]
 assignees: []
 created: 2026-05-07
-updated: 2026-05-09
+updated: 2026-05-17
+closed: 2026-05-17
 ---
 
 # #41 Automated shift report: cnb shutdown flow
 
-**State:** OPEN
-**Labels:** phase:2, infra
+**State:** CLOSED
+**Labels:** phase:2, infra, priority:p2
 
 ---
 

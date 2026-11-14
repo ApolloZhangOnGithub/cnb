@@ -1,17 +1,18 @@
 ---
 number: 67
 title: "Default pytest can fail when ambient pytest-randomly reseeds numpy"
-state: OPEN
-labels: ["bug", "phase:1", "infra"]
+state: CLOSED
+labels: ["bug", "phase:1", "infra", "priority:p0"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-10
+closed: 2026-05-10
 ---
 
 # #67 Default pytest can fail when ambient pytest-randomly reseeds numpy
 
-**State:** OPEN
-**Labels:** bug, phase:1, infra
+**State:** CLOSED
+**Labels:** bug, phase:1, infra, priority:p0
 
 ---
 
