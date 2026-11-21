@@ -2,16 +2,16 @@
 number: 47
 title: "Cross-project identity: unified tongxue across multiple .cnb/ projects"
 state: OPEN
-labels: ["phase:2", "infra", "org-design"]
+labels: ["phase:2", "infra", "org-design", "priority:p2"]
 assignees: []
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-10
 ---
 
 # #47 Cross-project identity: unified tongxue across multiple .cnb/ projects
 
 **State:** OPEN
-**Labels:** phase:2, infra, org-design
+**Labels:** phase:2, infra, org-design, priority:p2
 
 ---
 
