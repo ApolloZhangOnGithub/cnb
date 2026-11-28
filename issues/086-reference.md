@@ -2,16 +2,16 @@
 number: 86
 title: "研究：外部代码/文章引用记录与跨仓库 reference 机制"
 state: OPEN
-labels: ["question", "experiment", "infra"]
+labels: ["question", "phase:3", "experiment", "infra", "org-design"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-17
 ---
 
 # #86 研究：外部代码/文章引用记录与跨仓库 reference 机制
 
 **State:** OPEN
-**Labels:** question, experiment, infra
+**Labels:** question, phase:3, experiment, infra, org-design
 
 ---
 

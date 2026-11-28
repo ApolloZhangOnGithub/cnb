@@ -5,7 +5,7 @@ state: OPEN
 labels: ["phase:1", "org-design"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-17
 ---
 
 # #76 Organization reform: clarify authority, ownership, and shutdown governance

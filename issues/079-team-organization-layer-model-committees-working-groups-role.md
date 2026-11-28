@@ -5,7 +5,7 @@ state: OPEN
 labels: ["enhancement", "phase:2", "org-design"]
 assignees: []
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-10
 ---
 
 # #79 Team organization layer: model committees, working groups, role slots, and team instances

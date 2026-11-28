@@ -1,17 +1,18 @@
 ---
 number: 77
 title: "Tests pollute real ~/.cnb project registry and pubkeys"
-state: OPEN
-labels: ["bug", "phase:1", "infra"]
+state: CLOSED
+labels: ["bug", "phase:1", "infra", "priority:p0"]
 assignees: []
 created: 2026-05-09
 updated: 2026-05-10
+closed: 2026-05-10
 ---
 
 # #77 Tests pollute real ~/.cnb project registry and pubkeys
 
-**State:** OPEN
-**Labels:** bug, phase:1, infra
+**State:** CLOSED
+**Labels:** bug, phase:1, infra, priority:p0
 
 ---
 
